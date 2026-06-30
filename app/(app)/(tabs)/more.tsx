@@ -4,9 +4,9 @@ import * as WebBrowser from "expo-web-browser";
 import { useCallback, useState } from "react";
 import { Alert, Platform, Pressable, ScrollView, Text, View } from "react-native";
 
-import { Button, Card, Screen } from "../../components/ui";
-import { useAuth } from "../../lib/auth";
-import { supabase } from "../../lib/supabase";
+import { Button, Card, Screen } from "../../../components/ui";
+import { useAuth } from "../../../lib/auth";
+import { supabase } from "../../../lib/supabase";
 
 const LEMONSQUEEZY_URL = process.env.EXPO_PUBLIC_LEMONSQUEEZY_STORE_URL;
 const PAYPAL_URL = process.env.EXPO_PUBLIC_PAYPAL_PLAN_URL;

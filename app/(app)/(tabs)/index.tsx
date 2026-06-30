@@ -3,9 +3,9 @@ import { useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
 import { RefreshControl, ScrollView, Text, View } from "react-native";
 
-import { Card, Loading, Screen } from "../../components/ui";
-import { formatCurrency, formatDate } from "../../lib/format";
-import { supabase } from "../../lib/supabase";
+import { Card, Loading, Screen } from "../../../components/ui";
+import { formatCurrency, formatDate } from "../../../lib/format";
+import { supabase } from "../../../lib/supabase";
 
 type Summary = {
   properties: number;

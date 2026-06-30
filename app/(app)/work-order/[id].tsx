@@ -216,7 +216,12 @@ export default function WorkOrderDetail() {
     <Screen>
       <Stack.Screen options={{ headerShown: false }} />
       <View className="flex-row items-center px-4 pb-2 pt-2">
-        <Pressable onPress={() => router.back()} className="p-2">
+        <Pressable
+          onPress={() =>
+            router.canGoBack() ? router.back() : router.replace("/work-orders")
+          }
+          className="p-2"
+        >
           <Ionicons name="chevron-back" size={24} color="#0f766e" />
         </Pressable>
         <Text

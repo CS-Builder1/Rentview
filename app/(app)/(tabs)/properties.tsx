@@ -11,12 +11,12 @@ import {
   Field,
   Loading,
   Screen,
-} from "../../components/ui";
-import { useAuth } from "../../lib/auth";
-import type { Tables } from "../../lib/database.types";
-import { Constants } from "../../lib/database.types";
-import { titleCase } from "../../lib/format";
-import { supabase } from "../../lib/supabase";
+} from "../../../components/ui";
+import { useAuth } from "../../../lib/auth";
+import type { Tables } from "../../../lib/database.types";
+import { Constants } from "../../../lib/database.types";
+import { titleCase } from "../../../lib/format";
+import { supabase } from "../../../lib/supabase";
 
 type Property = Tables<"properties"> & { units: { count: number }[] };
 

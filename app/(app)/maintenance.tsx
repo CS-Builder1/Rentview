@@ -124,7 +124,12 @@ export default function Maintenance() {
     <Screen>
       <Stack.Screen options={{ headerShown: false }} />
       <View className="flex-row items-center px-4 pb-2 pt-2">
-        <Pressable onPress={() => router.back()} className="p-2">
+        <Pressable
+          onPress={() =>
+            router.canGoBack() ? router.back() : router.replace("/more")
+          }
+          className="p-2"
+        >
           <Ionicons name="chevron-back" size={24} color="#0f766e" />
         </Pressable>
         <Text className="flex-1 text-xl font-bold text-slate-900">
