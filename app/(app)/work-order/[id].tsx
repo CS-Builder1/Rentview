@@ -17,6 +17,7 @@ import {
   View,
 } from "react-native";
 
+import { DocumentsSection } from "../../../components/DocumentsSection";
 import {
   Badge,
   Button,
@@ -405,6 +406,17 @@ export default function WorkOrderDetail() {
             )}
           </View>
         )}
+
+        {/* Documents (invoices, receipts, quotes) — photos shown above */}
+        <DocumentsSection
+          scope={{
+            kind: "workOrder",
+            workOrderId: wo.id,
+            propertyId: wo.property_id,
+            unitId: wo.unit_id,
+          }}
+          defaultDocType="invoice"
+        />
       </ScrollView>
 
       <Modal visible={addingPart} animationType="slide" transparent>

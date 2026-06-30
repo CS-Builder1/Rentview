@@ -15,7 +15,13 @@ import { Badge, Button, Card, Field } from "./ui";
 
 export type DocScope =
   | { kind: "asset"; assetId: string; propertyId: string; unitId: string | null }
-  | { kind: "property"; propertyId: string };
+  | { kind: "property"; propertyId: string }
+  | {
+      kind: "workOrder";
+      workOrderId: string;
+      propertyId: string;
+      unitId: string | null;
+    };
 
 const DOC_TYPES = Constants.public.Enums.doc_type.filter((t) => t !== "photo");
 
@@ -50,6 +56,9 @@ export function DocumentsSection({
     let query = supabase.from("documents").select("*");
     if (scope.kind === "asset") {
       query = query.eq("asset_id", scope.assetId);
+    } else if (scope.kind === "workOrder") {
+      // Exclude photos — the work-order screen shows those in a separate grid.
+      query = query.eq("work_order_id", scope.workOrderId).neq("doc_type", "photo");
     } else {
       // Property-level only — exclude docs that belong to a unit or asset.
       query = query
@@ -99,7 +108,14 @@ export function DocumentsSection({
             property_id: scope.propertyId,
             unit_id: scope.unitId,
           }
-        : { ...base, property_id: scope.propertyId };
+        : scope.kind === "workOrder"
+          ? {
+              ...base,
+              work_order_id: scope.workOrderId,
+              property_id: scope.propertyId,
+              unit_id: scope.unitId,
+            }
+          : { ...base, property_id: scope.propertyId };
 
     setSaving(true);
     const { error } = await supabase.from("documents").insert(payload);
