@@ -20,7 +20,9 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
     storage: AsyncStorage,
     autoRefreshToken: true,
     persistSession: true,
-    // Only parse the OAuth/magic-link redirect fragment on web.
+    // PKCE works for both OAuth and email-confirmation links; on web the
+    // returned `?code=` is auto-exchanged when detectSessionInUrl is on.
+    flowType: "pkce",
     detectSessionInUrl: Platform.OS === "web",
   },
 });

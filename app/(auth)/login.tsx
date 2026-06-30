@@ -1,7 +1,10 @@
 import { useState } from "react";
 import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from "react-native";
 
+import { Ionicons } from "@expo/vector-icons";
+
 import { Button, Field, Screen } from "../../components/ui";
+import { authRedirectUrl, signInWithGoogle } from "../../lib/oauth";
 import { supabase } from "../../lib/supabase";
 
 export default function Login() {
@@ -10,6 +13,7 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
 
   function notify(title: string, message: string) {
     if (Platform.OS === "web") {
@@ -17,6 +21,17 @@ export default function Login() {
       window.alert(`${title}\n\n${message}`);
     } else {
       Alert.alert(title, message);
+    }
+  }
+
+  async function googleSignIn() {
+    setGoogleLoading(true);
+    try {
+      await signInWithGoogle();
+    } catch (e) {
+      notify("Google sign-in failed", e instanceof Error ? e.message : String(e));
+    } finally {
+      setGoogleLoading(false);
     }
   }
 
@@ -31,7 +46,10 @@ export default function Login() {
         const { error } = await supabase.auth.signUp({
           email,
           password,
-          options: { data: { full_name: fullName } },
+          options: {
+            data: { full_name: fullName },
+            emailRedirectTo: authRedirectUrl(),
+          },
         });
         if (error) throw error;
         notify(
@@ -68,6 +86,25 @@ export default function Login() {
             <Text className="mt-1 text-slate-500">
               Operations-first property management.
             </Text>
+          </View>
+
+          <Pressable
+            onPress={googleSignIn}
+            disabled={googleLoading}
+            className={`mb-5 flex-row items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-3 ${
+              googleLoading ? "opacity-50" : ""
+            }`}
+          >
+            <Ionicons name="logo-google" size={18} color="#0f766e" />
+            <Text className="ml-2 font-semibold text-slate-800">
+              {googleLoading ? "Connecting…" : "Continue with Google"}
+            </Text>
+          </Pressable>
+
+          <View className="mb-5 flex-row items-center">
+            <View className="h-px flex-1 bg-slate-200" />
+            <Text className="mx-3 text-xs uppercase text-slate-400">or</Text>
+            <View className="h-px flex-1 bg-slate-200" />
           </View>
 
           {mode === "signup" ? (
