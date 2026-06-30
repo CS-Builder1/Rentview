@@ -165,7 +165,7 @@ export default function PropertyDetail() {
           />
         ) : (
           units.map((u) => (
-            <Card key={u.id}>
+            <Card key={u.id} onPress={() => router.push(`/unit/${u.id}`)}>
               <View className="flex-row items-center justify-between">
                 <Text className="flex-1 text-base font-semibold text-slate-900">
                   {u.label}
