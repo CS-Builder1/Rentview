@@ -30,6 +30,7 @@ function confirm(
 const MANAGE_LINKS = [
   { href: "/assets", label: "Assets", icon: "cube-outline" },
   { href: "/inventory", label: "Inventory & parts", icon: "file-tray-stacked-outline" },
+  { href: "/maintenance", label: "Preventive maintenance", icon: "calendar-outline" },
   { href: "/expenses", label: "Expenses & analytics", icon: "cash-outline" },
 ] as const;
 

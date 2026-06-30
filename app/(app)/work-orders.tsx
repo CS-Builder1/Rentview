@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import { Modal, Pressable, ScrollView, Text, View } from "react-native";
 
@@ -26,6 +26,7 @@ type WorkOrder = Tables<"work_orders"> & {
 const PRIORITIES = Constants.public.Enums.wo_priority;
 
 export default function WorkOrders() {
+  const router = useRouter();
   const { session } = useAuth();
   const [orders, setOrders] = useState<WorkOrder[] | null>(null);
   const [properties, setProperties] = useState<Tables<"properties">[]>([]);
@@ -120,7 +121,7 @@ export default function WorkOrders() {
           />
         ) : (
           orders.map((o) => (
-            <Card key={o.id}>
+            <Card key={o.id} onPress={() => router.push(`/work-order/${o.id}`)}>
               <View className="flex-row items-center justify-between">
                 <Text className="flex-1 pr-2 text-base font-semibold text-slate-900">
                   {o.title}
