@@ -21,6 +21,7 @@ export default function AppLayout() {
       <Stack.Screen name="inventory" />
       <Stack.Screen name="expenses" />
       <Stack.Screen name="maintenance" />
+      <Stack.Screen name="documents" />
     </Stack>
   );
 }
