@@ -5,13 +5,13 @@
 --   * Does nothing unless that user exists (sign up in the app first).
 --   * Skips entirely if the user already has any properties (won't duplicate).
 --
--- Currency: XCD (East Caribbean Dollar). Names are generic and meant to be edited in-app.
+-- Currency: USD. Names are generic and meant to be edited in-app.
 -- To target a different account, change the email below.
 
 do $$
 declare
   v_email text := 'stunner.361@gmail.com';
-  v_cur   text := 'XCD';
+  v_cur   text := 'USD';
   v_owner uuid;
 
   -- property ids
