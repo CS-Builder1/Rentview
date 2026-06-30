@@ -54,8 +54,11 @@ export default function AppLayout() {
           ),
         }}
       />
-      {/* Detail routes live in the stack but are hidden from the tab bar. */}
+      {/* Routes reachable from More / detail screens, hidden from the tab bar. */}
       <Tabs.Screen name="property/[id]" options={{ href: null }} />
+      <Tabs.Screen name="assets" options={{ href: null }} />
+      <Tabs.Screen name="inventory" options={{ href: null }} />
+      <Tabs.Screen name="expenses" options={{ href: null }} />
     </Tabs>
   );
 }

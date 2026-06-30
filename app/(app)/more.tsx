@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import { useCallback, useState } from "react";
 import { Alert, Platform, Pressable, ScrollView, Text, View } from "react-native";
@@ -26,7 +27,14 @@ function confirm(
   ]);
 }
 
+const MANAGE_LINKS = [
+  { href: "/assets", label: "Assets", icon: "cube-outline" },
+  { href: "/inventory", label: "Inventory & parts", icon: "file-tray-stacked-outline" },
+  { href: "/expenses", label: "Expenses & analytics", icon: "cash-outline" },
+] as const;
+
 export default function More() {
+  const router = useRouter();
   const { session, signOut } = useAuth();
   const [deleting, setDeleting] = useState(false);
 
@@ -70,6 +78,23 @@ export default function More() {
         <Text className="mb-5 text-slate-500">{session?.user.email}</Text>
 
         <Text className="mb-2 text-sm font-semibold uppercase text-slate-400">
+          Manage
+        </Text>
+        {MANAGE_LINKS.map((link) => (
+          <Pressable key={link.href} onPress={() => router.push(link.href)}>
+            <Card>
+              <View className="flex-row items-center">
+                <Ionicons name={link.icon} size={20} color="#0f766e" />
+                <Text className="ml-3 flex-1 text-base text-slate-700">
+                  {link.label}
+                </Text>
+                <Ionicons name="chevron-forward" size={18} color="#cbd5e1" />
+              </View>
+            </Card>
+          </Pressable>
+        ))}
+
+        <Text className="mb-2 mt-4 text-sm font-semibold uppercase text-slate-400">
           Plan & billing
         </Text>
         <Card>
