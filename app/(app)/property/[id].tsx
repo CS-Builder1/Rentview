@@ -28,6 +28,11 @@ export default function PropertyDetail() {
 
   const [property, setProperty] = useState<Tables<"properties"> | null>(null);
   const [units, setUnits] = useState<Tables<"units">[] | null>(null);
+  const [assets, setAssets] = useState<Tables<"assets">[]>([]);
+  const [openWorkOrders, setOpenWorkOrders] = useState<Tables<"work_orders">[]>(
+    [],
+  );
+  const [spend, setSpend] = useState(0);
   const [adding, setAdding] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -41,16 +46,33 @@ export default function PropertyDetail() {
 
   const load = useCallback(async () => {
     if (!id) return;
-    const [prop, unitRows] = await Promise.all([
+    const [prop, unitRows, assetRows, woRows, expenseRows] = await Promise.all([
       supabase.from("properties").select("*").eq("id", id).single(),
       supabase
         .from("units")
         .select("*")
         .eq("property_id", id)
         .order("created_at", { ascending: true }),
+      supabase
+        .from("assets")
+        .select("*")
+        .eq("property_id", id)
+        .order("created_at", { ascending: true }),
+      supabase
+        .from("work_orders")
+        .select("*")
+        .eq("property_id", id)
+        .in("status", ["open", "in_progress", "on_hold"])
+        .order("created_at", { ascending: false }),
+      supabase.from("expenses").select("amount").eq("property_id", id),
     ]);
     setProperty(prop.data ?? null);
     setUnits(unitRows.data ?? []);
+    setAssets(assetRows.data ?? []);
+    setOpenWorkOrders(woRows.data ?? []);
+    setSpend(
+      (expenseRows.data ?? []).reduce((s, r) => s + Number(r.amount ?? 0), 0),
+    );
   }, [id]);
 
   useFocusEffect(
@@ -156,6 +178,56 @@ export default function PropertyDetail() {
             </Card>
           ))
         )}
+
+        {/* Open work orders for this property */}
+        <Text className="mb-2 mt-4 text-lg font-semibold text-slate-900">
+          Open work orders ({openWorkOrders.length})
+        </Text>
+        {openWorkOrders.length === 0 ? (
+          <Text className="mb-2 text-slate-400">None open.</Text>
+        ) : (
+          openWorkOrders.map((w) => (
+            <Card
+              key={w.id}
+              onPress={() => router.push(`/work-order/${w.id}`)}
+            >
+              <View className="flex-row items-center justify-between">
+                <Text className="flex-1 pr-2 text-slate-800">{w.title}</Text>
+                <Badge label={w.priority} />
+              </View>
+            </Card>
+          ))
+        )}
+
+        {/* Assets for this property */}
+        <Text className="mb-2 mt-4 text-lg font-semibold text-slate-900">
+          Assets ({assets.length})
+        </Text>
+        {assets.length === 0 ? (
+          <Text className="mb-2 text-slate-400">No assets tracked.</Text>
+        ) : (
+          assets.map((a) => (
+            <Card key={a.id}>
+              <View className="flex-row items-center justify-between">
+                <Text className="flex-1 pr-2 text-slate-800">{a.name}</Text>
+                <Badge label={a.status} />
+              </View>
+              {a.category ? (
+                <Text className="mt-1 text-slate-500">{a.category}</Text>
+              ) : null}
+            </Card>
+          ))
+        )}
+
+        {/* Spend */}
+        <Card>
+          <View className="flex-row items-center justify-between">
+            <Text className="text-slate-600">Total spend tracked</Text>
+            <Text className="text-lg font-bold text-slate-900">
+              {formatCurrency(spend, property.currency)}
+            </Text>
+          </View>
+        </Card>
       </ScrollView>
 
       <Modal visible={adding} animationType="slide" transparent>
