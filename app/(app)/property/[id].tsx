@@ -3,6 +3,7 @@ import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from "expo-rou
 import { useCallback, useState } from "react";
 import { Modal, Pressable, ScrollView, Text, View } from "react-native";
 
+import { DocumentsSection } from "../../../components/DocumentsSection";
 import {
   Badge,
   Button,
@@ -212,7 +213,7 @@ export default function PropertyDetail() {
           <Text className="mb-2 text-slate-400">No assets tracked.</Text>
         ) : (
           assets.map((a) => (
-            <Card key={a.id}>
+            <Card key={a.id} onPress={() => router.push(`/asset/${a.id}`)}>
               <View className="flex-row items-center justify-between">
                 <Text className="flex-1 pr-2 text-slate-800">{a.name}</Text>
                 <Badge label={a.status} />
@@ -223,6 +224,9 @@ export default function PropertyDetail() {
             </Card>
           ))
         )}
+
+        {/* Property-level documents (leases, insurance, etc.) */}
+        <DocumentsSection scope={{ kind: "property", propertyId: property.id }} />
 
         {/* Spend */}
         <Card>

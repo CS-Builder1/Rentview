@@ -17,6 +17,7 @@ export default function AppLayout() {
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="property/[id]" />
       <Stack.Screen name="work-order/[id]" />
+      <Stack.Screen name="asset/[id]" />
       <Stack.Screen name="assets" />
       <Stack.Screen name="inventory" />
       <Stack.Screen name="expenses" />

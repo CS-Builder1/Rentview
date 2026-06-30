@@ -136,7 +136,7 @@ export default function Assets() {
           />
         ) : (
           assets.map((a) => (
-            <Card key={a.id}>
+            <Card key={a.id} onPress={() => router.push(`/asset/${a.id}`)}>
               <View className="flex-row items-center justify-between">
                 <Text className="flex-1 pr-2 text-base font-semibold text-slate-900">
                   {a.name}
