@@ -8,8 +8,11 @@ import {
 import { useCallback, useState } from "react";
 import { Modal, Pressable, ScrollView, Text, View } from "react-native";
 
+import QRCode from "react-native-qrcode-svg";
+
 import { DocumentsSection } from "../../../components/DocumentsSection";
 import { Badge, Button, Card, Field, Loading, Screen } from "../../../components/ui";
+import { assetUrl } from "../../../lib/appUrl";
 import { cachedSelect } from "../../../lib/cache";
 import { confirmAction } from "../../../lib/confirm";
 import type { Tables } from "../../../lib/database.types";
@@ -222,6 +225,20 @@ export default function AssetDetail() {
             ) : null}
           </Card>
         </View>
+
+        {/* Printable QR tag — scanning it opens this asset in the app. */}
+        <Text className="mb-2 mt-4 text-lg font-semibold text-slate-900">
+          QR tag
+        </Text>
+        <Card>
+          <View className="items-center py-2">
+            <QRCode value={assetUrl(asset.id)} size={160} />
+            <Text className="mt-3 text-center text-sm text-slate-500">
+              Print and stick this on the asset. Scan it with the in-app
+              scanner (or any phone camera) to jump straight here.
+            </Text>
+          </View>
+        </Card>
 
         <DocumentsSection
           scope={{

@@ -33,7 +33,13 @@
       "output": "single"
     },
     "plugins": [
-      "expo-router"
+      "expo-router",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "RentView uses the camera to scan asset QR tags."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

@@ -29,6 +29,7 @@ function confirm(
 
 const MANAGE_LINKS = [
   { href: "/assets", label: "Assets", icon: "cube-outline" },
+  { href: "/scan", label: "Scan asset tag", icon: "qr-code-outline" },
   { href: "/inventory", label: "Inventory & parts", icon: "file-tray-stacked-outline" },
   { href: "/vendors", label: "Vendors", icon: "people-outline" },
   { href: "/maintenance", label: "Preventive maintenance", icon: "calendar-outline" },

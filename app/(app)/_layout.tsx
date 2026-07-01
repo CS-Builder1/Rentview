@@ -25,6 +25,7 @@ export default function AppLayout() {
       <Stack.Screen name="maintenance" />
       <Stack.Screen name="documents" />
       <Stack.Screen name="vendors" />
+      <Stack.Screen name="scan" />
     </Stack>
   );
 }

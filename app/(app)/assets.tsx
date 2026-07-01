@@ -144,6 +144,9 @@ export default function Assets() {
           <Ionicons name="chevron-back" size={24} color="#0f766e" />
         </Pressable>
         <Text className="flex-1 text-xl font-bold text-slate-900">Assets</Text>
+        <Pressable onPress={() => router.push("/scan")} className="p-2">
+          <Ionicons name="qr-code-outline" size={22} color="#0f766e" />
+        </Pressable>
         <Pressable
           onPress={() => setAdding(true)}
           className="flex-row items-center rounded-full bg-brand px-3 py-2"
