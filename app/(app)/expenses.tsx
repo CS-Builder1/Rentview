@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Stack, useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
-import { Modal, Pressable, ScrollView, Text, View } from "react-native";
+import { Alert, Modal, Platform, Pressable, ScrollView, Text, View } from "react-native";
 
 import {
   Badge,
@@ -14,6 +14,7 @@ import {
 } from "../../components/ui";
 import { useAuth } from "../../lib/auth";
 import { confirmAction } from "../../lib/confirm";
+import { useOffline } from "../../lib/offline";
 import type { Tables } from "../../lib/database.types";
 import { Constants } from "../../lib/database.types";
 import { formatCurrency, formatDate, titleCase } from "../../lib/format";
@@ -25,9 +26,16 @@ type Expense = Tables<"expenses"> & {
 
 const CATEGORIES = Constants.public.Enums.expense_category;
 
+function notify(title: string, message: string) {
+  Platform.OS === "web"
+    ? window.alert(`${title}\n\n${message}`)
+    : Alert.alert(title, message);
+}
+
 export default function Expenses() {
   const router = useRouter();
   const { session } = useAuth();
+  const { submitInsert } = useOffline();
   const [expenses, setExpenses] = useState<Expense[] | null>(null);
   const [properties, setProperties] = useState<Tables<"properties">[]>([]);
   const [adding, setAdding] = useState(false);
@@ -117,16 +125,36 @@ export default function Expenses() {
       category,
       description: description.trim() || null,
     };
-    const { error } = editingId
-      ? await supabase.from("expenses").update(payload).eq("id", editingId)
-      : await supabase
+    try {
+      if (editingId) {
+        const { error } = await supabase
           .from("expenses")
-          .insert({ ...payload, owner_id: session.user.id });
-    setSaving(false);
-    if (!error) {
-      setAdding(false);
-      resetForm();
-      load();
+          .update(payload)
+          .eq("id", editingId);
+        if (error) throw error;
+        setAdding(false);
+        resetForm();
+        load();
+      } else {
+        const result = await submitInsert("expenses", {
+          ...payload,
+          owner_id: session.user.id,
+        });
+        setAdding(false);
+        resetForm();
+        if (result === "queued") {
+          notify(
+            "Saved offline",
+            "This expense will sync automatically when you're back online.",
+          );
+        } else {
+          load();
+        }
+      }
+    } catch (e) {
+      notify("Could not save", e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(false);
     }
   }
 

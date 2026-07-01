@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
-import { Modal, Pressable, ScrollView, Text, View } from "react-native";
+import { Alert, Modal, Platform, Pressable, ScrollView, Text, View } from "react-native";
 
 import {
   Badge,
@@ -13,10 +13,17 @@ import {
   Screen,
 } from "../../../components/ui";
 import { useAuth } from "../../../lib/auth";
+import { useOffline } from "../../../lib/offline";
 import type { Tables } from "../../../lib/database.types";
 import { Constants } from "../../../lib/database.types";
 import { formatDate, titleCase } from "../../../lib/format";
 import { supabase } from "../../../lib/supabase";
+
+function notify(title: string, message: string) {
+  Platform.OS === "web"
+    ? window.alert(`${title}\n\n${message}`)
+    : Alert.alert(title, message);
+}
 
 type WorkOrder = Tables<"work_orders"> & {
   properties: { name: string } | null;
@@ -28,6 +35,7 @@ const PRIORITIES = Constants.public.Enums.wo_priority;
 export default function WorkOrders() {
   const router = useRouter();
   const { session } = useAuth();
+  const { submitInsert } = useOffline();
   const [orders, setOrders] = useState<WorkOrder[] | null>(null);
   const [properties, setProperties] = useState<Tables<"properties">[]>([]);
   const [units, setUnits] = useState<Tables<"units">[]>([]);
@@ -82,19 +90,29 @@ export default function WorkOrders() {
   async function save() {
     if (!title.trim() || !propertyId || !session) return;
     setSaving(true);
-    const { error } = await supabase.from("work_orders").insert({
-      owner_id: session.user.id,
-      property_id: propertyId,
-      unit_id: unitId,
-      title: title.trim(),
-      description: description.trim() || null,
-      priority,
-    });
-    setSaving(false);
-    if (!error) {
+    try {
+      const result = await submitInsert("work_orders", {
+        owner_id: session.user.id,
+        property_id: propertyId,
+        unit_id: unitId,
+        title: title.trim(),
+        description: description.trim() || null,
+        priority,
+      });
       setAdding(false);
       resetForm();
-      load();
+      if (result === "queued") {
+        notify(
+          "Saved offline",
+          "This work order will sync automatically when you're back online.",
+        );
+      } else {
+        load();
+      }
+    } catch (e) {
+      notify("Could not save", e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(false);
     }
   }
 
