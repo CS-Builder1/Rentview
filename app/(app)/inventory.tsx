@@ -12,6 +12,7 @@ import {
   Screen,
 } from "../../components/ui";
 import { useAuth } from "../../lib/auth";
+import { confirmAction } from "../../lib/confirm";
 import type { Tables } from "../../lib/database.types";
 import { formatCurrency } from "../../lib/format";
 import { supabase } from "../../lib/supabase";
@@ -34,6 +35,7 @@ export default function Inventory() {
   const [properties, setProperties] = useState<Tables<"properties">[]>([]);
   const [adding, setAdding] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   // form
   const [name, setName] = useState("");
@@ -68,26 +70,61 @@ export default function Inventory() {
     setThreshold("");
     setUnitCost("");
     setLocation("");
+    setEditingId(null);
+  }
+
+  function openAdd() {
+    resetForm();
+    setAdding(true);
+  }
+
+  function openEdit(it: Item) {
+    setName(it.name);
+    setPropertyId(it.property_id);
+    setQuantity(String(it.quantity));
+    setThreshold(it.low_stock_threshold != null ? String(it.low_stock_threshold) : "");
+    setUnitCost(it.unit_cost != null ? String(it.unit_cost) : "");
+    setLocation(it.location ?? "");
+    setEditingId(it.id);
+    setAdding(true);
   }
 
   async function save() {
     if (!name.trim() || !session) return;
     setSaving(true);
-    const { error } = await supabase.from("inventory_items").insert({
-      owner_id: session.user.id,
+    const payload = {
       property_id: propertyId,
       name: name.trim(),
       quantity: quantity ? Number(quantity) : 0,
       low_stock_threshold: threshold ? Number(threshold) : null,
       unit_cost: unitCost ? Number(unitCost) : null,
       location: location.trim() || null,
-    });
+    };
+    const { error } = editingId
+      ? await supabase.from("inventory_items").update(payload).eq("id", editingId)
+      : await supabase
+          .from("inventory_items")
+          .insert({ ...payload, owner_id: session.user.id });
     setSaving(false);
     if (!error) {
       setAdding(false);
       resetForm();
       load();
     }
+  }
+
+  function remove() {
+    if (!editingId) return;
+    confirmAction(
+      "Delete item",
+      "This permanently removes the inventory item. This cannot be undone.",
+      async () => {
+        await supabase.from("inventory_items").delete().eq("id", editingId);
+        setAdding(false);
+        resetForm();
+        load();
+      },
+    );
   }
 
   if (!items) return <Loading />;
@@ -110,7 +147,7 @@ export default function Inventory() {
           Inventory & parts
         </Text>
         <Pressable
-          onPress={() => setAdding(true)}
+          onPress={openAdd}
           className="flex-row items-center rounded-full bg-brand px-3 py-2"
         >
           <Ionicons name="add" color="#fff" size={18} />
@@ -134,7 +171,7 @@ export default function Inventory() {
           />
         ) : (
           items.map((it) => (
-            <Card key={it.id}>
+            <Card key={it.id} onPress={() => openEdit(it)}>
               <View className="flex-row items-center justify-between">
                 <Text className="flex-1 pr-2 text-base font-semibold text-slate-900">
                   {it.name}
@@ -171,7 +208,9 @@ export default function Inventory() {
             className="max-h-[88%] rounded-t-3xl bg-slate-50"
             contentContainerClassName="p-5"
           >
-            <Text className="mb-4 text-xl font-bold text-slate-900">New item</Text>
+            <Text className="mb-4 text-xl font-bold text-slate-900">
+              {editingId ? "Edit item" : "New item"}
+            </Text>
 
             <Field
               label="Name"
@@ -252,6 +291,11 @@ export default function Inventory() {
                 <Button title="Save" onPress={save} loading={saving} />
               </View>
             </View>
+            {editingId ? (
+              <View className="mt-3">
+                <Button title="Delete item" variant="danger" onPress={remove} />
+              </View>
+            ) : null}
           </ScrollView>
         </View>
       </Modal>

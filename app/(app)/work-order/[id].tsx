@@ -41,6 +41,7 @@ type WO = Tables<"work_orders"> & {
 };
 
 const STATUSES = Constants.public.Enums.wo_status;
+const PRIORITIES = Constants.public.Enums.wo_priority;
 
 function notify(title: string, message: string) {
   Platform.OS === "web"
@@ -67,6 +68,14 @@ export default function WorkOrderDetail() {
   const [partDesc, setPartDesc] = useState("");
   const [partQty, setPartQty] = useState("1");
   const [partCost, setPartCost] = useState("");
+
+  // edit-work-order modal
+  const [editing, setEditing] = useState(false);
+  const [eTitle, setETitle] = useState("");
+  const [eDesc, setEDesc] = useState("");
+  const [ePriority, setEPriority] =
+    useState<(typeof PRIORITIES)[number]>("medium");
+  const [eDue, setEDue] = useState("");
 
   const currency = wo?.properties?.currency ?? "USD";
 
@@ -190,6 +199,32 @@ export default function WorkOrderDetail() {
     }
   }
 
+  function openEdit() {
+    if (!wo) return;
+    setETitle(wo.title);
+    setEDesc(wo.description ?? "");
+    setEPriority(wo.priority);
+    setEDue(wo.due_date ?? "");
+    setEditing(true);
+  }
+
+  async function saveEdit() {
+    if (!eTitle.trim() || !wo) return;
+    setBusy(true);
+    await supabase
+      .from("work_orders")
+      .update({
+        title: eTitle.trim(),
+        description: eDesc.trim() || null,
+        priority: ePriority,
+        due_date: eDue.trim() || null,
+      })
+      .eq("id", wo.id);
+    setBusy(false);
+    setEditing(false);
+    load();
+  }
+
   function confirmDelete() {
     const run = async () => {
       if (!wo) return;
@@ -231,6 +266,9 @@ export default function WorkOrderDetail() {
         >
           {wo.title}
         </Text>
+        <Pressable onPress={openEdit} className="p-2">
+          <Ionicons name="create-outline" size={22} color="#0f766e" />
+        </Pressable>
         <Pressable onPress={confirmDelete} className="p-2">
           <Ionicons name="trash-outline" size={22} color="#dc2626" />
         </Pressable>
@@ -418,6 +456,70 @@ export default function WorkOrderDetail() {
           defaultDocType="invoice"
         />
       </ScrollView>
+
+      <Modal visible={editing} animationType="slide" transparent>
+        <View className="flex-1 justify-end bg-black/40">
+          <ScrollView
+            className="max-h-[88%] rounded-t-3xl bg-slate-50"
+            contentContainerClassName="p-5"
+          >
+            <Text className="mb-4 text-xl font-bold text-slate-900">
+              Edit work order
+            </Text>
+            <Field label="Title" value={eTitle} onChangeText={setETitle} />
+            <Field
+              label="Description"
+              value={eDesc}
+              onChangeText={setEDesc}
+              placeholder="Details, location, what's needed…"
+              multiline
+            />
+            <Text className="mb-1 text-sm font-medium text-slate-600">
+              Priority
+            </Text>
+            <View className="mb-3 flex-row flex-wrap">
+              {PRIORITIES.map((p) => (
+                <Pressable
+                  key={p}
+                  onPress={() => setEPriority(p)}
+                  className={`mb-2 mr-2 rounded-full border px-3 py-2 ${
+                    ePriority === p
+                      ? "border-brand bg-brand"
+                      : "border-slate-300 bg-white"
+                  }`}
+                >
+                  <Text
+                    className={
+                      ePriority === p ? "font-medium text-white" : "text-slate-700"
+                    }
+                  >
+                    {titleCase(p)}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+            <Field
+              label="Due date (YYYY-MM-DD, optional)"
+              value={eDue}
+              onChangeText={setEDue}
+              placeholder="2026-08-01"
+              autoCapitalize="none"
+            />
+            <View className="mt-2 flex-row gap-3">
+              <View className="flex-1">
+                <Button
+                  title="Cancel"
+                  variant="secondary"
+                  onPress={() => setEditing(false)}
+                />
+              </View>
+              <View className="flex-1">
+                <Button title="Save" onPress={saveEdit} loading={busy} />
+              </View>
+            </View>
+          </ScrollView>
+        </View>
+      </Modal>
 
       <Modal visible={addingPart} animationType="slide" transparent>
         <View className="flex-1 justify-end bg-black/40">

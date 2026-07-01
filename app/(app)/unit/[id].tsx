@@ -26,6 +26,7 @@ import { supabase } from "../../../lib/supabase";
 
 const UNIT_TYPES = Constants.public.Enums.unit_type;
 const UNIT_STATUSES = Constants.public.Enums.unit_status;
+const LEASE_STATUSES = Constants.public.Enums.lease_status;
 
 type Unit = Tables<"units"> & {
   properties: { name: string; currency: string } | null;
@@ -58,6 +59,9 @@ export default function UnitDetail() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [rent, setRent] = useState("");
+  const [leaseStatus, setLeaseStatus] =
+    useState<(typeof LEASE_STATUSES)[number]>("active");
+  const [editingLeaseId, setEditingLeaseId] = useState<string | null>(null);
 
   // edit-unit modal
   const [editing, setEditing] = useState(false);
@@ -111,26 +115,63 @@ export default function UnitDetail() {
     setStartDate("");
     setEndDate("");
     setRent("");
+    setLeaseStatus("active");
+    setEditingLeaseId(null);
+  }
+
+  function openAddLease() {
+    resetForm();
+    setAdding(true);
+  }
+
+  function openEditLease(l: Tables<"leases">) {
+    setTenantName(l.tenant_name);
+    setTenantPhone(l.tenant_phone ?? "");
+    setStartDate(l.start_date ?? "");
+    setEndDate(l.end_date ?? "");
+    setRent(l.rent_amount != null ? String(l.rent_amount) : "");
+    setLeaseStatus(l.status);
+    setEditingLeaseId(l.id);
+    setAdding(true);
   }
 
   async function saveLease() {
     if (!tenantName.trim() || !session || !id) return;
     setSaving(true);
-    await supabase.from("leases").insert({
-      owner_id: session.user.id,
-      unit_id: id,
+    const payload = {
       tenant_name: tenantName.trim(),
       tenant_phone: tenantPhone.trim() || null,
       start_date: startDate.trim() || null,
       end_date: endDate.trim() || null,
       rent_amount: rent ? Number(rent) : (unit?.rent_amount ?? null),
       rent_currency: currency,
-      status: "active",
-    });
+      status: leaseStatus,
+    };
+    const { error } = editingLeaseId
+      ? await supabase.from("leases").update(payload).eq("id", editingLeaseId)
+      : await supabase
+          .from("leases")
+          .insert({ ...payload, owner_id: session.user.id, unit_id: id });
     setSaving(false);
-    setAdding(false);
-    resetForm();
-    load();
+    if (!error) {
+      setAdding(false);
+      resetForm();
+      load();
+    }
+  }
+
+  function removeLease() {
+    if (!editingLeaseId) return;
+    confirmAction(
+      "Delete lease",
+      "This permanently removes the lease record. This cannot be undone.",
+      async () => {
+        await supabase.from("leases").delete().eq("id", editingLeaseId);
+        setAdding(false);
+        resetForm();
+        load();
+      },
+    );
   }
 
   function openEdit() {
@@ -243,7 +284,7 @@ export default function UnitDetail() {
             Lease & tenant
           </Text>
           <Pressable
-            onPress={() => setAdding(true)}
+            onPress={openAddLease}
             className="flex-row items-center rounded-full bg-brand px-3 py-1.5"
           >
             <Ionicons name="add" color="#fff" size={16} />
@@ -254,7 +295,7 @@ export default function UnitDetail() {
           <Text className="mb-2 text-slate-400">No lease on record.</Text>
         ) : (
           leases.map((l) => (
-            <Card key={l.id}>
+            <Card key={l.id} onPress={() => openEditLease(l)}>
               <View className="flex-row items-center justify-between">
                 <Text className="flex-1 pr-2 font-semibold text-slate-900">
                   {l.tenant_name}
@@ -409,7 +450,7 @@ export default function UnitDetail() {
             contentContainerClassName="p-5"
           >
             <Text className="mb-4 text-xl font-bold text-slate-900">
-              New lease
+              {editingLeaseId ? "Edit lease" : "New lease"}
             </Text>
             <Field
               label="Tenant name"
@@ -453,6 +494,28 @@ export default function UnitDetail() {
               }
               keyboardType="decimal-pad"
             />
+            <Text className="mb-1 text-sm font-medium text-slate-600">Status</Text>
+            <View className="mb-3 flex-row flex-wrap">
+              {LEASE_STATUSES.map((s) => (
+                <Pressable
+                  key={s}
+                  onPress={() => setLeaseStatus(s)}
+                  className={`mb-2 mr-2 rounded-full border px-3 py-2 ${
+                    leaseStatus === s
+                      ? "border-brand bg-brand"
+                      : "border-slate-300 bg-white"
+                  }`}
+                >
+                  <Text
+                    className={
+                      leaseStatus === s ? "font-medium text-white" : "text-slate-700"
+                    }
+                  >
+                    {titleCase(s)}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
             <View className="mt-2 flex-row gap-3">
               <View className="flex-1">
                 <Button
@@ -468,6 +531,11 @@ export default function UnitDetail() {
                 <Button title="Save" onPress={saveLease} loading={saving} />
               </View>
             </View>
+            {editingLeaseId ? (
+              <View className="mt-3">
+                <Button title="Delete lease" variant="danger" onPress={removeLease} />
+              </View>
+            ) : null}
           </ScrollView>
         </View>
       </Modal>

@@ -13,6 +13,7 @@ import {
   Screen,
 } from "../../components/ui";
 import { useAuth } from "../../lib/auth";
+import { confirmAction } from "../../lib/confirm";
 import type { Tables } from "../../lib/database.types";
 import { Constants } from "../../lib/database.types";
 import { formatCurrency, formatDate, titleCase } from "../../lib/format";
@@ -31,6 +32,7 @@ export default function Expenses() {
   const [properties, setProperties] = useState<Tables<"properties">[]>([]);
   const [adding, setAdding] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   // form
   const [amount, setAmount] = useState("");
@@ -87,25 +89,59 @@ export default function Expenses() {
     setCategory("repair");
     setPropertyId(null);
     setDescription("");
+    setEditingId(null);
+  }
+
+  function openAdd() {
+    resetForm();
+    setAdding(true);
+  }
+
+  function openEdit(e: Expense) {
+    setAmount(String(e.amount));
+    setCurrency(e.currency);
+    setCategory(e.category);
+    setPropertyId(e.property_id);
+    setDescription(e.description ?? "");
+    setEditingId(e.id);
+    setAdding(true);
   }
 
   async function save() {
     if (!amount || !session) return;
     setSaving(true);
-    const { error } = await supabase.from("expenses").insert({
-      owner_id: session.user.id,
+    const payload = {
       property_id: propertyId,
       amount: Number(amount),
       currency: currency.trim() || "USD",
       category,
       description: description.trim() || null,
-    });
+    };
+    const { error } = editingId
+      ? await supabase.from("expenses").update(payload).eq("id", editingId)
+      : await supabase
+          .from("expenses")
+          .insert({ ...payload, owner_id: session.user.id });
     setSaving(false);
     if (!error) {
       setAdding(false);
       resetForm();
       load();
     }
+  }
+
+  function remove() {
+    if (!editingId) return;
+    confirmAction(
+      "Delete expense",
+      "This permanently removes the expense. This cannot be undone.",
+      async () => {
+        await supabase.from("expenses").delete().eq("id", editingId);
+        setAdding(false);
+        resetForm();
+        load();
+      },
+    );
   }
 
   if (!expenses) return <Loading />;
@@ -126,7 +162,7 @@ export default function Expenses() {
           Expenses
         </Text>
         <Pressable
-          onPress={() => setAdding(true)}
+          onPress={openAdd}
           className="flex-row items-center rounded-full bg-brand px-3 py-2"
         >
           <Ionicons name="add" color="#fff" size={18} />
@@ -175,7 +211,7 @@ export default function Expenses() {
           />
         ) : (
           expenses.map((e) => (
-            <Card key={e.id}>
+            <Card key={e.id} onPress={() => openEdit(e)}>
               <View className="flex-row items-center justify-between">
                 <Text className="flex-1 pr-2 text-base font-semibold text-slate-900">
                   {e.description || titleCase(e.category)}
@@ -207,7 +243,7 @@ export default function Expenses() {
             contentContainerClassName="p-5"
           >
             <Text className="mb-4 text-xl font-bold text-slate-900">
-              New expense
+              {editingId ? "Edit expense" : "New expense"}
             </Text>
 
             <View className="flex-row gap-3">
@@ -309,6 +345,11 @@ export default function Expenses() {
                 <Button title="Save" onPress={save} loading={saving} />
               </View>
             </View>
+            {editingId ? (
+              <View className="mt-3">
+                <Button title="Delete expense" variant="danger" onPress={remove} />
+              </View>
+            ) : null}
           </ScrollView>
         </View>
       </Modal>
