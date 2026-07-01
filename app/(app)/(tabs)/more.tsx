@@ -35,12 +35,49 @@ const MANAGE_LINKS = [
   { href: "/maintenance", label: "Preventive maintenance", icon: "calendar-outline" },
   { href: "/documents", label: "Documents", icon: "document-text-outline" },
   { href: "/expenses", label: "Expenses & analytics", icon: "cash-outline" },
+  { href: "/export", label: "Accountant packet (CSV)", icon: "download-outline" },
 ] as const;
+
+function notify(title: string, message: string) {
+  Platform.OS === "web"
+    ? window.alert(`${title}\n\n${message}`)
+    : Alert.alert(title, message);
+}
 
 export default function More() {
   const router = useRouter();
   const { session, signOut } = useAuth();
   const [deleting, setDeleting] = useState(false);
+  const [reminding, setReminding] = useState(false);
+
+  async function sendReminders() {
+    setReminding(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("send-reminders");
+      if (error) throw error;
+      const res = data as {
+        emailConfigured: boolean;
+        dueUsers: number;
+        sent: number;
+      };
+      if (!res.emailConfigured) {
+        notify(
+          "Email not set up yet",
+          "Add a RESEND_API_KEY secret to the send-reminders function to enable email reminders.",
+        );
+      } else if (res.dueUsers === 0) {
+        notify("Nothing due", "No warranties or maintenance are due right now.");
+      } else if (res.sent > 0) {
+        notify("Reminder sent", `Emailed your reminders to ${session?.user.email}.`);
+      } else {
+        notify("Could not send", "Reminders are due but the email didn't send. Check the sender configuration.");
+      }
+    } catch (e) {
+      notify("Failed", e instanceof Error ? e.message : String(e));
+    } finally {
+      setReminding(false);
+    }
+  }
 
   const openCheckout = useCallback(async (url?: string) => {
     if (!url) {
@@ -97,6 +134,22 @@ export default function More() {
             </Card>
           </Pressable>
         ))}
+
+        <Text className="mb-2 mt-4 text-sm font-semibold uppercase text-slate-400">
+          Reminders
+        </Text>
+        <Card>
+          <Text className="text-slate-600">
+            Get warranties expiring soon and maintenance due, by email.
+          </Text>
+          <View className="mt-3">
+            <Button
+              title="Email me my reminders"
+              onPress={sendReminders}
+              loading={reminding}
+            />
+          </View>
+        </Card>
 
         <Text className="mb-2 mt-4 text-sm font-semibold uppercase text-slate-400">
           Plan & billing

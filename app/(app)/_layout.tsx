@@ -26,6 +26,7 @@ export default function AppLayout() {
       <Stack.Screen name="documents" />
       <Stack.Screen name="vendors" />
       <Stack.Screen name="scan" />
+      <Stack.Screen name="export" />
     </Stack>
   );
 }
