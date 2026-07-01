@@ -18,9 +18,14 @@ import {
   Screen,
 } from "../../../components/ui";
 import { useAuth } from "../../../lib/auth";
+import { confirmAction } from "../../../lib/confirm";
 import type { Tables } from "../../../lib/database.types";
+import { Constants } from "../../../lib/database.types";
 import { formatCurrency, formatDate, titleCase } from "../../../lib/format";
 import { supabase } from "../../../lib/supabase";
+
+const UNIT_TYPES = Constants.public.Enums.unit_type;
+const UNIT_STATUSES = Constants.public.Enums.unit_status;
 
 type Unit = Tables<"units"> & {
   properties: { name: string; currency: string } | null;
@@ -53,6 +58,17 @@ export default function UnitDetail() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [rent, setRent] = useState("");
+
+  // edit-unit modal
+  const [editing, setEditing] = useState(false);
+  const [eLabel, setELabel] = useState("");
+  const [eType, setEType] = useState<(typeof UNIT_TYPES)[number]>("apartment");
+  const [eStatus, setEStatus] =
+    useState<(typeof UNIT_STATUSES)[number]>("vacant");
+  const [eBeds, setEBeds] = useState("");
+  const [eBaths, setEBaths] = useState("");
+  const [eSize, setESize] = useState("");
+  const [eRent, setERent] = useState("");
 
   const currency = unit?.properties?.currency ?? unit?.rent_currency ?? "USD";
 
@@ -117,6 +133,53 @@ export default function UnitDetail() {
     load();
   }
 
+  function openEdit() {
+    if (!unit) return;
+    setELabel(unit.label);
+    setEType(unit.unit_type);
+    setEStatus(unit.status);
+    setEBeds(unit.bedrooms != null ? String(unit.bedrooms) : "");
+    setEBaths(unit.bathrooms != null ? String(unit.bathrooms) : "");
+    setESize(unit.size_value != null ? String(unit.size_value) : "");
+    setERent(unit.rent_amount != null ? String(unit.rent_amount) : "");
+    setEditing(true);
+  }
+
+  async function saveEdit() {
+    if (!eLabel.trim() || !id) return;
+    setSaving(true);
+    const { error } = await supabase
+      .from("units")
+      .update({
+        label: eLabel.trim(),
+        unit_type: eType,
+        status: eStatus,
+        bedrooms: eBeds ? Number(eBeds) : null,
+        bathrooms: eBaths ? Number(eBaths) : null,
+        size_value: eSize ? Number(eSize) : null,
+        rent_amount: eRent ? Number(eRent) : null,
+        rent_currency: currency,
+      })
+      .eq("id", id);
+    setSaving(false);
+    if (!error) {
+      setEditing(false);
+      load();
+    }
+  }
+
+  function deleteUnit() {
+    confirmAction(
+      "Delete unit",
+      "This permanently deletes the unit and its leases. Assets and work orders are kept but unlinked from it. This cannot be undone.",
+      async () => {
+        if (!unit) return;
+        await supabase.from("units").delete().eq("id", unit.id);
+        router.replace(`/property/${unit.property_id}`);
+      },
+    );
+  }
+
   if (!unit) return <Loading />;
 
   return (
@@ -137,6 +200,12 @@ export default function UnitDetail() {
         >
           {unit.label}
         </Text>
+        <Pressable onPress={openEdit} className="p-2">
+          <Ionicons name="create-outline" size={22} color="#0f766e" />
+        </Pressable>
+        <Pressable onPress={deleteUnit} className="p-2">
+          <Ionicons name="trash-outline" size={22} color="#dc2626" />
+        </Pressable>
       </View>
 
       <ScrollView contentContainerClassName="px-5 pb-12">
@@ -246,6 +315,92 @@ export default function UnitDetail() {
           defaultDocType="lease"
         />
       </ScrollView>
+
+      <Modal visible={editing} animationType="slide" transparent>
+        <View className="flex-1 justify-end bg-black/40">
+          <ScrollView
+            className="max-h-[88%] rounded-t-3xl bg-slate-50"
+            contentContainerClassName="p-5"
+          >
+            <Text className="mb-4 text-xl font-bold text-slate-900">Edit unit</Text>
+            <Field label="Label" value={eLabel} onChangeText={setELabel} />
+            <Text className="mb-1 text-sm font-medium text-slate-600">Type</Text>
+            <View className="mb-3 flex-row flex-wrap">
+              {UNIT_TYPES.map((t) => (
+                <Pressable
+                  key={t}
+                  onPress={() => setEType(t)}
+                  className={`mb-2 mr-2 rounded-full border px-3 py-2 ${
+                    eType === t ? "border-brand bg-brand" : "border-slate-300 bg-white"
+                  }`}
+                >
+                  <Text className={eType === t ? "font-medium text-white" : "text-slate-700"}>
+                    {titleCase(t)}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+            <Text className="mb-1 text-sm font-medium text-slate-600">Status</Text>
+            <View className="mb-3 flex-row flex-wrap">
+              {UNIT_STATUSES.map((s) => (
+                <Pressable
+                  key={s}
+                  onPress={() => setEStatus(s)}
+                  className={`mb-2 mr-2 rounded-full border px-3 py-2 ${
+                    eStatus === s ? "border-brand bg-brand" : "border-slate-300 bg-white"
+                  }`}
+                >
+                  <Text className={eStatus === s ? "font-medium text-white" : "text-slate-700"}>
+                    {titleCase(s)}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+            <View className="flex-row gap-3">
+              <View className="flex-1">
+                <Field
+                  label="Bedrooms"
+                  value={eBeds}
+                  onChangeText={setEBeds}
+                  keyboardType="number-pad"
+                />
+              </View>
+              <View className="flex-1">
+                <Field
+                  label="Bathrooms"
+                  value={eBaths}
+                  onChangeText={setEBaths}
+                  keyboardType="decimal-pad"
+                />
+              </View>
+            </View>
+            <Field
+              label="Size"
+              value={eSize}
+              onChangeText={setESize}
+              keyboardType="decimal-pad"
+            />
+            <Field
+              label={`Rent (${currency})`}
+              value={eRent}
+              onChangeText={setERent}
+              keyboardType="decimal-pad"
+            />
+            <View className="mt-2 flex-row gap-3">
+              <View className="flex-1">
+                <Button
+                  title="Cancel"
+                  variant="secondary"
+                  onPress={() => setEditing(false)}
+                />
+              </View>
+              <View className="flex-1">
+                <Button title="Save" onPress={saveEdit} loading={saving} />
+              </View>
+            </View>
+          </ScrollView>
+        </View>
+      </Modal>
 
       <Modal visible={adding} animationType="slide" transparent>
         <View className="flex-1 justify-end bg-black/40">

@@ -14,6 +14,7 @@ import {
   Screen,
 } from "../../../components/ui";
 import { useAuth } from "../../../lib/auth";
+import { confirmAction } from "../../../lib/confirm";
 import type { Tables } from "../../../lib/database.types";
 import { Constants } from "../../../lib/database.types";
 import { formatCurrency, titleCase } from "../../../lib/format";
@@ -21,6 +22,7 @@ import { supabase } from "../../../lib/supabase";
 
 const UNIT_TYPES = Constants.public.Enums.unit_type;
 const UNIT_STATUSES = Constants.public.Enums.unit_status;
+const PROPERTY_TYPES = Constants.public.Enums.property_type;
 
 export default function PropertyDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -44,6 +46,16 @@ export default function PropertyDetail() {
   const [status, setStatus] =
     useState<(typeof UNIT_STATUSES)[number]>("vacant");
   const [rent, setRent] = useState("");
+
+  // edit-property form
+  const [editing, setEditing] = useState(false);
+  const [eName, setEName] = useState("");
+  const [eType, setEType] =
+    useState<(typeof PROPERTY_TYPES)[number]>("residential");
+  const [eCity, setECity] = useState("");
+  const [eCurrency, setECurrency] = useState("USD");
+  const [eValue, setEValue] = useState("");
+  const [eNotes, setENotes] = useState("");
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -109,6 +121,50 @@ export default function PropertyDetail() {
     }
   }
 
+  function openEdit() {
+    if (!property) return;
+    setEName(property.name);
+    setEType(property.property_type);
+    setECity(property.city ?? "");
+    setECurrency(property.currency);
+    setEValue(property.estimated_value != null ? String(property.estimated_value) : "");
+    setENotes(property.notes ?? "");
+    setEditing(true);
+  }
+
+  async function saveEdit() {
+    if (!eName.trim() || !id) return;
+    setSaving(true);
+    const { error } = await supabase
+      .from("properties")
+      .update({
+        name: eName.trim(),
+        property_type: eType,
+        city: eCity.trim() || null,
+        currency: eCurrency.trim() || "USD",
+        estimated_value: eValue ? Number(eValue) : null,
+        notes: eNotes.trim() || null,
+      })
+      .eq("id", id);
+    setSaving(false);
+    if (!error) {
+      setEditing(false);
+      load();
+    }
+  }
+
+  function deleteProperty() {
+    confirmAction(
+      "Delete property",
+      "This permanently deletes the property and all its units, assets, work orders and records. This cannot be undone.",
+      async () => {
+        if (!id) return;
+        await supabase.from("properties").delete().eq("id", id);
+        router.replace("/properties");
+      },
+    );
+  }
+
   if (!property || !units) return <Loading />;
 
   return (
@@ -126,6 +182,12 @@ export default function PropertyDetail() {
         <Text className="flex-1 text-xl font-bold text-slate-900" numberOfLines={1}>
           {property.name}
         </Text>
+        <Pressable onPress={openEdit} className="p-2">
+          <Ionicons name="create-outline" size={22} color="#0f766e" />
+        </Pressable>
+        <Pressable onPress={deleteProperty} className="p-2">
+          <Ionicons name="trash-outline" size={22} color="#dc2626" />
+        </Pressable>
       </View>
 
       <ScrollView contentContainerClassName="px-5 pb-10">
@@ -238,6 +300,70 @@ export default function PropertyDetail() {
           </View>
         </Card>
       </ScrollView>
+
+      <Modal visible={editing} animationType="slide" transparent>
+        <View className="flex-1 justify-end bg-black/40">
+          <ScrollView
+            className="max-h-[88%] rounded-t-3xl bg-slate-50"
+            contentContainerClassName="p-5"
+          >
+            <Text className="mb-4 text-xl font-bold text-slate-900">
+              Edit property
+            </Text>
+            <Field label="Name" value={eName} onChangeText={setEName} />
+            <Text className="mb-1 text-sm font-medium text-slate-600">Type</Text>
+            <View className="mb-3 flex-row flex-wrap">
+              {PROPERTY_TYPES.map((t) => (
+                <Pressable
+                  key={t}
+                  onPress={() => setEType(t)}
+                  className={`mb-2 mr-2 rounded-full border px-3 py-2 ${
+                    eType === t ? "border-brand bg-brand" : "border-slate-300 bg-white"
+                  }`}
+                >
+                  <Text className={eType === t ? "font-medium text-white" : "text-slate-700"}>
+                    {titleCase(t)}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+            <Field label="City / area" value={eCity} onChangeText={setECity} />
+            <Field
+              label="Currency"
+              value={eCurrency}
+              onChangeText={(v) => setECurrency(v.toUpperCase())}
+              autoCapitalize="characters"
+              maxLength={3}
+            />
+            <Field
+              label="Estimated value"
+              value={eValue}
+              onChangeText={setEValue}
+              placeholder="0.00"
+              keyboardType="decimal-pad"
+            />
+            <Field
+              label="Notes"
+              value={eNotes}
+              onChangeText={setENotes}
+              placeholder="Optional"
+              multiline
+            />
+            <View className="mt-2 flex-row gap-3">
+              <View className="flex-1">
+                <Button
+                  title="Cancel"
+                  variant="secondary"
+                  onPress={() => setEditing(false)}
+                />
+              </View>
+              <View className="flex-1">
+                <Button title="Save" onPress={saveEdit} loading={saving} />
+              </View>
+            </View>
+          </ScrollView>
+        </View>
+      </Modal>
 
       <Modal visible={adding} animationType="slide" transparent>
         <View className="flex-1 justify-end bg-black/40">
