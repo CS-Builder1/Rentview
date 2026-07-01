@@ -13,6 +13,7 @@ import {
   Screen,
 } from "../../components/ui";
 import { useAuth } from "../../lib/auth";
+import { cachedSelect } from "../../lib/cache";
 import { confirmAction } from "../../lib/confirm";
 import { useOffline } from "../../lib/offline";
 import type { Tables } from "../../lib/database.types";
@@ -52,14 +53,20 @@ export default function Expenses() {
 
   const load = useCallback(async () => {
     const [e, p] = await Promise.all([
-      supabase
-        .from("expenses")
-        .select("*, properties(name)")
-        .order("incurred_on", { ascending: false }),
-      supabase.from("properties").select("*").order("name"),
+      cachedSelect<Expense[]>(
+        "expenses",
+        supabase
+          .from("expenses")
+          .select("*, properties(name)")
+          .order("incurred_on", { ascending: false }),
+      ),
+      cachedSelect<Tables<"properties">[]>(
+        "properties_min",
+        supabase.from("properties").select("*").order("name"),
+      ),
     ]);
-    setExpenses((e.data as Expense[]) ?? []);
-    setProperties(p.data ?? []);
+    setExpenses(e ?? []);
+    setProperties(p ?? []);
   }, []);
 
   useFocusEffect(

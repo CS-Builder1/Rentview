@@ -6,7 +6,7 @@ import {
   useRouter,
 } from "expo-router";
 import { useCallback, useState } from "react";
-import { Modal, Pressable, ScrollView, Text, View } from "react-native";
+import { Alert, Modal, Platform, Pressable, ScrollView, Text, View } from "react-native";
 
 import { DocumentsSection } from "../../../components/DocumentsSection";
 import {
@@ -18,11 +18,19 @@ import {
   Screen,
 } from "../../../components/ui";
 import { useAuth } from "../../../lib/auth";
+import { cachedSelect } from "../../../lib/cache";
 import { confirmAction } from "../../../lib/confirm";
+import { useOffline } from "../../../lib/offline";
 import type { Tables } from "../../../lib/database.types";
 import { Constants } from "../../../lib/database.types";
 import { formatCurrency, formatDate, titleCase } from "../../../lib/format";
 import { supabase } from "../../../lib/supabase";
+
+function notify(title: string, message: string) {
+  Platform.OS === "web"
+    ? window.alert(`${title}\n\n${message}`)
+    : Alert.alert(title, message);
+}
 
 const UNIT_TYPES = Constants.public.Enums.unit_type;
 const UNIT_STATUSES = Constants.public.Enums.unit_status;
@@ -45,6 +53,7 @@ export default function UnitDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { session } = useAuth();
+  const { submitInsert } = useOffline();
 
   const [unit, setUnit] = useState<Unit | null>(null);
   const [leases, setLeases] = useState<Tables<"leases">[]>([]);
@@ -79,28 +88,40 @@ export default function UnitDetail() {
   const load = useCallback(async () => {
     if (!id) return;
     const [u, l, a, w] = await Promise.all([
-      supabase
-        .from("units")
-        .select("*, properties(name, currency)")
-        .eq("id", id)
-        .single(),
-      supabase
-        .from("leases")
-        .select("*")
-        .eq("unit_id", id)
-        .order("start_date", { ascending: false, nullsFirst: false }),
-      supabase.from("assets").select("*").eq("unit_id", id),
-      supabase
-        .from("work_orders")
-        .select("*")
-        .eq("unit_id", id)
-        .in("status", ["open", "in_progress", "on_hold"])
-        .order("created_at", { ascending: false }),
+      cachedSelect<Unit>(
+        `unit:${id}`,
+        supabase
+          .from("units")
+          .select("*, properties(name, currency)")
+          .eq("id", id)
+          .single(),
+      ),
+      cachedSelect<Tables<"leases">[]>(
+        `leases:unit:${id}`,
+        supabase
+          .from("leases")
+          .select("*")
+          .eq("unit_id", id)
+          .order("start_date", { ascending: false, nullsFirst: false }),
+      ),
+      cachedSelect<Tables<"assets">[]>(
+        `assets:unit:${id}`,
+        supabase.from("assets").select("*").eq("unit_id", id),
+      ),
+      cachedSelect<Tables<"work_orders">[]>(
+        `wos:unit:${id}`,
+        supabase
+          .from("work_orders")
+          .select("*")
+          .eq("unit_id", id)
+          .in("status", ["open", "in_progress", "on_hold"])
+          .order("created_at", { ascending: false }),
+      ),
     ]);
-    setUnit((u.data as Unit) ?? null);
-    setLeases(l.data ?? []);
-    setAssets(a.data ?? []);
-    setWorkOrders(w.data ?? []);
+    setUnit(u ?? null);
+    setLeases(l ?? []);
+    setAssets(a ?? []);
+    setWorkOrders(w ?? []);
   }, [id]);
 
   useFocusEffect(
@@ -147,16 +168,37 @@ export default function UnitDetail() {
       rent_currency: currency,
       status: leaseStatus,
     };
-    const { error } = editingLeaseId
-      ? await supabase.from("leases").update(payload).eq("id", editingLeaseId)
-      : await supabase
+    try {
+      if (editingLeaseId) {
+        const { error } = await supabase
           .from("leases")
-          .insert({ ...payload, owner_id: session.user.id, unit_id: id });
-    setSaving(false);
-    if (!error) {
-      setAdding(false);
-      resetForm();
-      load();
+          .update(payload)
+          .eq("id", editingLeaseId);
+        if (error) throw error;
+        setAdding(false);
+        resetForm();
+        load();
+      } else {
+        const result = await submitInsert("leases", {
+          ...payload,
+          owner_id: session.user.id,
+          unit_id: id,
+        });
+        setAdding(false);
+        resetForm();
+        if (result === "queued") {
+          notify(
+            "Saved offline",
+            "This lease will sync automatically when you're back online.",
+          );
+        } else {
+          load();
+        }
+      }
+    } catch (e) {
+      notify("Could not save", e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(false);
     }
   }
 

@@ -13,6 +13,7 @@ import {
   Screen,
 } from "../../../components/ui";
 import { useAuth } from "../../../lib/auth";
+import { cachedSelect } from "../../../lib/cache";
 import type { Tables } from "../../../lib/database.types";
 import { Constants } from "../../../lib/database.types";
 import { titleCase } from "../../../lib/format";
@@ -36,11 +37,14 @@ export default function Properties() {
   const [currency, setCurrency] = useState("USD");
 
   const load = useCallback(async () => {
-    const { data } = await supabase
-      .from("properties")
-      .select("*, units(count)")
-      .order("created_at", { ascending: true });
-    setProperties((data as Property[]) ?? []);
+    const data = await cachedSelect<Property[]>(
+      "properties",
+      supabase
+        .from("properties")
+        .select("*, units(count)")
+        .order("created_at", { ascending: true }),
+    );
+    setProperties(data ?? []);
   }, []);
 
   useFocusEffect(

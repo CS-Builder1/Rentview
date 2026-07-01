@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Stack, useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
-import { Modal, Pressable, ScrollView, Text, View } from "react-native";
+import { Alert, Modal, Platform, Pressable, ScrollView, Text, View } from "react-native";
 
 import {
   Badge,
@@ -13,10 +13,18 @@ import {
   Screen,
 } from "../../components/ui";
 import { useAuth } from "../../lib/auth";
+import { cachedSelect } from "../../lib/cache";
+import { useOffline } from "../../lib/offline";
 import type { Tables } from "../../lib/database.types";
 import { Constants } from "../../lib/database.types";
 import { formatCurrency, formatDate, titleCase } from "../../lib/format";
 import { supabase } from "../../lib/supabase";
+
+function notify(title: string, message: string) {
+  Platform.OS === "web"
+    ? window.alert(`${title}\n\n${message}`)
+    : Alert.alert(title, message);
+}
 
 type Asset = Tables<"assets"> & {
   properties: { name: string; currency: string } | null;
@@ -28,6 +36,7 @@ const STATUSES = Constants.public.Enums.asset_status;
 export default function Assets() {
   const router = useRouter();
   const { session } = useAuth();
+  const { submitInsert } = useOffline();
   const [assets, setAssets] = useState<Asset[] | null>(null);
   const [properties, setProperties] = useState<Tables<"properties">[]>([]);
   const [units, setUnits] = useState<Tables<"units">[]>([]);
@@ -45,14 +54,20 @@ export default function Assets() {
 
   const load = useCallback(async () => {
     const [a, p] = await Promise.all([
-      supabase
-        .from("assets")
-        .select("*, properties(name, currency), units(label)")
-        .order("created_at", { ascending: false }),
-      supabase.from("properties").select("*").order("name"),
+      cachedSelect<Asset[]>(
+        "assets",
+        supabase
+          .from("assets")
+          .select("*, properties(name, currency), units(label)")
+          .order("created_at", { ascending: false }),
+      ),
+      cachedSelect<Tables<"properties">[]>(
+        "properties_min",
+        supabase.from("properties").select("*").order("name"),
+      ),
     ]);
-    setAssets((a.data as Asset[]) ?? []);
-    setProperties(p.data ?? []);
+    setAssets(a ?? []);
+    setProperties(p ?? []);
   }, []);
 
   useFocusEffect(
@@ -86,21 +101,31 @@ export default function Assets() {
   async function save() {
     if (!name.trim() || !propertyId || !session) return;
     setSaving(true);
-    const { error } = await supabase.from("assets").insert({
-      owner_id: session.user.id,
-      property_id: propertyId,
-      unit_id: unitId,
-      name: name.trim(),
-      category: category.trim() || null,
-      warranty_expiry: warranty.trim() || null,
-      expected_life_years: life ? Number(life) : null,
-      status,
-    });
-    setSaving(false);
-    if (!error) {
+    try {
+      const result = await submitInsert("assets", {
+        owner_id: session.user.id,
+        property_id: propertyId,
+        unit_id: unitId,
+        name: name.trim(),
+        category: category.trim() || null,
+        warranty_expiry: warranty.trim() || null,
+        expected_life_years: life ? Number(life) : null,
+        status,
+      });
       setAdding(false);
       resetForm();
-      load();
+      if (result === "queued") {
+        notify(
+          "Saved offline",
+          "This asset will sync automatically when you're back online.",
+        );
+      } else {
+        load();
+      }
+    } catch (e) {
+      notify("Could not save", e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(false);
     }
   }
 

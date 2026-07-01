@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 import { RefreshControl, ScrollView, Text, View } from "react-native";
 
 import { Card, Loading, Screen } from "../../../components/ui";
+import { cacheGet, cacheSet } from "../../../lib/cache";
 import { formatCurrency, formatDate } from "../../../lib/format";
 import { supabase } from "../../../lib/supabase";
 
@@ -36,6 +37,7 @@ export default function Dashboard() {
       .toISOString()
       .slice(0, 10);
 
+    try {
     const [props, units, openWos, expenses, urgentWos, dueSched, inventory, warranties] =
       await Promise.all([
         supabase.from("properties").select("id", { count: "exact", head: true }),
@@ -76,12 +78,13 @@ export default function Dashboard() {
       (i) => Number(i.quantity) <= Number(i.low_stock_threshold),
     ).length;
 
-    setSummary({
+    const nextSummary: Summary = {
       properties: props.count ?? 0,
       units: units.count ?? 0,
       openWorkOrders: openWos.count ?? 0,
       ytdSpend,
-    });
+    };
+    setSummary(nextSummary);
 
     const next: Alert[] = [];
     if ((urgentWos.count ?? 0) > 0)
@@ -113,6 +116,20 @@ export default function Dashboard() {
         text: `${warranties.count} warrant${warranties.count === 1 ? "y" : "ies"} expiring within ${SOON_DAYS} days`,
       });
     setAlerts(next);
+      await cacheSet("dashboard", { summary: nextSummary, alerts: next });
+    } catch {
+      // Offline (or a transient failure): fall back to the last snapshot.
+      const cached = await cacheGet<{ summary: Summary; alerts: Alert[] }>(
+        "dashboard",
+      );
+      setSummary(cached?.summary ?? {
+        properties: 0,
+        units: 0,
+        openWorkOrders: 0,
+        ytdSpend: 0,
+      });
+      setAlerts(cached?.alerts ?? []);
+    }
   }, []);
 
   useFocusEffect(

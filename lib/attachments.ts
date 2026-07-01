@@ -15,6 +15,29 @@ export type UploadedImage = {
 
 export type UploadedDocument = UploadedImage & { name: string };
 
+export type PickedImage = {
+  base64: string;
+  contentType: string;
+  ext: string;
+};
+
+/**
+ * Launch the image library and return the raw image (base64) WITHOUT uploading.
+ * Lets the caller upload now (online) or queue it (offline). Null on cancel.
+ */
+export async function pickImageForUpload(): Promise<PickedImage | null> {
+  const result = await ImagePicker.launchImageLibraryAsync({
+    mediaTypes: ["images"],
+    base64: true,
+    quality: 0.7,
+  });
+  if (result.canceled || !result.assets?.length) return null;
+  const asset = result.assets[0];
+  if (!asset.base64) throw new Error("Could not read the selected image.");
+  const contentType = asset.mimeType ?? "image/jpeg";
+  return { base64: asset.base64, contentType, ext: contentType.split("/")[1] ?? "jpg" };
+}
+
 /**
  * Launch the image library, then upload the chosen image to the private
  * `attachments` bucket under `<uid>/<subPath>/<timestamp>.<ext>`.

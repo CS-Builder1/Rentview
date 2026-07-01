@@ -13,6 +13,7 @@ import {
   Screen,
 } from "../../../components/ui";
 import { useAuth } from "../../../lib/auth";
+import { cachedSelect } from "../../../lib/cache";
 import { useOffline } from "../../../lib/offline";
 import type { Tables } from "../../../lib/database.types";
 import { Constants } from "../../../lib/database.types";
@@ -51,14 +52,20 @@ export default function WorkOrders() {
 
   const load = useCallback(async () => {
     const [wo, props] = await Promise.all([
-      supabase
-        .from("work_orders")
-        .select("*, properties(name), units(label)")
-        .order("created_at", { ascending: false }),
-      supabase.from("properties").select("*").order("name"),
+      cachedSelect<WorkOrder[]>(
+        "work_orders",
+        supabase
+          .from("work_orders")
+          .select("*, properties(name), units(label)")
+          .order("created_at", { ascending: false }),
+      ),
+      cachedSelect<Tables<"properties">[]>(
+        "properties_min",
+        supabase.from("properties").select("*").order("name"),
+      ),
     ]);
-    setOrders((wo.data as WorkOrder[]) ?? []);
-    setProperties(props.data ?? []);
+    setOrders(wo ?? []);
+    setProperties(props ?? []);
   }, []);
 
   useFocusEffect(

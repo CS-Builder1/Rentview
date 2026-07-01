@@ -12,6 +12,7 @@ import {
   Screen,
 } from "../../components/ui";
 import { useAuth } from "../../lib/auth";
+import { cachedSelect } from "../../lib/cache";
 import { confirmAction } from "../../lib/confirm";
 import type { Tables } from "../../lib/database.types";
 import { supabase } from "../../lib/supabase";
@@ -32,7 +33,10 @@ export default function Vendors() {
   const [notes, setNotes] = useState("");
 
   const load = useCallback(async () => {
-    const { data } = await supabase.from("vendors").select("*").order("name");
+    const data = await cachedSelect<Tables<"vendors">[]>(
+      "vendors",
+      supabase.from("vendors").select("*").order("name"),
+    );
     setVendors(data ?? []);
   }, []);
 

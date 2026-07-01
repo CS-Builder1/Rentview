@@ -12,6 +12,7 @@ import {
   Screen,
 } from "../../components/ui";
 import { useAuth } from "../../lib/auth";
+import { cachedSelect } from "../../lib/cache";
 import { confirmAction } from "../../lib/confirm";
 import type { Tables } from "../../lib/database.types";
 import { formatCurrency } from "../../lib/format";
@@ -47,14 +48,20 @@ export default function Inventory() {
 
   const load = useCallback(async () => {
     const [i, p] = await Promise.all([
-      supabase
-        .from("inventory_items")
-        .select("*, properties(name, currency)")
-        .order("name"),
-      supabase.from("properties").select("*").order("name"),
+      cachedSelect<Item[]>(
+        "inventory",
+        supabase
+          .from("inventory_items")
+          .select("*, properties(name, currency)")
+          .order("name"),
+      ),
+      cachedSelect<Tables<"properties">[]>(
+        "properties_min",
+        supabase.from("properties").select("*").order("name"),
+      ),
     ]);
-    setItems((i.data as Item[]) ?? []);
-    setProperties(p.data ?? []);
+    setItems(i ?? []);
+    setProperties(p ?? []);
   }, []);
 
   useFocusEffect(

@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from "react";
 
+import { clearCache } from "./cache";
 import { supabase } from "./supabase";
 
 type AuthContextValue = {
@@ -41,6 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       initializing,
       signOut: async () => {
         await supabase.auth.signOut();
+        await clearCache();
       },
     }),
     [session, initializing],

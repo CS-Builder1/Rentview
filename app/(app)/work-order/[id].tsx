@@ -26,8 +26,10 @@ import {
   Loading,
   Screen,
 } from "../../../components/ui";
-import { pickAndUploadImage, signedUrl } from "../../../lib/attachments";
+import { pickImageForUpload, signedUrl } from "../../../lib/attachments";
 import { useAuth } from "../../../lib/auth";
+import { cachedSelect } from "../../../lib/cache";
+import { useOffline } from "../../../lib/offline";
 import type { Tables } from "../../../lib/database.types";
 import { Constants } from "../../../lib/database.types";
 import { formatCurrency, formatDate, titleCase } from "../../../lib/format";
@@ -53,6 +55,7 @@ export default function WorkOrderDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { session } = useAuth();
+  const { submitPhoto } = useOffline();
 
   const [wo, setWo] = useState<WO | null>(null);
   const [parts, setParts] = useState<Tables<"work_order_parts">[]>([]);
@@ -81,34 +84,45 @@ export default function WorkOrderDetail() {
 
   const load = useCallback(async () => {
     if (!id) return;
-    const [woRes, partsRes, docsRes, vendorsRes] = await Promise.all([
-      supabase
-        .from("work_orders")
-        .select(
-          "*, properties(name, currency), units(label), vendors(name), assets(name)",
-        )
-        .eq("id", id)
-        .single(),
-      supabase.from("work_order_parts").select("*").eq("work_order_id", id),
-      supabase
-        .from("documents")
-        .select("id, storage_path")
-        .eq("work_order_id", id)
-        .eq("doc_type", "photo")
-        .order("created_at", { ascending: false }),
-      supabase.from("vendors").select("*").order("name"),
+    const [woData, partsData, docs, vendorsData] = await Promise.all([
+      cachedSelect<WO>(
+        `wo:${id}`,
+        supabase
+          .from("work_orders")
+          .select(
+            "*, properties(name, currency), units(label), vendors(name), assets(name)",
+          )
+          .eq("id", id)
+          .single(),
+      ),
+      cachedSelect<Tables<"work_order_parts">[]>(
+        `parts:wo:${id}`,
+        supabase.from("work_order_parts").select("*").eq("work_order_id", id),
+      ),
+      cachedSelect<{ id: string; storage_path: string }[]>(
+        `photos:wo:${id}`,
+        supabase
+          .from("documents")
+          .select("id, storage_path")
+          .eq("work_order_id", id)
+          .eq("doc_type", "photo")
+          .order("created_at", { ascending: false }),
+      ),
+      cachedSelect<Tables<"vendors">[]>(
+        "vendors",
+        supabase.from("vendors").select("*").order("name"),
+      ),
     ]);
 
-    setWo((woRes.data as WO) ?? null);
-    setParts(partsRes.data ?? []);
-    setVendors(vendorsRes.data ?? []);
+    setWo(woData ?? null);
+    setParts(partsData ?? []);
+    setVendors(vendorsData ?? []);
 
-    const docs = docsRes.data ?? [];
     const resolved = await Promise.all(
-      docs.map(async (d) => ({
+      (docs ?? []).map(async (d) => ({
         id: d.id,
         path: d.storage_path,
-        url: await signedUrl(d.storage_path),
+        url: await signedUrl(d.storage_path).catch(() => null),
       })),
     );
     setPhotos(resolved);
@@ -172,24 +186,30 @@ export default function WorkOrderDetail() {
 
   async function addPhoto() {
     if (!session || !wo) return;
-    setUploading(true);
     try {
-      const uploaded = await pickAndUploadImage(
-        session.user.id,
-        `work_orders/${wo.id}`,
-      );
-      if (uploaded) {
-        await supabase.from("documents").insert({
+      const picked = await pickImageForUpload();
+      if (!picked) return;
+      setUploading(true);
+      const storagePath = `${session.user.id}/work_orders/${wo.id}/${Date.now()}.${picked.ext}`;
+      const result = await submitPhoto({
+        base64: picked.base64,
+        contentType: picked.contentType,
+        storagePath,
+        doc: {
           owner_id: session.user.id,
           work_order_id: wo.id,
           property_id: wo.property_id,
           unit_id: wo.unit_id,
           name: "Photo",
           doc_type: "photo",
-          storage_path: uploaded.storagePath,
-          mime_type: uploaded.mimeType,
-          size_bytes: uploaded.sizeBytes,
-        });
+        },
+      });
+      if (result === "queued") {
+        notify(
+          "Saved offline",
+          "This photo will upload automatically when you're back online.",
+        );
+      } else {
         load();
       }
     } catch (e) {

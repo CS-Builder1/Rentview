@@ -10,6 +10,7 @@ import { Modal, Pressable, ScrollView, Text, View } from "react-native";
 
 import { DocumentsSection } from "../../../components/DocumentsSection";
 import { Badge, Button, Card, Field, Loading, Screen } from "../../../components/ui";
+import { cachedSelect } from "../../../lib/cache";
 import { confirmAction } from "../../../lib/confirm";
 import type { Tables } from "../../../lib/database.types";
 import { Constants } from "../../../lib/database.types";
@@ -68,12 +69,15 @@ export default function AssetDetail() {
 
   const load = useCallback(async () => {
     if (!id) return;
-    const { data } = await supabase
-      .from("assets")
-      .select("*, properties(name, currency), units(label)")
-      .eq("id", id)
-      .single();
-    setAsset((data as Asset) ?? null);
+    const data = await cachedSelect<Asset>(
+      `asset:${id}`,
+      supabase
+        .from("assets")
+        .select("*, properties(name, currency), units(label)")
+        .eq("id", id)
+        .single(),
+    );
+    setAsset(data ?? null);
   }, [id]);
 
   useFocusEffect(

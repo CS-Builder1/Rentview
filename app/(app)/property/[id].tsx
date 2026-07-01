@@ -14,6 +14,7 @@ import {
   Screen,
 } from "../../../components/ui";
 import { useAuth } from "../../../lib/auth";
+import { cachedSelect } from "../../../lib/cache";
 import { confirmAction } from "../../../lib/confirm";
 import type { Tables } from "../../../lib/database.types";
 import { Constants } from "../../../lib/database.types";
@@ -60,32 +61,45 @@ export default function PropertyDetail() {
   const load = useCallback(async () => {
     if (!id) return;
     const [prop, unitRows, assetRows, woRows, expenseRows] = await Promise.all([
-      supabase.from("properties").select("*").eq("id", id).single(),
-      supabase
-        .from("units")
-        .select("*")
-        .eq("property_id", id)
-        .order("created_at", { ascending: true }),
-      supabase
-        .from("assets")
-        .select("*")
-        .eq("property_id", id)
-        .order("created_at", { ascending: true }),
-      supabase
-        .from("work_orders")
-        .select("*")
-        .eq("property_id", id)
-        .in("status", ["open", "in_progress", "on_hold"])
-        .order("created_at", { ascending: false }),
-      supabase.from("expenses").select("amount").eq("property_id", id),
+      cachedSelect<Tables<"properties">>(
+        `property:${id}`,
+        supabase.from("properties").select("*").eq("id", id).single(),
+      ),
+      cachedSelect<Tables<"units">[]>(
+        `units:prop:${id}`,
+        supabase
+          .from("units")
+          .select("*")
+          .eq("property_id", id)
+          .order("created_at", { ascending: true }),
+      ),
+      cachedSelect<Tables<"assets">[]>(
+        `assets:prop:${id}`,
+        supabase
+          .from("assets")
+          .select("*")
+          .eq("property_id", id)
+          .order("created_at", { ascending: true }),
+      ),
+      cachedSelect<Tables<"work_orders">[]>(
+        `wos:prop:${id}`,
+        supabase
+          .from("work_orders")
+          .select("*")
+          .eq("property_id", id)
+          .in("status", ["open", "in_progress", "on_hold"])
+          .order("created_at", { ascending: false }),
+      ),
+      cachedSelect<{ amount: number }[]>(
+        `expenses:prop:${id}`,
+        supabase.from("expenses").select("amount").eq("property_id", id),
+      ),
     ]);
-    setProperty(prop.data ?? null);
-    setUnits(unitRows.data ?? []);
-    setAssets(assetRows.data ?? []);
-    setOpenWorkOrders(woRows.data ?? []);
-    setSpend(
-      (expenseRows.data ?? []).reduce((s, r) => s + Number(r.amount ?? 0), 0),
-    );
+    setProperty(prop ?? null);
+    setUnits(unitRows ?? []);
+    setAssets(assetRows ?? []);
+    setOpenWorkOrders(woRows ?? []);
+    setSpend((expenseRows ?? []).reduce((s, r) => s + Number(r.amount ?? 0), 0));
   }, [id]);
 
   useFocusEffect(
