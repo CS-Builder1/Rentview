@@ -9,6 +9,12 @@ inventory, parts/supplies, asset lifecycle, vendors, and cost-per-property. It i
 deliberately **internationally neutral** (multi-currency, no US-specific tenant
 screening, lease generation, or tax filing).
 
+**Tenants get their own portal.** Landlords invite tenants with a share-able code;
+tenants sign in to report repairs with photos, message the landlord per request,
+track fix status on a live timeline, rate completed repairs, and see their lease
+and rent payment history — while RLS guarantees they never see the landlord's
+costs, vendors, notes, or other units.
+
 ## Why RentView
 
 Existing tools optimize for US rent collection, screening, and Schedule E tax.
@@ -86,7 +92,19 @@ supabase functions deploy delete-account
 
 ## Status
 
-Stage 0/1 foundation is in place: schema + RLS, auth, portfolio overview, properties &
-units (varying-complex aware), and work orders. Next: assets/inventory/parts,
-preventive maintenance, expenses & analytics, document upload, QR codes, offline-first
-capture, and wiring the Lemon Squeezy + PayPal checkout.
+Owner app: schema + RLS, auth (email + Google), portfolio dashboard (gradient hero,
+occupancy ring, quick actions, alerts incl. new tenant requests and leases ending
+soon), properties & units, work orders (vendors, parts, photos), assets with QR tags,
+inventory, preventive maintenance, expenses & analytics, documents, CSV export,
+offline-first capture, email reminders, announcements, rent payment recording.
+
+Tenant portal: invite-code onboarding (deep-link or manual, survives OAuth),
+role-based routing, home screen with lease + rent status + announcements,
+maintenance requests with photos (offline-capable), per-request messaging,
+status timeline mirrored from the landlord's work order, repair ratings.
+
+Design system: centralized tokens (`lib/theme.ts` + Tailwind brand scale), full
+dark mode, skeleton loaders, toasts, press animations, gradient headers.
+
+Next: push notifications (expo-notifications), move-in/move-out checklists,
+realtime message channels, and wiring the Lemon Squeezy + PayPal checkout.
