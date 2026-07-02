@@ -331,7 +331,7 @@ export default function WorkOrderDetail() {
               className={`mb-2 mr-2 rounded-full border px-3 py-2 ${
                 wo.status === s
                   ? "border-brand bg-brand"
-                  : "border-slate-300 dark:border-slate-700 bg-white dark:bg-surface-dark dark:bg-surface-dark"
+                  : "border-slate-300 dark:border-slate-700 bg-white dark:bg-surface-dark"
               }`}
             >
               <Text
@@ -354,7 +354,7 @@ export default function WorkOrderDetail() {
             disabled={busy}
             onPress={() => assignVendor(null)}
             className={`mb-2 mr-2 rounded-full border px-3 py-2 ${
-              !wo.vendor_id ? "border-brand bg-brand" : "border-slate-300 dark:border-slate-700 bg-white dark:bg-surface-dark dark:bg-surface-dark"
+              !wo.vendor_id ? "border-brand bg-brand" : "border-slate-300 dark:border-slate-700 bg-white dark:bg-surface-dark"
             }`}
           >
             <Text
@@ -371,7 +371,7 @@ export default function WorkOrderDetail() {
               className={`mb-2 mr-2 rounded-full border px-3 py-2 ${
                 wo.vendor_id === v.id
                   ? "border-brand bg-brand"
-                  : "border-slate-300 dark:border-slate-700 bg-white dark:bg-surface-dark dark:bg-surface-dark"
+                  : "border-slate-300 dark:border-slate-700 bg-white dark:bg-surface-dark"
               }`}
             >
               <Text
@@ -481,7 +481,7 @@ export default function WorkOrderDetail() {
       <Modal visible={editing} animationType="slide" transparent>
         <View className="flex-1 justify-end bg-black/40">
           <ScrollView
-            className="max-h-[88%] rounded-t-3xl bg-slate-50 dark:bg-slate-900 dark:bg-slate-900"
+            className="max-h-[88%] rounded-t-3xl bg-slate-50 dark:bg-slate-900"
             contentContainerClassName="p-5"
           >
             <Text className="mb-4 text-xl font-bold text-slate-900 dark:text-slate-100">
@@ -506,7 +506,7 @@ export default function WorkOrderDetail() {
                   className={`mb-2 mr-2 rounded-full border px-3 py-2 ${
                     ePriority === p
                       ? "border-brand bg-brand"
-                      : "border-slate-300 dark:border-slate-700 bg-white dark:bg-surface-dark dark:bg-surface-dark"
+                      : "border-slate-300 dark:border-slate-700 bg-white dark:bg-surface-dark"
                   }`}
                 >
                   <Text

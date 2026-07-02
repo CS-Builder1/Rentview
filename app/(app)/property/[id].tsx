@@ -319,7 +319,7 @@ export default function PropertyDetail() {
       <Modal visible={editing} animationType="slide" transparent>
         <View className="flex-1 justify-end bg-black/40">
           <ScrollView
-            className="max-h-[88%] rounded-t-3xl bg-slate-50 dark:bg-slate-900 dark:bg-slate-900"
+            className="max-h-[88%] rounded-t-3xl bg-slate-50 dark:bg-slate-900"
             contentContainerClassName="p-5"
           >
             <Text className="mb-4 text-xl font-bold text-slate-900 dark:text-slate-100">
@@ -333,7 +333,7 @@ export default function PropertyDetail() {
                   key={t}
                   onPress={() => setEType(t)}
                   className={`mb-2 mr-2 rounded-full border px-3 py-2 ${
-                    eType === t ? "border-brand bg-brand" : "border-slate-300 dark:border-slate-700 bg-white dark:bg-surface-dark dark:bg-surface-dark"
+                    eType === t ? "border-brand bg-brand" : "border-slate-300 dark:border-slate-700 bg-white dark:bg-surface-dark"
                   }`}
                 >
                   <Text className={eType === t ? "font-medium text-white" : "text-slate-700 dark:text-slate-200"}>
@@ -383,7 +383,7 @@ export default function PropertyDetail() {
       <Modal visible={adding} animationType="slide" transparent>
         <View className="flex-1 justify-end bg-black/40">
           <ScrollView
-            className="max-h-[85%] rounded-t-3xl bg-slate-50 dark:bg-slate-900 dark:bg-slate-900"
+            className="max-h-[85%] rounded-t-3xl bg-slate-50 dark:bg-slate-900"
             contentContainerClassName="p-5"
           >
             <Text className="mb-4 text-xl font-bold text-slate-900 dark:text-slate-100">New unit</Text>
@@ -404,7 +404,7 @@ export default function PropertyDetail() {
                   className={`mb-2 mr-2 rounded-full border px-3 py-2 ${
                     unitType === t
                       ? "border-brand bg-brand"
-                      : "border-slate-300 dark:border-slate-700 bg-white dark:bg-surface-dark dark:bg-surface-dark"
+                      : "border-slate-300 dark:border-slate-700 bg-white dark:bg-surface-dark"
                   }`}
                 >
                   <Text
@@ -427,7 +427,7 @@ export default function PropertyDetail() {
                   className={`mb-2 mr-2 rounded-full border px-3 py-2 ${
                     status === s
                       ? "border-brand bg-brand"
-                      : "border-slate-300 dark:border-slate-700 bg-white dark:bg-surface-dark dark:bg-surface-dark"
+                      : "border-slate-300 dark:border-slate-700 bg-white dark:bg-surface-dark"
                   }`}
                 >
                   <Text

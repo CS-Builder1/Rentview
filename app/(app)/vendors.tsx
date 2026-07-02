@@ -167,7 +167,7 @@ export default function Vendors() {
       <Modal visible={open} animationType="slide" transparent>
         <View className="flex-1 justify-end bg-black/40">
           <ScrollView
-            className="max-h-[88%] rounded-t-3xl bg-slate-50 dark:bg-slate-900 dark:bg-slate-900"
+            className="max-h-[88%] rounded-t-3xl bg-slate-50 dark:bg-slate-900"
             contentContainerClassName="p-5"
           >
             <Text className="mb-4 text-xl font-bold text-slate-900 dark:text-slate-100">

@@ -1,4 +1,4 @@
-// Warranty + preventive-maintenance reminders by email (via Resend).
+// Warranty + preventive-maintenance + lease-renewal reminders by email (via Resend).
 //
 // Two ways to call it:
 //   * On-demand: the app invokes it with the user's JWT -> emails that user.
@@ -69,8 +69,11 @@ Deno.serve(async (req) => {
   let sent = 0;
   let dueUsers = 0;
 
+  // Leases get a longer look-ahead so there's time to negotiate a renewal.
+  const leaseSoon = new Date(Date.now() + 60 * 86400000).toISOString().slice(0, 10);
+
   for (const t of targets) {
-    const [{ data: warranties }, { data: maint }] = await Promise.all([
+    const [{ data: warranties }, { data: maint }, { data: leases }] = await Promise.all([
       admin
         .from("assets")
         .select("name, warranty_expiry, properties(name)")
@@ -87,11 +90,21 @@ Deno.serve(async (req) => {
         .not("next_due", "is", null)
         .lte("next_due", today)
         .order("next_due"),
+      admin
+        .from("leases")
+        .select("tenant_name, end_date, units(label)")
+        .eq("owner_id", t.userId)
+        .eq("status", "active")
+        .not("end_date", "is", null)
+        .gte("end_date", today)
+        .lte("end_date", leaseSoon)
+        .order("end_date"),
     ]);
 
     const w = warranties ?? [];
     const m = maint ?? [];
-    if (w.length === 0 && m.length === 0) continue;
+    const l = leases ?? [];
+    if (w.length === 0 && m.length === 0 && l.length === 0) continue;
     dueUsers += 1;
 
     if (!resendKey || !t.email) continue; // nothing to send with / to
@@ -108,11 +121,18 @@ Deno.serve(async (req) => {
           `<li>${s.title}${s.properties?.name ? ` (${s.properties.name})` : ""} — due ${s.next_due}</li>`,
       )
       .join("");
+    const lList = l
+      .map(
+        (x: any) =>
+          `<li>${x.tenant_name}${x.units?.label ? ` (${x.units.label})` : ""} — lease ends ${x.end_date}</li>`,
+      )
+      .join("");
 
     const html = `
       <h2>RentView reminders</h2>
       ${w.length ? `<h3>Warranties expiring within ${WINDOW_DAYS} days</h3><ul>${wList}</ul>` : ""}
       ${m.length ? `<h3>Maintenance due</h3><ul>${mList}</ul>` : ""}
+      ${l.length ? `<h3>Leases ending within 60 days</h3><ul>${lList}</ul><p>Now is a good time to start the renewal conversation.</p>` : ""}
       <p style="color:#64748b;font-size:12px">For your records — RentView is not tax or accounting advice.</p>
     `;
 

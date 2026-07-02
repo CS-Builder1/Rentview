@@ -198,7 +198,7 @@ export default function Assets() {
       <Modal visible={adding} animationType="slide" transparent>
         <View className="flex-1 justify-end bg-black/40">
           <ScrollView
-            className="max-h-[88%] rounded-t-3xl bg-slate-50 dark:bg-slate-900 dark:bg-slate-900"
+            className="max-h-[88%] rounded-t-3xl bg-slate-50 dark:bg-slate-900"
             contentContainerClassName="p-5"
           >
             <Text className="mb-4 text-xl font-bold text-slate-900 dark:text-slate-100">New asset</Text>
@@ -228,7 +228,7 @@ export default function Assets() {
                     className={`mb-2 mr-2 rounded-full border px-3 py-2 ${
                       propertyId === p.id
                         ? "border-brand bg-brand"
-                        : "border-slate-300 dark:border-slate-700 bg-white dark:bg-surface-dark dark:bg-surface-dark"
+                        : "border-slate-300 dark:border-slate-700 bg-white dark:bg-surface-dark"
                     }`}
                   >
                     <Text
@@ -258,7 +258,7 @@ export default function Assets() {
                       className={`mb-2 mr-2 rounded-full border px-3 py-2 ${
                         unitId === u.id
                           ? "border-brand bg-brand"
-                          : "border-slate-300 dark:border-slate-700 bg-white dark:bg-surface-dark dark:bg-surface-dark"
+                          : "border-slate-300 dark:border-slate-700 bg-white dark:bg-surface-dark"
                       }`}
                     >
                       <Text
@@ -298,7 +298,7 @@ export default function Assets() {
                   key={s}
                   onPress={() => setStatus(s)}
                   className={`mb-2 mr-2 rounded-full border px-3 py-2 ${
-                    status === s ? "border-brand bg-brand" : "border-slate-300 dark:border-slate-700 bg-white dark:bg-surface-dark dark:bg-surface-dark"
+                    status === s ? "border-brand bg-brand" : "border-slate-300 dark:border-slate-700 bg-white dark:bg-surface-dark"
                   }`}
                 >
                   <Text

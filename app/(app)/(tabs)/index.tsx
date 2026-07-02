@@ -19,6 +19,7 @@ type Summary = {
   occupiedUnits: number;
   openWorkOrders: number;
   ytdSpend: number;
+  newRequests: number;
 };
 
 type Alert = {
@@ -64,6 +65,8 @@ export default function Dashboard() {
       dueSched,
       inventory,
       warranties,
+      newRequests,
+      endingLeases,
     ] =
       await Promise.all([
         supabase.from("properties").select("id", { count: "exact", head: true }),
@@ -98,6 +101,17 @@ export default function Dashboard() {
           .not("warranty_expiry", "is", null)
           .gte("warranty_expiry", today)
           .lte("warranty_expiry", soon),
+        supabase
+          .from("maintenance_requests")
+          .select("id", { count: "exact", head: true })
+          .eq("status", "submitted"),
+        supabase
+          .from("leases")
+          .select("id", { count: "exact", head: true })
+          .eq("status", "active")
+          .not("end_date", "is", null)
+          .gte("end_date", today)
+          .lte("end_date", soon),
       ]);
 
     const ytdSpend = (expenses.data ?? []).reduce(
@@ -114,6 +128,7 @@ export default function Dashboard() {
       occupiedUnits: occupied.count ?? 0,
       openWorkOrders: openWos.count ?? 0,
       ytdSpend,
+      newRequests: newRequests.count ?? 0,
     };
     setSummary(nextSummary);
 
@@ -146,6 +161,13 @@ export default function Dashboard() {
         tone: "slate",
         text: `${warranties.count} warrant${warranties.count === 1 ? "y" : "ies"} expiring within ${SOON_DAYS} days`,
       });
+    if ((endingLeases.count ?? 0) > 0)
+      next.push({
+        key: "leases",
+        icon: "document-text",
+        tone: "amber",
+        text: `${endingLeases.count} lease${endingLeases.count === 1 ? "" : "s"} ending within ${SOON_DAYS} days — time to talk renewal`,
+      });
     setAlerts(next);
       await cacheSet("dashboard", { summary: nextSummary, alerts: next });
     } catch {
@@ -159,6 +181,7 @@ export default function Dashboard() {
         occupiedUnits: 0,
         openWorkOrders: 0,
         ytdSpend: 0,
+        newRequests: 0,
       });
       setAlerts(cached?.alerts ?? []);
     }
@@ -306,6 +329,27 @@ export default function Dashboard() {
         </View>
 
         <View className="px-5">
+          {summary.newRequests > 0 ? (
+            <View className="mt-5">
+              <Card onPress={() => router.push("/(app)/requests")}>
+                <View className="flex-row items-center">
+                  <View className="h-10 w-10 items-center justify-center rounded-full bg-brand-50 dark:bg-brand-950">
+                    <Ionicons name="chatbubbles" size={18} color={colors.brand} />
+                  </View>
+                  <View className="ml-3 flex-1">
+                    <Text className="text-base font-semibold text-slate-900 dark:text-slate-100">
+                      {summary.newRequests} new tenant request
+                      {summary.newRequests === 1 ? "" : "s"}
+                    </Text>
+                    <Text className="text-sm text-slate-500 dark:text-slate-400">
+                      Tap to triage
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color={colors.inkFaint} />
+                </View>
+              </Card>
+            </View>
+          ) : null}
           <Text className="mb-2 mt-5 text-sm font-semibold uppercase text-slate-400 dark:text-slate-500">
             Needs attention
           </Text>

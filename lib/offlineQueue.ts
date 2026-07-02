@@ -20,7 +20,8 @@ export type QueuedPhoto = {
   base64: string;
   contentType: string;
   storagePath: string;
-  doc: Record<string, unknown>; // documents row (minus storage/mime/size)
+  doc: Record<string, unknown>; // metadata row (minus storage/mime/size)
+  docTable?: string; // defaults to "documents"; e.g. "request_photos"
   createdAt: number;
 };
 

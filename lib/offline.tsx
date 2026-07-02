@@ -26,6 +26,8 @@ export type PhotoSubmission = {
   contentType: string;
   storagePath: string;
   doc: Record<string, unknown>;
+  /** Table for the metadata row; defaults to "documents" (e.g. "request_photos"). */
+  docTable?: string;
 };
 
 async function uploadPhoto(op: {
@@ -33,6 +35,7 @@ async function uploadPhoto(op: {
   contentType: string;
   storagePath: string;
   doc: Record<string, unknown>;
+  docTable?: string;
 }): Promise<void> {
   const bytes = decode(op.base64);
   const { error: upErr } = await supabase.storage
@@ -42,12 +45,17 @@ async function uploadPhoto(op: {
       upsert: true, // idempotent so retries after a partial failure are safe
     });
   if (upErr) throw upErr;
-  const { error: docErr } = await supabase.from("documents").insert({
+  const table = op.docTable ?? "documents";
+  const row: Record<string, unknown> = {
     ...op.doc,
     storage_path: op.storagePath,
-    mime_type: op.contentType,
-    size_bytes: bytes.byteLength,
-  } as never);
+  };
+  if (table === "documents") {
+    // Only the documents table carries mime/size metadata columns.
+    row.mime_type = op.contentType;
+    row.size_bytes = bytes.byteLength;
+  }
+  const { error: docErr } = await supabase.from(table as never).insert(row as never);
   if (docErr) throw docErr;
 }
 

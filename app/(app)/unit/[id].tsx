@@ -6,7 +6,7 @@ import {
   useRouter,
 } from "expo-router";
 import { useCallback, useState } from "react";
-import { Alert, Modal, Platform, Pressable, ScrollView, Text, View } from "react-native";
+import { Alert, Modal, Platform, Pressable, ScrollView, Share, Text, View } from "react-native";
 
 import { DocumentsSection } from "../../../components/DocumentsSection";
 import {
@@ -21,6 +21,7 @@ import {
 import { useAuth } from "../../../lib/auth";
 import { cachedSelect } from "../../../lib/cache";
 import { confirmAction } from "../../../lib/confirm";
+import { generateInviteCode } from "../../../lib/invites";
 import { useOffline } from "../../../lib/offline";
 import type { Tables } from "../../../lib/database.types";
 import { Constants } from "../../../lib/database.types";
@@ -36,6 +37,7 @@ function notify(title: string, message: string) {
 const UNIT_TYPES = Constants.public.Enums.unit_type;
 const UNIT_STATUSES = Constants.public.Enums.unit_status;
 const LEASE_STATUSES = Constants.public.Enums.lease_status;
+const PAYMENT_METHODS = Constants.public.Enums.payment_method;
 
 type Unit = Tables<"units"> & {
   properties: { name: string; currency: string } | null;
@@ -60,6 +62,18 @@ export default function UnitDetail() {
   const [leases, setLeases] = useState<Tables<"leases">[]>([]);
   const [assets, setAssets] = useState<Tables<"assets">[]>([]);
   const [workOrders, setWorkOrders] = useState<Tables<"work_orders">[]>([]);
+  const [payments, setPayments] = useState<Tables<"rent_payments">[]>([]);
+  const [invitingLeaseId, setInvitingLeaseId] = useState<string | null>(null);
+
+  // record-payment modal
+  const [payingLease, setPayingLease] = useState<Tables<"leases"> | null>(null);
+  const [payAmount, setPayAmount] = useState("");
+  const [payDueDate, setPayDueDate] = useState("");
+  const [payPaidOn, setPayPaidOn] = useState("");
+  const [payMethod, setPayMethod] =
+    useState<(typeof PAYMENT_METHODS)[number]>("bank_transfer");
+  const [payNote, setPayNote] = useState("");
+  const [savingPayment, setSavingPayment] = useState(false);
 
   // add-lease modal
   const [adding, setAdding] = useState(false);
@@ -123,6 +137,21 @@ export default function UnitDetail() {
     setLeases(l ?? []);
     setAssets(a ?? []);
     setWorkOrders(w ?? []);
+    const leaseIds = (l ?? []).map((lease) => lease.id);
+    if (leaseIds.length > 0) {
+      const pays = await cachedSelect<Tables<"rent_payments">[]>(
+        `payments:unit:${id}`,
+        supabase
+          .from("rent_payments")
+          .select("*")
+          .in("lease_id", leaseIds)
+          .order("due_date", { ascending: false, nullsFirst: false })
+          .limit(12),
+      );
+      setPayments(pays ?? []);
+    } else {
+      setPayments([]);
+    }
   }, [id]);
 
   useFocusEffect(
@@ -215,6 +244,75 @@ export default function UnitDetail() {
         load();
       },
     );
+  }
+
+  async function inviteTenant(l: Tables<"leases">) {
+    if (!session) return;
+    setInvitingLeaseId(l.id);
+    try {
+      const code = generateInviteCode();
+      const { error } = await supabase.from("tenant_invites").insert({
+        owner_id: session.user.id,
+        lease_id: l.id,
+        code,
+        email: l.tenant_email,
+      });
+      if (error) throw error;
+      const appUrl = process.env.EXPO_PUBLIC_APP_URL;
+      const link = appUrl ? `${appUrl}/login?code=${code}` : null;
+      const message =
+        `Hi ${l.tenant_name.split(" ")[0]}! Join me on RentView to report repairs and see your rent info.\n\n` +
+        `Your invite code: ${code}\n` +
+        (link ? `Sign up here: ${link}\n` : "") +
+        `The code expires in 14 days.`;
+      if (Platform.OS === "web") {
+        if (navigator.share) {
+          await navigator.share({ message, text: message } as ShareData);
+        } else {
+          await navigator.clipboard?.writeText(message);
+          notify("Invite created", `Code ${code} copied to clipboard — send it to ${l.tenant_name}.`);
+        }
+      } else {
+        await Share.share({ message });
+      }
+    } catch (e) {
+      notify("Could not create invite", e instanceof Error ? e.message : String(e));
+    } finally {
+      setInvitingLeaseId(null);
+    }
+  }
+
+  function openRecordPayment(l: Tables<"leases">) {
+    setPayingLease(l);
+    setPayAmount(l.rent_amount != null ? String(l.rent_amount) : "");
+    setPayDueDate(new Date().toISOString().slice(0, 10));
+    setPayPaidOn(new Date().toISOString().slice(0, 10));
+    setPayMethod("bank_transfer");
+    setPayNote("");
+  }
+
+  async function savePayment() {
+    if (!payingLease || !session || !payAmount) return;
+    setSavingPayment(true);
+    try {
+      const { error } = await supabase.from("rent_payments").insert({
+        owner_id: session.user.id,
+        lease_id: payingLease.id,
+        amount: Number(payAmount),
+        currency: payingLease.rent_currency ?? currency,
+        due_date: payDueDate.trim() || null,
+        paid_on: payPaidOn.trim() || null,
+        method: payMethod,
+        note: payNote.trim() || null,
+      });
+      if (error) throw error;
+      setPayingLease(null);
+      load();
+    } catch (e) {
+      notify("Could not record payment", e instanceof Error ? e.message : String(e));
+    } finally {
+      setSavingPayment(false);
+    }
   }
 
   function openEdit() {
@@ -355,9 +453,85 @@ export default function UnitDetail() {
                   ? ` · ${formatCurrency(l.rent_amount, l.rent_currency ?? currency)}`
                   : ""}
               </Text>
+              <View className="mt-3 flex-row items-center border-t border-slate-100 pt-3 dark:border-slate-800">
+                {l.tenant_user_id ? (
+                  <View className="mr-2 flex-row items-center rounded-full bg-brand-50 px-2.5 py-1.5 dark:bg-brand-950">
+                    <Icon name="link" size={13} />
+                    <Text className="ml-1 text-xs font-medium text-brand-800 dark:text-brand-300">
+                      Tenant app linked
+                    </Text>
+                  </View>
+                ) : (
+                  <Pressable
+                    onPress={() => inviteTenant(l)}
+                    disabled={invitingLeaseId === l.id}
+                    className="mr-2 flex-row items-center rounded-full border border-brand px-2.5 py-1.5"
+                  >
+                    <Icon name="paper-plane-outline" size={13} />
+                    <Text className="ml-1 text-xs font-medium text-brand dark:text-brand-400">
+                      {invitingLeaseId === l.id ? "Creating…" : "Invite to app"}
+                    </Text>
+                  </Pressable>
+                )}
+                <Pressable
+                  onPress={() => openRecordPayment(l)}
+                  className="flex-row items-center rounded-full border border-slate-300 px-2.5 py-1.5 dark:border-slate-700"
+                >
+                  <Icon name="cash-outline" size={13} tone="muted" />
+                  <Text className="ml-1 text-xs font-medium text-slate-600 dark:text-slate-300">
+                    Record payment
+                  </Text>
+                </Pressable>
+              </View>
             </Card>
           ))
         )}
+
+        {/* Rent payments */}
+        {payments.length > 0 ? (
+          <>
+            <Text className="mb-2 mt-4 text-lg font-semibold text-slate-900 dark:text-slate-100">
+              Rent payments
+            </Text>
+            <Card>
+              {payments.map((p, idx) => (
+                <View
+                  key={p.id}
+                  className={`flex-row items-center justify-between py-2 ${
+                    idx < payments.length - 1
+                      ? "border-b border-slate-100 dark:border-slate-800"
+                      : ""
+                  }`}
+                >
+                  <View>
+                    <Text className="font-medium text-slate-900 dark:text-slate-100">
+                      {formatCurrency(p.amount, p.currency)}
+                    </Text>
+                    <Text className="text-xs text-slate-400 dark:text-slate-500">
+                      {p.due_date ? `Due ${formatDate(p.due_date)}` : ""}
+                      {p.method ? ` · ${titleCase(p.method)}` : ""}
+                    </Text>
+                  </View>
+                  {p.paid_on ? (
+                    <View className="flex-row items-center">
+                      <Icon name="checkmark-circle" size={16} tone="success" />
+                      <Text className="ml-1 text-sm text-slate-600 dark:text-slate-300">
+                        {formatDate(p.paid_on)}
+                      </Text>
+                    </View>
+                  ) : (
+                    <View className="flex-row items-center">
+                      <Icon name="time" size={16} tone="warning" />
+                      <Text className="ml-1 text-sm text-slate-600 dark:text-slate-300">
+                        Unpaid
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              ))}
+            </Card>
+          </>
+        ) : null}
 
         {/* Open work orders */}
         <Text className="mb-2 mt-4 text-lg font-semibold text-slate-900 dark:text-slate-100">
@@ -403,7 +577,7 @@ export default function UnitDetail() {
       <Modal visible={editing} animationType="slide" transparent>
         <View className="flex-1 justify-end bg-black/40">
           <ScrollView
-            className="max-h-[88%] rounded-t-3xl bg-slate-50 dark:bg-slate-900 dark:bg-slate-900"
+            className="max-h-[88%] rounded-t-3xl bg-slate-50 dark:bg-slate-900"
             contentContainerClassName="p-5"
           >
             <Text className="mb-4 text-xl font-bold text-slate-900 dark:text-slate-100">Edit unit</Text>
@@ -415,7 +589,7 @@ export default function UnitDetail() {
                   key={t}
                   onPress={() => setEType(t)}
                   className={`mb-2 mr-2 rounded-full border px-3 py-2 ${
-                    eType === t ? "border-brand bg-brand" : "border-slate-300 dark:border-slate-700 bg-white dark:bg-surface-dark dark:bg-surface-dark"
+                    eType === t ? "border-brand bg-brand" : "border-slate-300 dark:border-slate-700 bg-white dark:bg-surface-dark"
                   }`}
                 >
                   <Text className={eType === t ? "font-medium text-white" : "text-slate-700 dark:text-slate-200"}>
@@ -431,7 +605,7 @@ export default function UnitDetail() {
                   key={s}
                   onPress={() => setEStatus(s)}
                   className={`mb-2 mr-2 rounded-full border px-3 py-2 ${
-                    eStatus === s ? "border-brand bg-brand" : "border-slate-300 dark:border-slate-700 bg-white dark:bg-surface-dark dark:bg-surface-dark"
+                    eStatus === s ? "border-brand bg-brand" : "border-slate-300 dark:border-slate-700 bg-white dark:bg-surface-dark"
                   }`}
                 >
                   <Text className={eStatus === s ? "font-medium text-white" : "text-slate-700 dark:text-slate-200"}>
@@ -489,7 +663,7 @@ export default function UnitDetail() {
       <Modal visible={adding} animationType="slide" transparent>
         <View className="flex-1 justify-end bg-black/40">
           <ScrollView
-            className="max-h-[88%] rounded-t-3xl bg-slate-50 dark:bg-slate-900 dark:bg-slate-900"
+            className="max-h-[88%] rounded-t-3xl bg-slate-50 dark:bg-slate-900"
             contentContainerClassName="p-5"
           >
             <Text className="mb-4 text-xl font-bold text-slate-900 dark:text-slate-100">
@@ -546,7 +720,7 @@ export default function UnitDetail() {
                   className={`mb-2 mr-2 rounded-full border px-3 py-2 ${
                     leaseStatus === s
                       ? "border-brand bg-brand"
-                      : "border-slate-300 dark:border-slate-700 bg-white dark:bg-surface-dark dark:bg-surface-dark"
+                      : "border-slate-300 dark:border-slate-700 bg-white dark:bg-surface-dark"
                   }`}
                 >
                   <Text
@@ -579,6 +753,91 @@ export default function UnitDetail() {
                 <Button title="Delete lease" variant="danger" onPress={removeLease} />
               </View>
             ) : null}
+          </ScrollView>
+        </View>
+      </Modal>
+
+      <Modal visible={payingLease !== null} animationType="slide" transparent>
+        <View className="flex-1 justify-end bg-black/40">
+          <ScrollView
+            className="max-h-[88%] rounded-t-3xl bg-slate-50 dark:bg-slate-900"
+            contentContainerClassName="p-5"
+          >
+            <Text className="mb-4 text-xl font-bold text-slate-900 dark:text-slate-100">
+              Record rent payment
+            </Text>
+            <Text className="mb-3 text-slate-500 dark:text-slate-400">
+              {payingLease?.tenant_name} · {unit.label}
+            </Text>
+            <Field
+              label={`Amount (${payingLease?.rent_currency ?? currency})`}
+              value={payAmount}
+              onChangeText={setPayAmount}
+              keyboardType="decimal-pad"
+              placeholder="0.00"
+            />
+            <View className="flex-row gap-3">
+              <View className="flex-1">
+                <Field
+                  label="Due (YYYY-MM-DD)"
+                  value={payDueDate}
+                  onChangeText={setPayDueDate}
+                  autoCapitalize="none"
+                />
+              </View>
+              <View className="flex-1">
+                <Field
+                  label="Paid on (blank = unpaid)"
+                  value={payPaidOn}
+                  onChangeText={setPayPaidOn}
+                  autoCapitalize="none"
+                />
+              </View>
+            </View>
+            <Text className="mb-1 text-sm font-medium text-slate-600 dark:text-slate-300">
+              Method
+            </Text>
+            <View className="mb-3 flex-row flex-wrap">
+              {PAYMENT_METHODS.map((m) => (
+                <Pressable
+                  key={m}
+                  onPress={() => setPayMethod(m)}
+                  className={`mb-2 mr-2 rounded-full border px-3 py-2 ${
+                    payMethod === m
+                      ? "border-brand bg-brand"
+                      : "border-slate-300 bg-white dark:border-slate-700 dark:bg-surface-dark"
+                  }`}
+                >
+                  <Text
+                    className={
+                      payMethod === m
+                        ? "font-medium text-white"
+                        : "text-slate-700 dark:text-slate-200"
+                    }
+                  >
+                    {titleCase(m)}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+            <Field
+              label="Note (optional)"
+              value={payNote}
+              onChangeText={setPayNote}
+              placeholder="Reference, partial payment…"
+            />
+            <View className="mt-2 flex-row gap-3">
+              <View className="flex-1">
+                <Button
+                  title="Cancel"
+                  variant="secondary"
+                  onPress={() => setPayingLease(null)}
+                />
+              </View>
+              <View className="flex-1">
+                <Button title="Save" onPress={savePayment} loading={savingPayment} />
+              </View>
+            </View>
           </ScrollView>
         </View>
       </Modal>

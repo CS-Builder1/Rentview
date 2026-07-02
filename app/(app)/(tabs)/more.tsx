@@ -28,6 +28,8 @@ function confirm(
 }
 
 const MANAGE_LINKS = [
+  { href: "/requests", label: "Tenant requests", icon: "chatbubbles-outline" },
+  { href: "/announcements", label: "Announcements", icon: "megaphone-outline" },
   { href: "/assets", label: "Assets", icon: "cube-outline" },
   { href: "/scan", label: "Scan asset tag", icon: "qr-code-outline" },
   { href: "/inventory", label: "Inventory & parts", icon: "file-tray-stacked-outline" },

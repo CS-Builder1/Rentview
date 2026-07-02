@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useLocalSearchParams } from "expo-router";
+import { useEffect, useState } from "react";
 import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from "react-native";
 
 import { Ionicons } from "@expo/vector-icons";
@@ -6,16 +7,35 @@ import { LinearGradient } from "expo-linear-gradient";
 
 import { Button, Field, Screen, Icon } from "../../components/ui";
 import { brandGradient } from "../../lib/theme";
+import { setPendingInviteCode } from "../../lib/invites";
 import { authRedirectUrl, signInWithGoogle } from "../../lib/oauth";
 import { supabase } from "../../lib/supabase";
 
 export default function Login() {
+  const params = useLocalSearchParams<{ code?: string }>();
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [inviteCode, setInviteCode] = useState("");
+  const [showInvite, setShowInvite] = useState(false);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+
+  // Deep link "…/login?code=XYZ" (from a landlord's shared invite) pre-fills
+  // the code and flips straight into signup mode.
+  useEffect(() => {
+    if (typeof params.code === "string" && params.code) {
+      setInviteCode(params.code.toUpperCase());
+      setShowInvite(true);
+      setMode("signup");
+    }
+  }, [params.code]);
+
+  /** Persist the invite code so it survives the signup/OAuth redirect. */
+  async function stashInvite() {
+    if (inviteCode.trim()) await setPendingInviteCode(inviteCode);
+  }
 
   function notify(title: string, message: string) {
     if (Platform.OS === "web") {
@@ -29,6 +49,7 @@ export default function Login() {
   async function googleSignIn() {
     setGoogleLoading(true);
     try {
+      await stashInvite();
       await signInWithGoogle();
     } catch (e) {
       notify("Google sign-in failed", e instanceof Error ? e.message : String(e));
@@ -44,6 +65,7 @@ export default function Login() {
     }
     setLoading(true);
     try {
+      await stashInvite();
       if (mode === "signup") {
         const { error } = await supabase.auth.signUp({
           email,
@@ -152,6 +174,26 @@ export default function Login() {
             placeholder="••••••••"
             secureTextEntry
           />
+
+          {showInvite ? (
+            <Field
+              label="Tenant invite code"
+              value={inviteCode}
+              onChangeText={(v) => setInviteCode(v.toUpperCase())}
+              placeholder="e.g. K7PWQ2XR"
+              autoCapitalize="characters"
+            />
+          ) : (
+            <Pressable
+              onPress={() => setShowInvite(true)}
+              className="mb-3 flex-row items-center"
+            >
+              <Icon name="key-outline" size={16} />
+              <Text className="ml-1.5 text-sm font-medium text-brand dark:text-brand-400">
+                Renting? Enter your invite code
+              </Text>
+            </Pressable>
+          )}
 
           <View className="mt-2">
             <Button
