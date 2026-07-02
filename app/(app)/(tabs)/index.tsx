@@ -1,16 +1,22 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import { RefreshControl, ScrollView, Text, View } from "react-native";
 
-import { Card, Loading, Screen } from "../../../components/ui";
+import { GradientHeader } from "../../../components/GradientHeader";
+import { ProgressRing } from "../../../components/ProgressRing";
+import { SkeletonCard, SkeletonStat } from "../../../components/Skeleton";
+import { Card, PressableScale, Screen } from "../../../components/ui";
+import { useAuth } from "../../../lib/auth";
 import { cacheGet, cacheSet } from "../../../lib/cache";
-import { formatCurrency, formatDate } from "../../../lib/format";
+import { formatCurrency } from "../../../lib/format";
 import { supabase } from "../../../lib/supabase";
+import { useTheme } from "../../../lib/theme";
 
 type Summary = {
   properties: number;
   units: number;
+  occupiedUnits: number;
   openWorkOrders: number;
   ytdSpend: number;
 };
@@ -24,10 +30,20 @@ type Alert = {
 
 const SOON_DAYS = 60;
 
+function greetingForNow(): string {
+  const h = new Date().getHours();
+  if (h < 12) return "Good morning";
+  if (h < 18) return "Good afternoon";
+  return "Good evening";
+}
+
 export default function Dashboard() {
   const [summary, setSummary] = useState<Summary | null>(null);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const { session } = useAuth();
+  const { colors } = useTheme();
+  const router = useRouter();
 
   const load = useCallback(async () => {
     const now = new Date();
@@ -38,10 +54,24 @@ export default function Dashboard() {
       .slice(0, 10);
 
     try {
-    const [props, units, openWos, expenses, urgentWos, dueSched, inventory, warranties] =
+    const [
+      props,
+      units,
+      occupied,
+      openWos,
+      expenses,
+      urgentWos,
+      dueSched,
+      inventory,
+      warranties,
+    ] =
       await Promise.all([
         supabase.from("properties").select("id", { count: "exact", head: true }),
         supabase.from("units").select("id", { count: "exact", head: true }),
+        supabase
+          .from("units")
+          .select("id", { count: "exact", head: true })
+          .eq("status", "occupied"),
         supabase
           .from("work_orders")
           .select("id", { count: "exact", head: true })
@@ -81,6 +111,7 @@ export default function Dashboard() {
     const nextSummary: Summary = {
       properties: props.count ?? 0,
       units: units.count ?? 0,
+      occupiedUnits: occupied.count ?? 0,
       openWorkOrders: openWos.count ?? 0,
       ytdSpend,
     };
@@ -125,6 +156,7 @@ export default function Dashboard() {
       setSummary(cached?.summary ?? {
         properties: 0,
         units: 0,
+        occupiedUnits: 0,
         openWorkOrders: 0,
         ytdSpend: 0,
       });
@@ -144,85 +176,166 @@ export default function Dashboard() {
     setRefreshing(false);
   }, [load]);
 
-  if (!summary) return <Loading />;
+  const firstName =
+    (session?.user.user_metadata?.full_name as string | undefined)
+      ?.trim()
+      .split(/\s+/)[0] ?? "there";
 
-  const tiles = [
-    { label: "Properties", value: String(summary.properties) },
-    { label: "Units", value: String(summary.units) },
-    { label: "Open work orders", value: String(summary.openWorkOrders) },
-    { label: "Spend this year", value: formatCurrency(summary.ytdSpend) },
+  if (!summary) {
+    return (
+      <Screen>
+        <GradientHeader greeting={`${greetingForNow()}, ${firstName}`} title="Your portfolio" />
+        <View className="mt-4 flex-row flex-wrap justify-between px-5">
+          <SkeletonStat />
+          <SkeletonStat />
+        </View>
+        <View className="px-5 pt-3">
+          <SkeletonCard />
+          <SkeletonCard />
+        </View>
+      </Screen>
+    );
+  }
+
+  const occupancy = summary.units > 0 ? summary.occupiedUnits / summary.units : 0;
+
+  const tiles: {
+    label: string;
+    value: string;
+    icon: keyof typeof Ionicons.glyphMap;
+    onPress?: () => void;
+  }[] = [
+    {
+      label: "Properties",
+      value: String(summary.properties),
+      icon: "business",
+      onPress: () => router.push("/(app)/(tabs)/properties"),
+    },
+    {
+      label: "Units",
+      value: String(summary.units),
+      icon: "home",
+      onPress: () => router.push("/(app)/(tabs)/properties"),
+    },
+    {
+      label: "Open work orders",
+      value: String(summary.openWorkOrders),
+      icon: "construct",
+      onPress: () => router.push("/(app)/(tabs)/work-orders"),
+    },
+    {
+      label: "Spend this year",
+      value: formatCurrency(summary.ytdSpend),
+      icon: "wallet",
+      onPress: () => router.push("/(app)/expenses"),
+    },
+  ];
+
+  const quickActions: {
+    label: string;
+    icon: keyof typeof Ionicons.glyphMap;
+    onPress: () => void;
+  }[] = [
+    { label: "Scan tag", icon: "qr-code", onPress: () => router.push("/(app)/scan") },
+    { label: "Maintenance", icon: "calendar", onPress: () => router.push("/(app)/maintenance") },
+    { label: "Expenses", icon: "wallet", onPress: () => router.push("/(app)/expenses") },
+    { label: "Export", icon: "download", onPress: () => router.push("/(app)/export") },
   ];
 
   const toneColor = {
-    red: "text-red-600",
-    amber: "text-amber-600",
-    slate: "text-slate-600",
+    red: "text-red-600 dark:text-red-400",
+    amber: "text-amber-600 dark:text-amber-400",
+    slate: "text-slate-600 dark:text-slate-300",
+  };
+  const toneIcon = {
+    red: colors.danger,
+    amber: colors.warning,
+    slate: colors.inkMuted,
   };
 
   return (
     <Screen>
       <ScrollView
-        contentContainerClassName="px-5 pb-10"
+        contentContainerClassName="pb-10"
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
       >
-        <Text className="mb-1 mt-2 text-2xl font-bold text-slate-900">
-          Overview
-        </Text>
-        <Text className="mb-5 text-slate-500">Your portfolio at a glance.</Text>
+        <GradientHeader
+          greeting={`${greetingForNow()}, ${firstName}`}
+          title="Your portfolio"
+          subtitle={`${summary.properties} propert${summary.properties === 1 ? "y" : "ies"} · ${summary.units} unit${summary.units === 1 ? "" : "s"}`}
+          right={
+            summary.units > 0 ? (
+              <View className="rounded-2xl bg-white/10 p-2">
+                <ProgressRing progress={occupancy} label="occupied" size={68} />
+              </View>
+            ) : undefined
+          }
+        />
 
-        <View className="flex-row flex-wrap justify-between">
+        <View className="mt-4 flex-row flex-wrap justify-between px-5">
           {tiles.map((t) => (
             <View key={t.label} className="mb-3 w-[48%]">
-              <Card>
-                <Text className="text-3xl font-bold text-brand">{t.value}</Text>
-                <Text className="mt-1 text-slate-500">{t.label}</Text>
+              <Card onPress={t.onPress}>
+                <View className="h-8 w-8 items-center justify-center rounded-full bg-brand-50 dark:bg-brand-950">
+                  <Ionicons name={t.icon} size={15} color={colors.brand} />
+                </View>
+                <Text className="mt-2 text-2xl font-bold text-slate-900 dark:text-slate-100">
+                  {t.value}
+                </Text>
+                <Text className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">
+                  {t.label}
+                </Text>
               </Card>
             </View>
           ))}
         </View>
 
-        <Text className="mb-2 mt-3 text-sm font-semibold uppercase text-slate-400">
-          Needs attention
-        </Text>
-        {alerts.length === 0 ? (
-          <Card>
-            <View className="flex-row items-center">
-              <Ionicons name="checkmark-circle" size={20} color="#16a34a" />
-              <Text className="ml-2 text-slate-600">All clear — nothing pressing.</Text>
-            </View>
-          </Card>
-        ) : (
-          <Card>
-            {alerts.map((a, idx) => (
-              <View
-                key={a.key}
-                className={`flex-row items-center py-2 ${
-                  idx < alerts.length - 1 ? "border-b border-slate-100" : ""
-                }`}
-              >
-                <Ionicons
-                  name={a.icon}
-                  size={18}
-                  color={
-                    a.tone === "red"
-                      ? "#dc2626"
-                      : a.tone === "amber"
-                        ? "#d97706"
-                        : "#475569"
-                  }
-                />
-                <Text className={`ml-3 ${toneColor[a.tone]}`}>{a.text}</Text>
+        <View className="mb-1 flex-row justify-between px-5">
+          {quickActions.map((a) => (
+            <PressableScale key={a.label} onPress={a.onPress} className="items-center">
+              <View className="h-12 w-12 items-center justify-center rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-surface-dark">
+                <Ionicons name={a.icon} size={20} color={colors.brand} />
               </View>
-            ))}
-          </Card>
-        )}
+              <Text className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                {a.label}
+              </Text>
+            </PressableScale>
+          ))}
+        </View>
 
-        <Text className="mt-5 text-slate-400">
-          Pull down to refresh. Manage assets, inventory, maintenance and
-          expenses from the More tab.
-        </Text>
+        <View className="px-5">
+          <Text className="mb-2 mt-5 text-sm font-semibold uppercase text-slate-400 dark:text-slate-500">
+            Needs attention
+          </Text>
+          {alerts.length === 0 ? (
+            <Card>
+              <View className="flex-row items-center">
+                <Ionicons name="checkmark-circle" size={20} color={colors.success} />
+                <Text className="ml-2 text-slate-600 dark:text-slate-300">
+                  All clear — nothing pressing.
+                </Text>
+              </View>
+            </Card>
+          ) : (
+            <Card>
+              {alerts.map((a, idx) => (
+                <View
+                  key={a.key}
+                  className={`flex-row items-center py-2 ${
+                    idx < alerts.length - 1
+                      ? "border-b border-slate-100 dark:border-slate-800"
+                      : ""
+                  }`}
+                >
+                  <Ionicons name={a.icon} size={18} color={toneIcon[a.tone]} />
+                  <Text className={`ml-3 ${toneColor[a.tone]}`}>{a.text}</Text>
+                </View>
+              ))}
+            </Card>
+          )}
+        </View>
       </ScrollView>
     </Screen>
   );

@@ -25,6 +25,7 @@ import {
   Field,
   Loading,
   Screen,
+  Icon,
 } from "../../../components/ui";
 import { pickImageForUpload, signedUrl } from "../../../lib/attachments";
 import { useAuth } from "../../../lib/auth";
@@ -278,19 +279,19 @@ export default function WorkOrderDetail() {
           }
           className="p-2"
         >
-          <Ionicons name="chevron-back" size={24} color="#0f766e" />
+          <Icon name="chevron-back" size={24} />
         </Pressable>
         <Text
-          className="flex-1 text-xl font-bold text-slate-900"
+          className="flex-1 text-xl font-bold text-slate-900 dark:text-slate-100"
           numberOfLines={1}
         >
           {wo.title}
         </Text>
         <Pressable onPress={openEdit} className="p-2">
-          <Ionicons name="create-outline" size={22} color="#0f766e" />
+          <Icon name="create-outline" size={22} />
         </Pressable>
         <Pressable onPress={confirmDelete} className="p-2">
-          <Ionicons name="trash-outline" size={22} color="#dc2626" />
+          <Icon name="trash-outline" size={22} tone="danger" />
         </Pressable>
       </View>
 
@@ -298,18 +299,18 @@ export default function WorkOrderDetail() {
         <Card>
           <View className="flex-row items-center justify-between">
             <Badge label={wo.priority} />
-            <Text className="text-slate-500">
+            <Text className="text-slate-500 dark:text-slate-400">
               {wo.properties?.name ?? "—"}
               {wo.units?.label ? ` · ${wo.units.label}` : ""}
             </Text>
           </View>
           {wo.description ? (
-            <Text className="mt-3 text-slate-700">{wo.description}</Text>
+            <Text className="mt-3 text-slate-700 dark:text-slate-200">{wo.description}</Text>
           ) : null}
           {wo.asset_id && wo.assets ? (
-            <Text className="mt-2 text-slate-500">Asset: {wo.assets.name}</Text>
+            <Text className="mt-2 text-slate-500 dark:text-slate-400">Asset: {wo.assets.name}</Text>
           ) : null}
-          <Text className="mt-2 text-xs text-slate-400">
+          <Text className="mt-2 text-xs text-slate-400 dark:text-slate-500">
             Opened {formatDate(wo.created_at)}
             {wo.completed_at
               ? ` · Completed ${formatDate(wo.completed_at)}`
@@ -318,7 +319,7 @@ export default function WorkOrderDetail() {
         </Card>
 
         {/* Status */}
-        <Text className="mb-2 mt-4 text-sm font-semibold uppercase text-slate-400">
+        <Text className="mb-2 mt-4 text-sm font-semibold uppercase text-slate-400 dark:text-slate-500">
           Status
         </Text>
         <View className="flex-row flex-wrap">
@@ -330,12 +331,12 @@ export default function WorkOrderDetail() {
               className={`mb-2 mr-2 rounded-full border px-3 py-2 ${
                 wo.status === s
                   ? "border-brand bg-brand"
-                  : "border-slate-300 bg-white"
+                  : "border-slate-300 dark:border-slate-700 bg-white dark:bg-surface-dark dark:bg-surface-dark"
               }`}
             >
               <Text
                 className={
-                  wo.status === s ? "font-medium text-white" : "text-slate-700"
+                  wo.status === s ? "font-medium text-white" : "text-slate-700 dark:text-slate-200"
                 }
               >
                 {titleCase(s)}
@@ -345,7 +346,7 @@ export default function WorkOrderDetail() {
         </View>
 
         {/* Vendor */}
-        <Text className="mb-2 mt-4 text-sm font-semibold uppercase text-slate-400">
+        <Text className="mb-2 mt-4 text-sm font-semibold uppercase text-slate-400 dark:text-slate-500">
           Assigned vendor
         </Text>
         <View className="flex-row flex-wrap">
@@ -353,11 +354,11 @@ export default function WorkOrderDetail() {
             disabled={busy}
             onPress={() => assignVendor(null)}
             className={`mb-2 mr-2 rounded-full border px-3 py-2 ${
-              !wo.vendor_id ? "border-brand bg-brand" : "border-slate-300 bg-white"
+              !wo.vendor_id ? "border-brand bg-brand" : "border-slate-300 dark:border-slate-700 bg-white dark:bg-surface-dark dark:bg-surface-dark"
             }`}
           >
             <Text
-              className={!wo.vendor_id ? "font-medium text-white" : "text-slate-700"}
+              className={!wo.vendor_id ? "font-medium text-white" : "text-slate-700 dark:text-slate-200"}
             >
               Unassigned
             </Text>
@@ -370,14 +371,14 @@ export default function WorkOrderDetail() {
               className={`mb-2 mr-2 rounded-full border px-3 py-2 ${
                 wo.vendor_id === v.id
                   ? "border-brand bg-brand"
-                  : "border-slate-300 bg-white"
+                  : "border-slate-300 dark:border-slate-700 bg-white dark:bg-surface-dark dark:bg-surface-dark"
               }`}
             >
               <Text
                 className={
                   wo.vendor_id === v.id
                     ? "font-medium text-white"
-                    : "text-slate-700"
+                    : "text-slate-700 dark:text-slate-200"
                 }
               >
                 {v.name}
@@ -388,7 +389,7 @@ export default function WorkOrderDetail() {
 
         {/* Parts */}
         <View className="mb-2 mt-4 flex-row items-center justify-between">
-          <Text className="text-sm font-semibold uppercase text-slate-400">
+          <Text className="text-sm font-semibold uppercase text-slate-400 dark:text-slate-500">
             Parts used
           </Text>
           <Pressable
@@ -400,18 +401,18 @@ export default function WorkOrderDetail() {
           </Pressable>
         </View>
         {parts.length === 0 ? (
-          <Text className="mb-2 text-slate-400">No parts logged.</Text>
+          <Text className="mb-2 text-slate-400 dark:text-slate-500">No parts logged.</Text>
         ) : (
           <Card>
             {parts.map((p) => (
               <View
                 key={p.id}
-                className="flex-row items-center justify-between border-b border-slate-100 py-2"
+                className="flex-row items-center justify-between border-b border-slate-100 dark:border-slate-800 py-2"
               >
-                <Text className="flex-1 text-slate-700">
+                <Text className="flex-1 text-slate-700 dark:text-slate-200">
                   {Number(p.quantity)} × {p.description}
                 </Text>
-                <Text className="mr-3 text-slate-600">
+                <Text className="mr-3 text-slate-600 dark:text-slate-300">
                   {p.unit_cost
                     ? formatCurrency(
                         Number(p.unit_cost) * Number(p.quantity),
@@ -420,13 +421,13 @@ export default function WorkOrderDetail() {
                     : "—"}
                 </Text>
                 <Pressable onPress={() => removePart(p.id)}>
-                  <Ionicons name="close-circle" size={20} color="#cbd5e1" />
+                  <Icon name="close-circle" size={20} tone="faint" />
                 </Pressable>
               </View>
             ))}
             <View className="flex-row justify-between pt-2">
-              <Text className="font-semibold text-slate-800">Parts total</Text>
-              <Text className="font-semibold text-slate-900">
+              <Text className="font-semibold text-slate-800 dark:text-slate-200">Parts total</Text>
+              <Text className="font-semibold text-slate-900 dark:text-slate-100">
                 {formatCurrency(partsTotal, currency)}
               </Text>
             </View>
@@ -435,7 +436,7 @@ export default function WorkOrderDetail() {
 
         {/* Photos */}
         <View className="mb-2 mt-4 flex-row items-center justify-between">
-          <Text className="text-sm font-semibold uppercase text-slate-400">
+          <Text className="text-sm font-semibold uppercase text-slate-400 dark:text-slate-500">
             Photos
           </Text>
           <Pressable
@@ -450,7 +451,7 @@ export default function WorkOrderDetail() {
           </Pressable>
         </View>
         {photos.length === 0 ? (
-          <Text className="text-slate-400">No photos yet.</Text>
+          <Text className="text-slate-400 dark:text-slate-500">No photos yet.</Text>
         ) : (
           <View className="flex-row flex-wrap">
             {photos.map((p) =>
@@ -480,10 +481,10 @@ export default function WorkOrderDetail() {
       <Modal visible={editing} animationType="slide" transparent>
         <View className="flex-1 justify-end bg-black/40">
           <ScrollView
-            className="max-h-[88%] rounded-t-3xl bg-slate-50"
+            className="max-h-[88%] rounded-t-3xl bg-slate-50 dark:bg-slate-900 dark:bg-slate-900"
             contentContainerClassName="p-5"
           >
-            <Text className="mb-4 text-xl font-bold text-slate-900">
+            <Text className="mb-4 text-xl font-bold text-slate-900 dark:text-slate-100">
               Edit work order
             </Text>
             <Field label="Title" value={eTitle} onChangeText={setETitle} />
@@ -494,7 +495,7 @@ export default function WorkOrderDetail() {
               placeholder="Details, location, what's needed…"
               multiline
             />
-            <Text className="mb-1 text-sm font-medium text-slate-600">
+            <Text className="mb-1 text-sm font-medium text-slate-600 dark:text-slate-300">
               Priority
             </Text>
             <View className="mb-3 flex-row flex-wrap">
@@ -505,12 +506,12 @@ export default function WorkOrderDetail() {
                   className={`mb-2 mr-2 rounded-full border px-3 py-2 ${
                     ePriority === p
                       ? "border-brand bg-brand"
-                      : "border-slate-300 bg-white"
+                      : "border-slate-300 dark:border-slate-700 bg-white dark:bg-surface-dark dark:bg-surface-dark"
                   }`}
                 >
                   <Text
                     className={
-                      ePriority === p ? "font-medium text-white" : "text-slate-700"
+                      ePriority === p ? "font-medium text-white" : "text-slate-700 dark:text-slate-200"
                     }
                   >
                     {titleCase(p)}
@@ -543,8 +544,8 @@ export default function WorkOrderDetail() {
 
       <Modal visible={addingPart} animationType="slide" transparent>
         <View className="flex-1 justify-end bg-black/40">
-          <View className="rounded-t-3xl bg-slate-50 p-5">
-            <Text className="mb-4 text-xl font-bold text-slate-900">Add part</Text>
+          <View className="rounded-t-3xl bg-slate-50 dark:bg-slate-900 p-5">
+            <Text className="mb-4 text-xl font-bold text-slate-900 dark:text-slate-100">Add part</Text>
             <Field
               label="Description"
               value={partDesc}

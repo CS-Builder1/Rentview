@@ -83,7 +83,7 @@ export default function Properties() {
   return (
     <Screen>
       <View className="flex-row items-center justify-between px-5 pb-2 pt-2">
-        <Text className="text-2xl font-bold text-slate-900">Properties</Text>
+        <Text className="text-2xl font-bold text-slate-900 dark:text-slate-100">Properties</Text>
         <Pressable
           onPress={() => setAdding(true)}
           className="flex-row items-center rounded-full bg-brand px-3 py-2"
@@ -103,12 +103,12 @@ export default function Properties() {
           properties.map((p) => (
             <Card key={p.id} onPress={() => router.push(`/property/${p.id}`)}>
               <View className="flex-row items-center justify-between">
-                <Text className="flex-1 text-lg font-semibold text-slate-900">
+                <Text className="flex-1 text-lg font-semibold text-slate-900 dark:text-slate-100">
                   {p.name}
                 </Text>
                 <Badge label={p.property_type} />
               </View>
-              <Text className="mt-1 text-slate-500">
+              <Text className="mt-1 text-slate-500 dark:text-slate-400">
                 {p.city ? `${p.city} · ` : ""}
                 {p.units?.[0]?.count ?? 0} unit
                 {(p.units?.[0]?.count ?? 0) === 1 ? "" : "s"}
@@ -120,8 +120,8 @@ export default function Properties() {
 
       <Modal visible={adding} animationType="slide" transparent>
         <View className="flex-1 justify-end bg-black/40">
-          <View className="rounded-t-3xl bg-slate-50 p-5">
-            <Text className="mb-4 text-xl font-bold text-slate-900">
+          <View className="rounded-t-3xl bg-slate-50 dark:bg-slate-900 p-5">
+            <Text className="mb-4 text-xl font-bold text-slate-900 dark:text-slate-100">
               New property
             </Text>
 
@@ -132,7 +132,7 @@ export default function Properties() {
               placeholder="e.g. Marigot Bay Complex"
             />
 
-            <Text className="mb-1 text-sm font-medium text-slate-600">Type</Text>
+            <Text className="mb-1 text-sm font-medium text-slate-600 dark:text-slate-300">Type</Text>
             <View className="mb-3 flex-row flex-wrap">
               {PROPERTY_TYPES.map((t) => (
                 <Pressable
@@ -141,12 +141,12 @@ export default function Properties() {
                   className={`mb-2 mr-2 rounded-full border px-3 py-2 ${
                     type === t
                       ? "border-brand bg-brand"
-                      : "border-slate-300 bg-white"
+                      : "border-slate-300 dark:border-slate-700 bg-white dark:bg-surface-dark dark:bg-surface-dark"
                   }`}
                 >
                   <Text
                     className={
-                      type === t ? "font-medium text-white" : "text-slate-700"
+                      type === t ? "font-medium text-white" : "text-slate-700 dark:text-slate-200"
                     }
                   >
                     {titleCase(t)}

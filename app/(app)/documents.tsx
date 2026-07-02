@@ -19,6 +19,7 @@ import {
   Field,
   Loading,
   Screen,
+  Icon,
 } from "../../components/ui";
 import { openAttachment, pickAndUploadDocument } from "../../lib/attachments";
 import { useAuth } from "../../lib/auth";
@@ -149,9 +150,9 @@ export default function Documents() {
           }
           className="p-2"
         >
-          <Ionicons name="chevron-back" size={24} color="#0f766e" />
+          <Icon name="chevron-back" size={24} />
         </Pressable>
-        <Text className="flex-1 text-xl font-bold text-slate-900">Documents</Text>
+        <Text className="flex-1 text-xl font-bold text-slate-900 dark:text-slate-100">Documents</Text>
         <Pressable
           onPress={() => setAdding(true)}
           className="flex-row items-center rounded-full bg-brand px-3 py-2"
@@ -171,19 +172,19 @@ export default function Documents() {
           docs.map((d) => (
             <Card key={d.id} onPress={() => openAttachment(d.storage_path)}>
               <View className="flex-row items-center">
-                <Ionicons name="document-text-outline" size={22} color="#0f766e" />
+                <Icon name="document-text-outline" size={22} />
                 <View className="ml-3 flex-1">
-                  <Text className="font-semibold text-slate-900" numberOfLines={1}>
+                  <Text className="font-semibold text-slate-900 dark:text-slate-100" numberOfLines={1}>
                     {d.name}
                   </Text>
-                  <Text className="text-xs text-slate-400">
+                  <Text className="text-xs text-slate-400 dark:text-slate-500">
                     {d.properties?.name ? `${d.properties.name} · ` : ""}
                     {formatDate(d.created_at)}
                   </Text>
                 </View>
                 <Badge label={d.doc_type} />
                 <Pressable onPress={() => remove(d)} className="ml-2">
-                  <Ionicons name="trash-outline" size={18} color="#dc2626" />
+                  <Icon name="trash-outline" size={18} tone="danger" />
                 </Pressable>
               </View>
             </Card>
@@ -194,23 +195,22 @@ export default function Documents() {
       <Modal visible={adding} animationType="slide" transparent>
         <View className="flex-1 justify-end bg-black/40">
           <ScrollView
-            className="max-h-[88%] rounded-t-3xl bg-slate-50"
+            className="max-h-[88%] rounded-t-3xl bg-slate-50 dark:bg-slate-900 dark:bg-slate-900"
             contentContainerClassName="p-5"
           >
-            <Text className="mb-4 text-xl font-bold text-slate-900">
+            <Text className="mb-4 text-xl font-bold text-slate-900 dark:text-slate-100">
               Add document
             </Text>
 
             <Pressable
               onPress={pickFile}
-              className="mb-3 flex-row items-center justify-center rounded-xl border border-dashed border-brand bg-white px-4 py-4"
+              className="mb-3 flex-row items-center justify-center rounded-xl border border-dashed border-brand bg-white dark:bg-surface-dark px-4 py-4"
             >
-              <Ionicons
+              <Icon
                 name={picked ? "checkmark-circle" : "cloud-upload-outline"}
                 size={20}
-                color="#0f766e"
               />
-              <Text className="ml-2 font-medium text-brand" numberOfLines={1}>
+              <Text className="ml-2 font-medium text-brand dark:text-brand-400" numberOfLines={1}>
                 {picked ? picked.name : "Choose a file"}
               </Text>
             </Pressable>
@@ -222,7 +222,7 @@ export default function Documents() {
               placeholder="e.g. AC warranty, Lease 2026"
             />
 
-            <Text className="mb-1 text-sm font-medium text-slate-600">Type</Text>
+            <Text className="mb-1 text-sm font-medium text-slate-600 dark:text-slate-300">Type</Text>
             <View className="mb-3 flex-row flex-wrap">
               {DOC_TYPES.map((t) => (
                 <Pressable
@@ -231,12 +231,12 @@ export default function Documents() {
                   className={`mb-2 mr-2 rounded-full border px-3 py-2 ${
                     docType === t
                       ? "border-brand bg-brand"
-                      : "border-slate-300 bg-white"
+                      : "border-slate-300 dark:border-slate-700 bg-white dark:bg-surface-dark dark:bg-surface-dark"
                   }`}
                 >
                   <Text
                     className={
-                      docType === t ? "font-medium text-white" : "text-slate-700"
+                      docType === t ? "font-medium text-white" : "text-slate-700 dark:text-slate-200"
                     }
                   >
                     {titleCase(t)}
@@ -245,7 +245,7 @@ export default function Documents() {
               ))}
             </View>
 
-            <Text className="mb-1 text-sm font-medium text-slate-600">
+            <Text className="mb-1 text-sm font-medium text-slate-600 dark:text-slate-300">
               Property (optional)
             </Text>
             <View className="mb-3 flex-row flex-wrap">
@@ -256,14 +256,14 @@ export default function Documents() {
                   className={`mb-2 mr-2 rounded-full border px-3 py-2 ${
                     propertyId === p.id
                       ? "border-brand bg-brand"
-                      : "border-slate-300 bg-white"
+                      : "border-slate-300 dark:border-slate-700 bg-white dark:bg-surface-dark dark:bg-surface-dark"
                   }`}
                 >
                   <Text
                     className={
                       propertyId === p.id
                         ? "font-medium text-white"
-                        : "text-slate-700"
+                        : "text-slate-700 dark:text-slate-200"
                     }
                   >
                     {p.name}

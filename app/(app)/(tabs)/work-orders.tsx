@@ -128,7 +128,7 @@ export default function WorkOrders() {
   return (
     <Screen>
       <View className="flex-row items-center justify-between px-5 pb-2 pt-2">
-        <Text className="text-2xl font-bold text-slate-900">Work Orders</Text>
+        <Text className="text-2xl font-bold text-slate-900 dark:text-slate-100">Work Orders</Text>
         <Pressable
           onPress={() => setAdding(true)}
           className="flex-row items-center rounded-full bg-brand px-3 py-2"
@@ -148,18 +148,18 @@ export default function WorkOrders() {
           orders.map((o) => (
             <Card key={o.id} onPress={() => router.push(`/work-order/${o.id}`)}>
               <View className="flex-row items-center justify-between">
-                <Text className="flex-1 pr-2 text-base font-semibold text-slate-900">
+                <Text className="flex-1 pr-2 text-base font-semibold text-slate-900 dark:text-slate-100">
                   {o.title}
                 </Text>
                 <Badge label={o.priority} />
               </View>
-              <Text className="mt-1 text-slate-500">
+              <Text className="mt-1 text-slate-500 dark:text-slate-400">
                 {o.properties?.name ?? "—"}
                 {o.units?.label ? ` · ${o.units.label}` : ""}
               </Text>
               <View className="mt-2 flex-row items-center justify-between">
                 <Badge label={o.status} />
-                <Text className="text-xs text-slate-400">
+                <Text className="text-xs text-slate-400 dark:text-slate-500">
                   {formatDate(o.created_at)}
                 </Text>
               </View>
@@ -171,10 +171,10 @@ export default function WorkOrders() {
       <Modal visible={adding} animationType="slide" transparent>
         <View className="flex-1 justify-end bg-black/40">
           <ScrollView
-            className="max-h-[85%] rounded-t-3xl bg-slate-50"
+            className="max-h-[85%] rounded-t-3xl bg-slate-50 dark:bg-slate-900 dark:bg-slate-900"
             contentContainerClassName="p-5"
           >
-            <Text className="mb-4 text-xl font-bold text-slate-900">
+            <Text className="mb-4 text-xl font-bold text-slate-900 dark:text-slate-100">
               New work order
             </Text>
 
@@ -192,11 +192,11 @@ export default function WorkOrders() {
               multiline
             />
 
-            <Text className="mb-1 text-sm font-medium text-slate-600">
+            <Text className="mb-1 text-sm font-medium text-slate-600 dark:text-slate-300">
               Property
             </Text>
             {properties.length === 0 ? (
-              <Text className="mb-3 text-slate-400">
+              <Text className="mb-3 text-slate-400 dark:text-slate-500">
                 Add a property first under the Properties tab.
               </Text>
             ) : (
@@ -208,14 +208,14 @@ export default function WorkOrders() {
                     className={`mb-2 mr-2 rounded-full border px-3 py-2 ${
                       propertyId === p.id
                         ? "border-brand bg-brand"
-                        : "border-slate-300 bg-white"
+                        : "border-slate-300 dark:border-slate-700 bg-white dark:bg-surface-dark dark:bg-surface-dark"
                     }`}
                   >
                     <Text
                       className={
                         propertyId === p.id
                           ? "font-medium text-white"
-                          : "text-slate-700"
+                          : "text-slate-700 dark:text-slate-200"
                       }
                     >
                       {p.name}
@@ -227,7 +227,7 @@ export default function WorkOrders() {
 
             {units.length > 0 ? (
               <>
-                <Text className="mb-1 text-sm font-medium text-slate-600">
+                <Text className="mb-1 text-sm font-medium text-slate-600 dark:text-slate-300">
                   Unit (optional)
                 </Text>
                 <View className="mb-3 flex-row flex-wrap">
@@ -240,14 +240,14 @@ export default function WorkOrders() {
                       className={`mb-2 mr-2 rounded-full border px-3 py-2 ${
                         unitId === u.id
                           ? "border-brand bg-brand"
-                          : "border-slate-300 bg-white"
+                          : "border-slate-300 dark:border-slate-700 bg-white dark:bg-surface-dark dark:bg-surface-dark"
                       }`}
                     >
                       <Text
                         className={
                           unitId === u.id
                             ? "font-medium text-white"
-                            : "text-slate-700"
+                            : "text-slate-700 dark:text-slate-200"
                         }
                       >
                         {u.label}
@@ -258,7 +258,7 @@ export default function WorkOrders() {
               </>
             ) : null}
 
-            <Text className="mb-1 text-sm font-medium text-slate-600">
+            <Text className="mb-1 text-sm font-medium text-slate-600 dark:text-slate-300">
               Priority
             </Text>
             <View className="mb-3 flex-row flex-wrap">
@@ -269,12 +269,12 @@ export default function WorkOrders() {
                   className={`mb-2 mr-2 rounded-full border px-3 py-2 ${
                     priority === p
                       ? "border-brand bg-brand"
-                      : "border-slate-300 bg-white"
+                      : "border-slate-300 dark:border-slate-700 bg-white dark:bg-surface-dark dark:bg-surface-dark"
                   }`}
                 >
                   <Text
                     className={
-                      priority === p ? "font-medium text-white" : "text-slate-700"
+                      priority === p ? "font-medium text-white" : "text-slate-700 dark:text-slate-200"
                     }
                   >
                     {titleCase(p)}

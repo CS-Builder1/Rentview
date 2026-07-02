@@ -10,6 +10,7 @@ import {
   Field,
   Loading,
   Screen,
+  Icon,
 } from "../../components/ui";
 import { useAuth } from "../../lib/auth";
 import type { Tables } from "../../lib/database.types";
@@ -130,9 +131,9 @@ export default function Maintenance() {
           }
           className="p-2"
         >
-          <Ionicons name="chevron-back" size={24} color="#0f766e" />
+          <Icon name="chevron-back" size={24} />
         </Pressable>
-        <Text className="flex-1 text-xl font-bold text-slate-900">
+        <Text className="flex-1 text-xl font-bold text-slate-900 dark:text-slate-100">
           Preventive maintenance
         </Text>
         <Pressable
@@ -154,30 +155,30 @@ export default function Maintenance() {
           schedules.map((s) => (
             <Card key={s.id}>
               <View className="flex-row items-center justify-between">
-                <Text className="flex-1 pr-2 text-base font-semibold text-slate-900">
+                <Text className="flex-1 pr-2 text-base font-semibold text-slate-900 dark:text-slate-100">
                   {s.title}
                 </Text>
                 {isDue(s) ? (
-                  <View className="rounded-full bg-amber-100 px-2.5 py-0.5">
-                    <Text className="text-xs font-medium text-amber-800">Due</Text>
+                  <View className="rounded-full bg-amber-100 dark:bg-amber-950 px-2.5 py-0.5">
+                    <Text className="text-xs font-medium text-amber-800 dark:text-amber-300">Due</Text>
                   </View>
                 ) : null}
               </View>
-              <Text className="mt-1 text-slate-500">
+              <Text className="mt-1 text-slate-500 dark:text-slate-400">
                 {titleCase(s.frequency)}
                 {s.properties?.name ? ` · ${s.properties.name}` : ""}
               </Text>
               <View className="mt-2 flex-row items-center justify-between">
-                <Text className="text-xs text-slate-400">
+                <Text className="text-xs text-slate-400 dark:text-slate-500">
                   {s.next_due ? `Next: ${formatDate(s.next_due)}` : "No date set"}
                   {s.last_done ? ` · Last: ${formatDate(s.last_done)}` : ""}
                 </Text>
                 <Pressable
                   disabled={busy}
                   onPress={() => markDone(s)}
-                  className="rounded-full bg-slate-200 px-3 py-1.5"
+                  className="rounded-full bg-slate-200 dark:bg-slate-700 px-3 py-1.5"
                 >
-                  <Text className="text-sm font-medium text-slate-700">
+                  <Text className="text-sm font-medium text-slate-700 dark:text-slate-200">
                     Mark done
                   </Text>
                 </Pressable>
@@ -190,10 +191,10 @@ export default function Maintenance() {
       <Modal visible={adding} animationType="slide" transparent>
         <View className="flex-1 justify-end bg-black/40">
           <ScrollView
-            className="max-h-[88%] rounded-t-3xl bg-slate-50"
+            className="max-h-[88%] rounded-t-3xl bg-slate-50 dark:bg-slate-900 dark:bg-slate-900"
             contentContainerClassName="p-5"
           >
-            <Text className="mb-4 text-xl font-bold text-slate-900">
+            <Text className="mb-4 text-xl font-bold text-slate-900 dark:text-slate-100">
               New schedule
             </Text>
 
@@ -204,7 +205,7 @@ export default function Maintenance() {
               placeholder="e.g. Quarterly AC service"
             />
 
-            <Text className="mb-1 text-sm font-medium text-slate-600">
+            <Text className="mb-1 text-sm font-medium text-slate-600 dark:text-slate-300">
               Frequency
             </Text>
             <View className="mb-3 flex-row flex-wrap">
@@ -215,12 +216,12 @@ export default function Maintenance() {
                   className={`mb-2 mr-2 rounded-full border px-3 py-2 ${
                     frequency === f
                       ? "border-brand bg-brand"
-                      : "border-slate-300 bg-white"
+                      : "border-slate-300 dark:border-slate-700 bg-white dark:bg-surface-dark dark:bg-surface-dark"
                   }`}
                 >
                   <Text
                     className={
-                      frequency === f ? "font-medium text-white" : "text-slate-700"
+                      frequency === f ? "font-medium text-white" : "text-slate-700 dark:text-slate-200"
                     }
                   >
                     {titleCase(f)}
@@ -239,7 +240,7 @@ export default function Maintenance() {
               />
             ) : null}
 
-            <Text className="mb-1 text-sm font-medium text-slate-600">
+            <Text className="mb-1 text-sm font-medium text-slate-600 dark:text-slate-300">
               Property (optional)
             </Text>
             <View className="mb-3 flex-row flex-wrap">
@@ -250,14 +251,14 @@ export default function Maintenance() {
                   className={`mb-2 mr-2 rounded-full border px-3 py-2 ${
                     propertyId === p.id
                       ? "border-brand bg-brand"
-                      : "border-slate-300 bg-white"
+                      : "border-slate-300 dark:border-slate-700 bg-white dark:bg-surface-dark dark:bg-surface-dark"
                   }`}
                 >
                   <Text
                     className={
                       propertyId === p.id
                         ? "font-medium text-white"
-                        : "text-slate-700"
+                        : "text-slate-700 dark:text-slate-200"
                     }
                   >
                     {p.name}

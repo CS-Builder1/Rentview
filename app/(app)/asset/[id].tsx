@@ -11,7 +11,7 @@ import { Modal, Pressable, ScrollView, Text, View } from "react-native";
 import QRCode from "react-native-qrcode-svg";
 
 import { DocumentsSection } from "../../../components/DocumentsSection";
-import { Badge, Button, Card, Field, Loading, Screen } from "../../../components/ui";
+import { Badge, Button, Card, Field, Loading, Screen, Icon } from "../../../components/ui";
 import { assetUrl } from "../../../lib/appUrl";
 import { cachedSelect } from "../../../lib/cache";
 import { confirmAction } from "../../../lib/confirm";
@@ -43,9 +43,9 @@ function warrantyState(expiry: string | null): {
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <View className="flex-row justify-between border-b border-slate-100 py-2">
-      <Text className="text-slate-500">{label}</Text>
-      <Text className="font-medium text-slate-800">{value}</Text>
+    <View className="flex-row justify-between border-b border-slate-100 dark:border-slate-800 py-2">
+      <Text className="text-slate-500 dark:text-slate-400">{label}</Text>
+      <Text className="font-medium text-slate-800 dark:text-slate-200">{value}</Text>
     </View>
   );
 }
@@ -156,19 +156,19 @@ export default function AssetDetail() {
           }
           className="p-2"
         >
-          <Ionicons name="chevron-back" size={24} color="#0f766e" />
+          <Icon name="chevron-back" size={24} />
         </Pressable>
         <Text
-          className="flex-1 text-xl font-bold text-slate-900"
+          className="flex-1 text-xl font-bold text-slate-900 dark:text-slate-100"
           numberOfLines={1}
         >
           {asset.name}
         </Text>
         <Pressable onPress={openEdit} className="p-2">
-          <Ionicons name="create-outline" size={22} color="#0f766e" />
+          <Icon name="create-outline" size={22} />
         </Pressable>
         <Pressable onPress={deleteAsset} className="p-2">
-          <Ionicons name="trash-outline" size={22} color="#dc2626" />
+          <Icon name="trash-outline" size={22} tone="danger" />
         </Pressable>
       </View>
 
@@ -176,14 +176,14 @@ export default function AssetDetail() {
         <Card>
           <View className="flex-row items-center justify-between">
             <Badge label={asset.status} />
-            <Text className="text-slate-500">
+            <Text className="text-slate-500 dark:text-slate-400">
               {asset.properties?.name ?? "—"}
               {asset.units?.label ? ` · ${asset.units.label}` : " · Shared"}
             </Text>
           </View>
           {warranty ? (
             <View className="mt-3 flex-row items-center">
-              <Ionicons name="shield-checkmark-outline" size={18} color="#475569" />
+              <Icon name="shield-checkmark-outline" size={18} tone="muted" />
               <Text className={`ml-2 font-medium ${warranty.tone}`}>
                 {warranty.label}
               </Text>
@@ -227,13 +227,13 @@ export default function AssetDetail() {
         </View>
 
         {/* Printable QR tag — scanning it opens this asset in the app. */}
-        <Text className="mb-2 mt-4 text-lg font-semibold text-slate-900">
+        <Text className="mb-2 mt-4 text-lg font-semibold text-slate-900 dark:text-slate-100">
           QR tag
         </Text>
         <Card>
           <View className="items-center py-2">
             <QRCode value={assetUrl(asset.id)} size={160} />
-            <Text className="mt-3 text-center text-sm text-slate-500">
+            <Text className="mt-3 text-center text-sm text-slate-500 dark:text-slate-400">
               Print and stick this on the asset. Scan it with the in-app
               scanner (or any phone camera) to jump straight here.
             </Text>
@@ -254,10 +254,10 @@ export default function AssetDetail() {
       <Modal visible={editing} animationType="slide" transparent>
         <View className="flex-1 justify-end bg-black/40">
           <ScrollView
-            className="max-h-[90%] rounded-t-3xl bg-slate-50"
+            className="max-h-[90%] rounded-t-3xl bg-slate-50 dark:bg-slate-900 dark:bg-slate-900"
             contentContainerClassName="p-5"
           >
-            <Text className="mb-4 text-xl font-bold text-slate-900">Edit asset</Text>
+            <Text className="mb-4 text-xl font-bold text-slate-900 dark:text-slate-100">Edit asset</Text>
             <Field label="Name" value={eName} onChangeText={setEName} />
             <Field label="Category" value={eCategory} onChangeText={setECategory} />
             <View className="flex-row gap-3">
@@ -301,17 +301,17 @@ export default function AssetDetail() {
                 />
               </View>
             </View>
-            <Text className="mb-1 text-sm font-medium text-slate-600">Status</Text>
+            <Text className="mb-1 text-sm font-medium text-slate-600 dark:text-slate-300">Status</Text>
             <View className="mb-3 flex-row flex-wrap">
               {ASSET_STATUSES.map((s) => (
                 <Pressable
                   key={s}
                   onPress={() => setEStatus(s)}
                   className={`mb-2 mr-2 rounded-full border px-3 py-2 ${
-                    eStatus === s ? "border-brand bg-brand" : "border-slate-300 bg-white"
+                    eStatus === s ? "border-brand bg-brand" : "border-slate-300 dark:border-slate-700 bg-white dark:bg-surface-dark dark:bg-surface-dark"
                   }`}
                 >
-                  <Text className={eStatus === s ? "font-medium text-white" : "text-slate-700"}>
+                  <Text className={eStatus === s ? "font-medium text-white" : "text-slate-700 dark:text-slate-200"}>
                     {titleCase(s)}
                   </Text>
                 </Pressable>

@@ -3,7 +3,7 @@ import { Stack, useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import { Alert, Platform, Pressable, ScrollView, Text, View } from "react-native";
 
-import { Button, Card, Loading, Screen } from "../../components/ui";
+import { Button, Card, Loading, Screen, Icon } from "../../components/ui";
 import { exportText, toCsv } from "../../lib/csv";
 import type { Tables } from "../../lib/database.types";
 import { titleCase } from "../../lib/format";
@@ -143,28 +143,28 @@ export default function ExportPacket() {
           }
           className="p-2"
         >
-          <Ionicons name="chevron-back" size={24} color="#0f766e" />
+          <Icon name="chevron-back" size={24} />
         </Pressable>
-        <Text className="flex-1 text-xl font-bold text-slate-900">
+        <Text className="flex-1 text-xl font-bold text-slate-900 dark:text-slate-100">
           Accountant packet
         </Text>
       </View>
 
       <ScrollView contentContainerClassName="px-5 pb-10">
-        <Text className="mb-4 text-slate-500">
+        <Text className="mb-4 text-slate-500 dark:text-slate-400">
           Export expenses as a CSV to share with your accountant. Choose a
           property and period.
         </Text>
 
-        <Text className="mb-1 text-sm font-medium text-slate-600">Property</Text>
+        <Text className="mb-1 text-sm font-medium text-slate-600 dark:text-slate-300">Property</Text>
         <View className="mb-4 flex-row flex-wrap">
           <Pressable
             onPress={() => setPropertyId(null)}
             className={`mb-2 mr-2 rounded-full border px-3 py-2 ${
-              !propertyId ? "border-brand bg-brand" : "border-slate-300 bg-white"
+              !propertyId ? "border-brand bg-brand" : "border-slate-300 dark:border-slate-700 bg-white dark:bg-surface-dark dark:bg-surface-dark"
             }`}
           >
-            <Text className={!propertyId ? "font-medium text-white" : "text-slate-700"}>
+            <Text className={!propertyId ? "font-medium text-white" : "text-slate-700 dark:text-slate-200"}>
               All properties
             </Text>
           </Pressable>
@@ -175,12 +175,12 @@ export default function ExportPacket() {
               className={`mb-2 mr-2 rounded-full border px-3 py-2 ${
                 propertyId === p.id
                   ? "border-brand bg-brand"
-                  : "border-slate-300 bg-white"
+                  : "border-slate-300 dark:border-slate-700 bg-white dark:bg-surface-dark dark:bg-surface-dark"
               }`}
             >
               <Text
                 className={
-                  propertyId === p.id ? "font-medium text-white" : "text-slate-700"
+                  propertyId === p.id ? "font-medium text-white" : "text-slate-700 dark:text-slate-200"
                 }
               >
                 {p.name}
@@ -189,7 +189,7 @@ export default function ExportPacket() {
           ))}
         </View>
 
-        <Text className="mb-1 text-sm font-medium text-slate-600">Period</Text>
+        <Text className="mb-1 text-sm font-medium text-slate-600 dark:text-slate-300">Period</Text>
         <View className="mb-6 flex-row flex-wrap">
           {PERIODS.map((p) => (
             <Pressable
@@ -198,12 +198,12 @@ export default function ExportPacket() {
               className={`mb-2 mr-2 rounded-full border px-3 py-2 ${
                 period === p.key
                   ? "border-brand bg-brand"
-                  : "border-slate-300 bg-white"
+                  : "border-slate-300 dark:border-slate-700 bg-white dark:bg-surface-dark dark:bg-surface-dark"
               }`}
             >
               <Text
                 className={
-                  period === p.key ? "font-medium text-white" : "text-slate-700"
+                  period === p.key ? "font-medium text-white" : "text-slate-700 dark:text-slate-200"
                 }
               >
                 {p.label}
@@ -217,7 +217,7 @@ export default function ExportPacket() {
           onPress={run}
           loading={busy}
         />
-        <Text className="mt-3 text-xs text-slate-400">
+        <Text className="mt-3 text-xs text-slate-400 dark:text-slate-500">
           The file includes date, property, unit, category, description,
           vendor and amount, with totals per currency. For your records —
           RentView is not tax or accounting advice.

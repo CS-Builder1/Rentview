@@ -16,6 +16,7 @@ import {
   Field,
   Loading,
   Screen,
+  Icon,
 } from "../../../components/ui";
 import { useAuth } from "../../../lib/auth";
 import { cachedSelect } from "../../../lib/cache";
@@ -42,9 +43,9 @@ type Unit = Tables<"units"> & {
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <View className="flex-row justify-between border-b border-slate-100 py-2">
-      <Text className="text-slate-500">{label}</Text>
-      <Text className="font-medium text-slate-800">{value}</Text>
+    <View className="flex-row justify-between border-b border-slate-100 dark:border-slate-800 py-2">
+      <Text className="text-slate-500 dark:text-slate-400">{label}</Text>
+      <Text className="font-medium text-slate-800 dark:text-slate-200">{value}</Text>
     </View>
   );
 }
@@ -275,19 +276,19 @@ export default function UnitDetail() {
           }
           className="p-2"
         >
-          <Ionicons name="chevron-back" size={24} color="#0f766e" />
+          <Icon name="chevron-back" size={24} />
         </Pressable>
         <Text
-          className="flex-1 text-xl font-bold text-slate-900"
+          className="flex-1 text-xl font-bold text-slate-900 dark:text-slate-100"
           numberOfLines={1}
         >
           {unit.label}
         </Text>
         <Pressable onPress={openEdit} className="p-2">
-          <Ionicons name="create-outline" size={22} color="#0f766e" />
+          <Icon name="create-outline" size={22} />
         </Pressable>
         <Pressable onPress={deleteUnit} className="p-2">
-          <Ionicons name="trash-outline" size={22} color="#dc2626" />
+          <Icon name="trash-outline" size={22} tone="danger" />
         </Pressable>
       </View>
 
@@ -295,7 +296,7 @@ export default function UnitDetail() {
         <Card>
           <View className="flex-row items-center justify-between">
             <Badge label={unit.status} />
-            <Text className="text-slate-500">
+            <Text className="text-slate-500 dark:text-slate-400">
               {unit.properties?.name ?? ""} · {titleCase(unit.unit_type)}
             </Text>
           </View>
@@ -322,7 +323,7 @@ export default function UnitDetail() {
 
         {/* Lease / tenant */}
         <View className="mb-2 mt-4 flex-row items-center justify-between">
-          <Text className="text-lg font-semibold text-slate-900">
+          <Text className="text-lg font-semibold text-slate-900 dark:text-slate-100">
             Lease & tenant
           </Text>
           <Pressable
@@ -334,20 +335,20 @@ export default function UnitDetail() {
           </Pressable>
         </View>
         {leases.length === 0 ? (
-          <Text className="mb-2 text-slate-400">No lease on record.</Text>
+          <Text className="mb-2 text-slate-400 dark:text-slate-500">No lease on record.</Text>
         ) : (
           leases.map((l) => (
             <Card key={l.id} onPress={() => openEditLease(l)}>
               <View className="flex-row items-center justify-between">
-                <Text className="flex-1 pr-2 font-semibold text-slate-900">
+                <Text className="flex-1 pr-2 font-semibold text-slate-900 dark:text-slate-100">
                   {l.tenant_name}
                 </Text>
                 <Badge label={l.status} />
               </View>
               {l.tenant_phone ? (
-                <Text className="mt-1 text-slate-500">{l.tenant_phone}</Text>
+                <Text className="mt-1 text-slate-500 dark:text-slate-400">{l.tenant_phone}</Text>
               ) : null}
-              <Text className="mt-1 text-xs text-slate-400">
+              <Text className="mt-1 text-xs text-slate-400 dark:text-slate-500">
                 {l.start_date ? formatDate(l.start_date) : "—"} →{" "}
                 {l.end_date ? formatDate(l.end_date) : "ongoing"}
                 {l.rent_amount != null
@@ -359,16 +360,16 @@ export default function UnitDetail() {
         )}
 
         {/* Open work orders */}
-        <Text className="mb-2 mt-4 text-lg font-semibold text-slate-900">
+        <Text className="mb-2 mt-4 text-lg font-semibold text-slate-900 dark:text-slate-100">
           Open work orders ({workOrders.length})
         </Text>
         {workOrders.length === 0 ? (
-          <Text className="mb-2 text-slate-400">None open.</Text>
+          <Text className="mb-2 text-slate-400 dark:text-slate-500">None open.</Text>
         ) : (
           workOrders.map((w) => (
             <Card key={w.id} onPress={() => router.push(`/work-order/${w.id}`)}>
               <View className="flex-row items-center justify-between">
-                <Text className="flex-1 pr-2 text-slate-800">{w.title}</Text>
+                <Text className="flex-1 pr-2 text-slate-800 dark:text-slate-200">{w.title}</Text>
                 <Badge label={w.priority} />
               </View>
             </Card>
@@ -376,16 +377,16 @@ export default function UnitDetail() {
         )}
 
         {/* Assets */}
-        <Text className="mb-2 mt-4 text-lg font-semibold text-slate-900">
+        <Text className="mb-2 mt-4 text-lg font-semibold text-slate-900 dark:text-slate-100">
           Assets ({assets.length})
         </Text>
         {assets.length === 0 ? (
-          <Text className="mb-2 text-slate-400">No assets in this unit.</Text>
+          <Text className="mb-2 text-slate-400 dark:text-slate-500">No assets in this unit.</Text>
         ) : (
           assets.map((a) => (
             <Card key={a.id} onPress={() => router.push(`/asset/${a.id}`)}>
               <View className="flex-row items-center justify-between">
-                <Text className="flex-1 pr-2 text-slate-800">{a.name}</Text>
+                <Text className="flex-1 pr-2 text-slate-800 dark:text-slate-200">{a.name}</Text>
                 <Badge label={a.status} />
               </View>
             </Card>
@@ -402,38 +403,38 @@ export default function UnitDetail() {
       <Modal visible={editing} animationType="slide" transparent>
         <View className="flex-1 justify-end bg-black/40">
           <ScrollView
-            className="max-h-[88%] rounded-t-3xl bg-slate-50"
+            className="max-h-[88%] rounded-t-3xl bg-slate-50 dark:bg-slate-900 dark:bg-slate-900"
             contentContainerClassName="p-5"
           >
-            <Text className="mb-4 text-xl font-bold text-slate-900">Edit unit</Text>
+            <Text className="mb-4 text-xl font-bold text-slate-900 dark:text-slate-100">Edit unit</Text>
             <Field label="Label" value={eLabel} onChangeText={setELabel} />
-            <Text className="mb-1 text-sm font-medium text-slate-600">Type</Text>
+            <Text className="mb-1 text-sm font-medium text-slate-600 dark:text-slate-300">Type</Text>
             <View className="mb-3 flex-row flex-wrap">
               {UNIT_TYPES.map((t) => (
                 <Pressable
                   key={t}
                   onPress={() => setEType(t)}
                   className={`mb-2 mr-2 rounded-full border px-3 py-2 ${
-                    eType === t ? "border-brand bg-brand" : "border-slate-300 bg-white"
+                    eType === t ? "border-brand bg-brand" : "border-slate-300 dark:border-slate-700 bg-white dark:bg-surface-dark dark:bg-surface-dark"
                   }`}
                 >
-                  <Text className={eType === t ? "font-medium text-white" : "text-slate-700"}>
+                  <Text className={eType === t ? "font-medium text-white" : "text-slate-700 dark:text-slate-200"}>
                     {titleCase(t)}
                   </Text>
                 </Pressable>
               ))}
             </View>
-            <Text className="mb-1 text-sm font-medium text-slate-600">Status</Text>
+            <Text className="mb-1 text-sm font-medium text-slate-600 dark:text-slate-300">Status</Text>
             <View className="mb-3 flex-row flex-wrap">
               {UNIT_STATUSES.map((s) => (
                 <Pressable
                   key={s}
                   onPress={() => setEStatus(s)}
                   className={`mb-2 mr-2 rounded-full border px-3 py-2 ${
-                    eStatus === s ? "border-brand bg-brand" : "border-slate-300 bg-white"
+                    eStatus === s ? "border-brand bg-brand" : "border-slate-300 dark:border-slate-700 bg-white dark:bg-surface-dark dark:bg-surface-dark"
                   }`}
                 >
-                  <Text className={eStatus === s ? "font-medium text-white" : "text-slate-700"}>
+                  <Text className={eStatus === s ? "font-medium text-white" : "text-slate-700 dark:text-slate-200"}>
                     {titleCase(s)}
                   </Text>
                 </Pressable>
@@ -488,10 +489,10 @@ export default function UnitDetail() {
       <Modal visible={adding} animationType="slide" transparent>
         <View className="flex-1 justify-end bg-black/40">
           <ScrollView
-            className="max-h-[88%] rounded-t-3xl bg-slate-50"
+            className="max-h-[88%] rounded-t-3xl bg-slate-50 dark:bg-slate-900 dark:bg-slate-900"
             contentContainerClassName="p-5"
           >
-            <Text className="mb-4 text-xl font-bold text-slate-900">
+            <Text className="mb-4 text-xl font-bold text-slate-900 dark:text-slate-100">
               {editingLeaseId ? "Edit lease" : "New lease"}
             </Text>
             <Field
@@ -536,7 +537,7 @@ export default function UnitDetail() {
               }
               keyboardType="decimal-pad"
             />
-            <Text className="mb-1 text-sm font-medium text-slate-600">Status</Text>
+            <Text className="mb-1 text-sm font-medium text-slate-600 dark:text-slate-300">Status</Text>
             <View className="mb-3 flex-row flex-wrap">
               {LEASE_STATUSES.map((s) => (
                 <Pressable
@@ -545,12 +546,12 @@ export default function UnitDetail() {
                   className={`mb-2 mr-2 rounded-full border px-3 py-2 ${
                     leaseStatus === s
                       ? "border-brand bg-brand"
-                      : "border-slate-300 bg-white"
+                      : "border-slate-300 dark:border-slate-700 bg-white dark:bg-surface-dark dark:bg-surface-dark"
                   }`}
                 >
                   <Text
                     className={
-                      leaseStatus === s ? "font-medium text-white" : "text-slate-700"
+                      leaseStatus === s ? "font-medium text-white" : "text-slate-700 dark:text-slate-200"
                     }
                   >
                     {titleCase(s)}

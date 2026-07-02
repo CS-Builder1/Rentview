@@ -7,6 +7,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { AuthProvider } from "../lib/auth";
 import { OfflineProvider } from "../lib/offline";
+import { ToastProvider } from "../components/Toast";
 
 export default function RootLayout() {
   return (
@@ -14,12 +15,15 @@ export default function RootLayout() {
       <SafeAreaProvider>
         <AuthProvider>
           <OfflineProvider>
-            <StatusBar style="dark" />
-            <Stack screenOptions={{ headerShown: false }}>
-              <Stack.Screen name="index" />
-              <Stack.Screen name="(auth)" />
-              <Stack.Screen name="(app)" />
-            </Stack>
+            <ToastProvider>
+              <StatusBar style="auto" />
+              <Stack screenOptions={{ headerShown: false }}>
+                <Stack.Screen name="index" />
+                <Stack.Screen name="(auth)" />
+                <Stack.Screen name="(app)" />
+                <Stack.Screen name="(tenant)" />
+              </Stack>
+            </ToastProvider>
           </OfflineProvider>
         </AuthProvider>
       </SafeAreaProvider>

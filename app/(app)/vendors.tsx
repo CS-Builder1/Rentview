@@ -10,6 +10,7 @@ import {
   Field,
   Loading,
   Screen,
+  Icon,
 } from "../../components/ui";
 import { useAuth } from "../../lib/auth";
 import { cachedSelect } from "../../lib/cache";
@@ -122,9 +123,9 @@ export default function Vendors() {
           }
           className="p-2"
         >
-          <Ionicons name="chevron-back" size={24} color="#0f766e" />
+          <Icon name="chevron-back" size={24} />
         </Pressable>
-        <Text className="flex-1 text-xl font-bold text-slate-900">
+        <Text className="flex-1 text-xl font-bold text-slate-900 dark:text-slate-100">
           Vendors
         </Text>
         <Pressable
@@ -146,15 +147,15 @@ export default function Vendors() {
           vendors.map((v) => (
             <Card key={v.id} onPress={() => openEdit(v)}>
               <View className="flex-row items-center justify-between">
-                <Text className="flex-1 pr-2 text-base font-semibold text-slate-900">
+                <Text className="flex-1 pr-2 text-base font-semibold text-slate-900 dark:text-slate-100">
                   {v.name}
                 </Text>
                 {v.trade ? (
-                  <Text className="text-slate-500">{v.trade}</Text>
+                  <Text className="text-slate-500 dark:text-slate-400">{v.trade}</Text>
                 ) : null}
               </View>
               {v.phone || v.email ? (
-                <Text className="mt-1 text-slate-500">
+                <Text className="mt-1 text-slate-500 dark:text-slate-400">
                   {[v.phone, v.email].filter(Boolean).join("  ·  ")}
                 </Text>
               ) : null}
@@ -166,10 +167,10 @@ export default function Vendors() {
       <Modal visible={open} animationType="slide" transparent>
         <View className="flex-1 justify-end bg-black/40">
           <ScrollView
-            className="max-h-[88%] rounded-t-3xl bg-slate-50"
+            className="max-h-[88%] rounded-t-3xl bg-slate-50 dark:bg-slate-900 dark:bg-slate-900"
             contentContainerClassName="p-5"
           >
-            <Text className="mb-4 text-xl font-bold text-slate-900">
+            <Text className="mb-4 text-xl font-bold text-slate-900 dark:text-slate-100">
               {editingId ? "Edit vendor" : "New vendor"}
             </Text>
             <Field label="Name" value={name} onChangeText={setName} placeholder="e.g. Island Plumbing Co." />

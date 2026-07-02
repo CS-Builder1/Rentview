@@ -11,6 +11,7 @@ import {
   Field,
   Loading,
   Screen,
+  Icon,
 } from "../../components/ui";
 import { useAuth } from "../../lib/auth";
 import { cachedSelect } from "../../lib/cache";
@@ -191,9 +192,9 @@ export default function Expenses() {
           }
           className="p-2"
         >
-          <Ionicons name="chevron-back" size={24} color="#0f766e" />
+          <Icon name="chevron-back" size={24} />
         </Pressable>
-        <Text className="flex-1 text-xl font-bold text-slate-900">
+        <Text className="flex-1 text-xl font-bold text-slate-900 dark:text-slate-100">
           Expenses
         </Text>
         <Pressable
@@ -208,12 +209,12 @@ export default function Expenses() {
       <ScrollView contentContainerClassName="px-5 pb-10">
         {analytics.size > 0 ? (
           <View className="mb-4">
-            <Text className="mb-2 text-sm font-semibold uppercase text-slate-400">
+            <Text className="mb-2 text-sm font-semibold uppercase text-slate-400 dark:text-slate-500">
               Spend this year
             </Text>
             {[...analytics.entries()].map(([cur, data]) => (
               <Card key={cur}>
-                <Text className="text-2xl font-bold text-brand">
+                <Text className="text-2xl font-bold text-brand dark:text-brand-400">
                   {formatCurrency(data.total, cur)}
                 </Text>
                 <View className="mt-3">
@@ -224,8 +225,8 @@ export default function Expenses() {
                         key={cat}
                         className="flex-row items-center justify-between py-1"
                       >
-                        <Text className="text-slate-600">{titleCase(cat)}</Text>
-                        <Text className="font-medium text-slate-800">
+                        <Text className="text-slate-600 dark:text-slate-300">{titleCase(cat)}</Text>
+                        <Text className="font-medium text-slate-800 dark:text-slate-200">
                           {formatCurrency(amt, cur)}
                         </Text>
                       </View>
@@ -236,7 +237,7 @@ export default function Expenses() {
           </View>
         ) : null}
 
-        <Text className="mb-2 text-sm font-semibold uppercase text-slate-400">
+        <Text className="mb-2 text-sm font-semibold uppercase text-slate-400 dark:text-slate-500">
           Recent
         </Text>
         {expenses.length === 0 ? (
@@ -248,21 +249,21 @@ export default function Expenses() {
           expenses.map((e) => (
             <Card key={e.id} onPress={() => openEdit(e)}>
               <View className="flex-row items-center justify-between">
-                <Text className="flex-1 pr-2 text-base font-semibold text-slate-900">
+                <Text className="flex-1 pr-2 text-base font-semibold text-slate-900 dark:text-slate-100">
                   {e.description || titleCase(e.category)}
                 </Text>
-                <Text className="font-bold text-slate-800">
+                <Text className="font-bold text-slate-800 dark:text-slate-200">
                   {formatCurrency(Number(e.amount), e.currency)}
                 </Text>
               </View>
               <View className="mt-1 flex-row items-center justify-between">
                 <View className="flex-row items-center">
                   <Badge label={e.category} />
-                  <Text className="ml-2 text-slate-500">
+                  <Text className="ml-2 text-slate-500 dark:text-slate-400">
                     {e.properties?.name ?? "—"}
                   </Text>
                 </View>
-                <Text className="text-xs text-slate-400">
+                <Text className="text-xs text-slate-400 dark:text-slate-500">
                   {formatDate(e.incurred_on)}
                 </Text>
               </View>
@@ -274,10 +275,10 @@ export default function Expenses() {
       <Modal visible={adding} animationType="slide" transparent>
         <View className="flex-1 justify-end bg-black/40">
           <ScrollView
-            className="max-h-[88%] rounded-t-3xl bg-slate-50"
+            className="max-h-[88%] rounded-t-3xl bg-slate-50 dark:bg-slate-900 dark:bg-slate-900"
             contentContainerClassName="p-5"
           >
-            <Text className="mb-4 text-xl font-bold text-slate-900">
+            <Text className="mb-4 text-xl font-bold text-slate-900 dark:text-slate-100">
               {editingId ? "Edit expense" : "New expense"}
             </Text>
 
@@ -303,7 +304,7 @@ export default function Expenses() {
               </View>
             </View>
 
-            <Text className="mb-1 text-sm font-medium text-slate-600">
+            <Text className="mb-1 text-sm font-medium text-slate-600 dark:text-slate-300">
               Category
             </Text>
             <View className="mb-3 flex-row flex-wrap">
@@ -314,12 +315,12 @@ export default function Expenses() {
                   className={`mb-2 mr-2 rounded-full border px-3 py-2 ${
                     category === c
                       ? "border-brand bg-brand"
-                      : "border-slate-300 bg-white"
+                      : "border-slate-300 dark:border-slate-700 bg-white dark:bg-surface-dark dark:bg-surface-dark"
                   }`}
                 >
                   <Text
                     className={
-                      category === c ? "font-medium text-white" : "text-slate-700"
+                      category === c ? "font-medium text-white" : "text-slate-700 dark:text-slate-200"
                     }
                   >
                     {titleCase(c)}
@@ -328,7 +329,7 @@ export default function Expenses() {
               ))}
             </View>
 
-            <Text className="mb-1 text-sm font-medium text-slate-600">
+            <Text className="mb-1 text-sm font-medium text-slate-600 dark:text-slate-300">
               Property (optional)
             </Text>
             <View className="mb-3 flex-row flex-wrap">
@@ -342,14 +343,14 @@ export default function Expenses() {
                   className={`mb-2 mr-2 rounded-full border px-3 py-2 ${
                     propertyId === p.id
                       ? "border-brand bg-brand"
-                      : "border-slate-300 bg-white"
+                      : "border-slate-300 dark:border-slate-700 bg-white dark:bg-surface-dark dark:bg-surface-dark"
                   }`}
                 >
                   <Text
                     className={
                       propertyId === p.id
                         ? "font-medium text-white"
-                        : "text-slate-700"
+                        : "text-slate-700 dark:text-slate-200"
                     }
                   >
                     {p.name}

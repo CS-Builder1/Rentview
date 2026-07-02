@@ -2,8 +2,10 @@ import { useState } from "react";
 import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from "react-native";
 
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 
-import { Button, Field, Screen } from "../../components/ui";
+import { Button, Field, Screen, Icon } from "../../components/ui";
+import { brandGradient } from "../../lib/theme";
 import { authRedirectUrl, signInWithGoogle } from "../../lib/oauth";
 import { supabase } from "../../lib/supabase";
 
@@ -81,30 +83,47 @@ export default function Login() {
           contentContainerClassName="flex-grow justify-center px-6"
           keyboardShouldPersistTaps="handled"
         >
-          <View className="mb-8">
-            <Text className="text-3xl font-bold text-brand">RentView</Text>
-            <Text className="mt-1 text-slate-500">
-              Operations-first property management.
+          <View className="mb-8 items-center">
+            <LinearGradient
+              colors={[...brandGradient]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={{
+                borderRadius: 20,
+                width: 64,
+                height: 64,
+                marginBottom: 16,
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Ionicons name="home" size={30} color="#fff" />
+            </LinearGradient>
+            <Text className="text-3xl font-bold text-slate-900 dark:text-slate-100">
+              RentView
+            </Text>
+            <Text className="mt-1 text-center text-slate-500 dark:text-slate-400">
+              Property management for owners and tenants.
             </Text>
           </View>
 
           <Pressable
             onPress={googleSignIn}
             disabled={googleLoading}
-            className={`mb-5 flex-row items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-3 ${
+            className={`mb-5 flex-row items-center justify-center rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-surface-dark px-4 py-3 ${
               googleLoading ? "opacity-50" : ""
             }`}
           >
-            <Ionicons name="logo-google" size={18} color="#0f766e" />
-            <Text className="ml-2 font-semibold text-slate-800">
+            <Icon name="logo-google" size={18} />
+            <Text className="ml-2 font-semibold text-slate-800 dark:text-slate-200">
               {googleLoading ? "Connecting…" : "Continue with Google"}
             </Text>
           </Pressable>
 
           <View className="mb-5 flex-row items-center">
-            <View className="h-px flex-1 bg-slate-200" />
-            <Text className="mx-3 text-xs uppercase text-slate-400">or</Text>
-            <View className="h-px flex-1 bg-slate-200" />
+            <View className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
+            <Text className="mx-3 text-xs uppercase text-slate-400 dark:text-slate-500">or</Text>
+            <View className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
           </View>
 
           {mode === "signup" ? (
@@ -146,7 +165,7 @@ export default function Login() {
             onPress={() => setMode(mode === "signin" ? "signup" : "signin")}
             className="mt-5 items-center"
           >
-            <Text className="text-slate-600">
+            <Text className="text-slate-600 dark:text-slate-300">
               {mode === "signin"
                 ? "No account yet? Create one"
                 : "Already have an account? Sign in"}

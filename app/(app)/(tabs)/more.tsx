@@ -4,7 +4,7 @@ import * as WebBrowser from "expo-web-browser";
 import { useCallback, useState } from "react";
 import { Alert, Platform, Pressable, ScrollView, Text, View } from "react-native";
 
-import { Button, Card, Screen } from "../../../components/ui";
+import { Button, Card, Screen, Icon } from "../../../components/ui";
 import { useAuth } from "../../../lib/auth";
 import { supabase } from "../../../lib/supabase";
 
@@ -115,31 +115,31 @@ export default function More() {
   return (
     <Screen>
       <ScrollView contentContainerClassName="px-5 pb-10">
-        <Text className="mb-1 mt-2 text-2xl font-bold text-slate-900">More</Text>
-        <Text className="mb-5 text-slate-500">{session?.user.email}</Text>
+        <Text className="mb-1 mt-2 text-2xl font-bold text-slate-900 dark:text-slate-100">More</Text>
+        <Text className="mb-5 text-slate-500 dark:text-slate-400">{session?.user.email}</Text>
 
-        <Text className="mb-2 text-sm font-semibold uppercase text-slate-400">
+        <Text className="mb-2 text-sm font-semibold uppercase text-slate-400 dark:text-slate-500">
           Manage
         </Text>
         {MANAGE_LINKS.map((link) => (
           <Pressable key={link.href} onPress={() => router.push(link.href)}>
             <Card>
               <View className="flex-row items-center">
-                <Ionicons name={link.icon} size={20} color="#0f766e" />
-                <Text className="ml-3 flex-1 text-base text-slate-700">
+                <Icon name={link.icon} size={20} />
+                <Text className="ml-3 flex-1 text-base text-slate-700 dark:text-slate-200">
                   {link.label}
                 </Text>
-                <Ionicons name="chevron-forward" size={18} color="#cbd5e1" />
+                <Icon name="chevron-forward" size={18} tone="faint" />
               </View>
             </Card>
           </Pressable>
         ))}
 
-        <Text className="mb-2 mt-4 text-sm font-semibold uppercase text-slate-400">
+        <Text className="mb-2 mt-4 text-sm font-semibold uppercase text-slate-400 dark:text-slate-500">
           Reminders
         </Text>
         <Card>
-          <Text className="text-slate-600">
+          <Text className="text-slate-600 dark:text-slate-300">
             Get warranties expiring soon and maintenance due, by email.
           </Text>
           <View className="mt-3">
@@ -151,14 +151,14 @@ export default function More() {
           </View>
         </Card>
 
-        <Text className="mb-2 mt-4 text-sm font-semibold uppercase text-slate-400">
+        <Text className="mb-2 mt-4 text-sm font-semibold uppercase text-slate-400 dark:text-slate-500">
           Plan & billing
         </Text>
         <Card>
-          <Text className="text-base font-semibold text-slate-900">
+          <Text className="text-base font-semibold text-slate-900 dark:text-slate-100">
             RentView Pro
           </Text>
-          <Text className="mt-1 text-slate-500">
+          <Text className="mt-1 text-slate-500 dark:text-slate-400">
             Unlimited properties & units, inventory, asset lifecycle,
             preventive maintenance and analytics.
           </Text>
@@ -173,20 +173,20 @@ export default function More() {
               onPress={() => openCheckout(PAYPAL_URL)}
             />
           </View>
-          <Text className="mt-3 text-xs text-slate-400">
+          <Text className="mt-3 text-xs text-slate-400 dark:text-slate-500">
             Manage your subscription on the web. Prices shown at checkout.
           </Text>
         </Card>
 
-        <Text className="mb-2 mt-4 text-sm font-semibold uppercase text-slate-400">
+        <Text className="mb-2 mt-4 text-sm font-semibold uppercase text-slate-400 dark:text-slate-500">
           Account
         </Text>
 
         <Pressable onPress={signOut}>
           <Card>
             <View className="flex-row items-center">
-              <Ionicons name="log-out-outline" size={20} color="#475569" />
-              <Text className="ml-3 text-base text-slate-700">Sign out</Text>
+              <Icon name="log-out-outline" size={20} tone="muted" />
+              <Text className="ml-3 text-base text-slate-700 dark:text-slate-200">Sign out</Text>
             </View>
           </Card>
         </Pressable>
@@ -194,15 +194,15 @@ export default function More() {
         <Pressable onPress={deleteAccount} disabled={deleting}>
           <Card>
             <View className="flex-row items-center">
-              <Ionicons name="trash-outline" size={20} color="#dc2626" />
-              <Text className="ml-3 text-base text-red-600">
+              <Icon name="trash-outline" size={20} tone="danger" />
+              <Text className="ml-3 text-base text-red-600 dark:text-red-400">
                 {deleting ? "Deleting…" : "Delete account"}
               </Text>
             </View>
           </Card>
         </Pressable>
 
-        <Text className="mt-4 text-xs text-slate-400">
+        <Text className="mt-4 text-xs text-slate-400 dark:text-slate-500">
           RentView keeps your records for you — it is not legal, tax or
           accounting advice. Consult your accountant for tax matters.
         </Text>

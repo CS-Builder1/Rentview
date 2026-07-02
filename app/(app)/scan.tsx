@@ -4,7 +4,7 @@ import { Stack, useRouter } from "expo-router";
 import { useRef, useState } from "react";
 import { Alert, Platform, Pressable, ScrollView, Text, View } from "react-native";
 
-import { Button, Field, Loading, Screen } from "../../components/ui";
+import { Button, Field, Loading, Screen, Icon } from "../../components/ui";
 import { supabase } from "../../lib/supabase";
 
 function notify(title: string, message: string) {
@@ -87,9 +87,9 @@ export default function Scan() {
           }
           className="p-2"
         >
-          <Ionicons name="chevron-back" size={24} color="#0f766e" />
+          <Icon name="chevron-back" size={24} />
         </Pressable>
-        <Text className="flex-1 text-xl font-bold text-slate-900">
+        <Text className="flex-1 text-xl font-bold text-slate-900 dark:text-slate-100">
           Scan asset tag
         </Text>
       </View>
@@ -106,14 +106,14 @@ export default function Scan() {
             />
           </View>
         ) : (
-          <View className="mb-4 rounded-2xl border border-slate-200 bg-white p-5">
-            <Text className="text-slate-700">
+          <View className="mb-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-surface-dark p-5">
+            <Text className="text-slate-700 dark:text-slate-200">
               Camera access is needed to scan tags.
             </Text>
             <View className="mt-3">
               <Button title="Enable camera" onPress={requestPermission} />
             </View>
-            <Text className="mt-3 text-xs text-slate-400">
+            <Text className="mt-3 text-xs text-slate-400 dark:text-slate-500">
               On some browsers in-app scanning isn't supported — you can scan
               the tag with your phone's camera app instead, or paste the code
               below.
@@ -122,10 +122,10 @@ export default function Scan() {
         )}
 
         {resolving ? (
-          <Text className="mb-3 text-center text-slate-500">Looking up…</Text>
+          <Text className="mb-3 text-center text-slate-500 dark:text-slate-400">Looking up…</Text>
         ) : null}
 
-        <Text className="mb-1 text-sm font-medium text-slate-600">
+        <Text className="mb-1 text-sm font-medium text-slate-600 dark:text-slate-300">
           Or enter a code / paste a tag link
         </Text>
         <Field

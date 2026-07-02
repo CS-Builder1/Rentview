@@ -11,6 +11,7 @@ import {
   Field,
   Loading,
   Screen,
+  Icon,
 } from "../../components/ui";
 import { useAuth } from "../../lib/auth";
 import { cachedSelect } from "../../lib/cache";
@@ -141,11 +142,11 @@ export default function Assets() {
           }
           className="p-2"
         >
-          <Ionicons name="chevron-back" size={24} color="#0f766e" />
+          <Icon name="chevron-back" size={24} />
         </Pressable>
-        <Text className="flex-1 text-xl font-bold text-slate-900">Assets</Text>
+        <Text className="flex-1 text-xl font-bold text-slate-900 dark:text-slate-100">Assets</Text>
         <Pressable onPress={() => router.push("/scan")} className="p-2">
-          <Ionicons name="qr-code-outline" size={22} color="#0f766e" />
+          <Icon name="qr-code-outline" size={22} />
         </Pressable>
         <Pressable
           onPress={() => setAdding(true)}
@@ -166,23 +167,23 @@ export default function Assets() {
           assets.map((a) => (
             <Card key={a.id} onPress={() => router.push(`/asset/${a.id}`)}>
               <View className="flex-row items-center justify-between">
-                <Text className="flex-1 pr-2 text-base font-semibold text-slate-900">
+                <Text className="flex-1 pr-2 text-base font-semibold text-slate-900 dark:text-slate-100">
                   {a.name}
                 </Text>
                 <Badge label={a.status} />
               </View>
-              <Text className="mt-1 text-slate-500">
+              <Text className="mt-1 text-slate-500 dark:text-slate-400">
                 {a.category ? `${a.category} · ` : ""}
                 {a.properties?.name ?? "—"}
                 {a.units?.label ? ` · ${a.units.label}` : ""}
               </Text>
               {a.warranty_expiry ? (
-                <Text className="mt-1 text-xs text-slate-400">
+                <Text className="mt-1 text-xs text-slate-400 dark:text-slate-500">
                   Warranty until {formatDate(a.warranty_expiry)}
                 </Text>
               ) : null}
               {a.purchase_cost ? (
-                <Text className="mt-0.5 text-xs text-slate-400">
+                <Text className="mt-0.5 text-xs text-slate-400 dark:text-slate-500">
                   {formatCurrency(
                     a.purchase_cost,
                     a.purchase_currency ?? a.properties?.currency ?? "USD",
@@ -197,10 +198,10 @@ export default function Assets() {
       <Modal visible={adding} animationType="slide" transparent>
         <View className="flex-1 justify-end bg-black/40">
           <ScrollView
-            className="max-h-[88%] rounded-t-3xl bg-slate-50"
+            className="max-h-[88%] rounded-t-3xl bg-slate-50 dark:bg-slate-900 dark:bg-slate-900"
             contentContainerClassName="p-5"
           >
-            <Text className="mb-4 text-xl font-bold text-slate-900">New asset</Text>
+            <Text className="mb-4 text-xl font-bold text-slate-900 dark:text-slate-100">New asset</Text>
 
             <Field
               label="Name"
@@ -215,9 +216,9 @@ export default function Assets() {
               placeholder="HVAC, Appliance, Plumbing…"
             />
 
-            <Text className="mb-1 text-sm font-medium text-slate-600">Property</Text>
+            <Text className="mb-1 text-sm font-medium text-slate-600 dark:text-slate-300">Property</Text>
             {properties.length === 0 ? (
-              <Text className="mb-3 text-slate-400">Add a property first.</Text>
+              <Text className="mb-3 text-slate-400 dark:text-slate-500">Add a property first.</Text>
             ) : (
               <View className="mb-3 flex-row flex-wrap">
                 {properties.map((p) => (
@@ -227,14 +228,14 @@ export default function Assets() {
                     className={`mb-2 mr-2 rounded-full border px-3 py-2 ${
                       propertyId === p.id
                         ? "border-brand bg-brand"
-                        : "border-slate-300 bg-white"
+                        : "border-slate-300 dark:border-slate-700 bg-white dark:bg-surface-dark dark:bg-surface-dark"
                     }`}
                   >
                     <Text
                       className={
                         propertyId === p.id
                           ? "font-medium text-white"
-                          : "text-slate-700"
+                          : "text-slate-700 dark:text-slate-200"
                       }
                     >
                       {p.name}
@@ -246,7 +247,7 @@ export default function Assets() {
 
             {units.length > 0 ? (
               <>
-                <Text className="mb-1 text-sm font-medium text-slate-600">
+                <Text className="mb-1 text-sm font-medium text-slate-600 dark:text-slate-300">
                   Unit (optional — leave blank for shared/common)
                 </Text>
                 <View className="mb-3 flex-row flex-wrap">
@@ -257,14 +258,14 @@ export default function Assets() {
                       className={`mb-2 mr-2 rounded-full border px-3 py-2 ${
                         unitId === u.id
                           ? "border-brand bg-brand"
-                          : "border-slate-300 bg-white"
+                          : "border-slate-300 dark:border-slate-700 bg-white dark:bg-surface-dark dark:bg-surface-dark"
                       }`}
                     >
                       <Text
                         className={
                           unitId === u.id
                             ? "font-medium text-white"
-                            : "text-slate-700"
+                            : "text-slate-700 dark:text-slate-200"
                         }
                       >
                         {u.label}
@@ -290,18 +291,18 @@ export default function Assets() {
               keyboardType="number-pad"
             />
 
-            <Text className="mb-1 text-sm font-medium text-slate-600">Status</Text>
+            <Text className="mb-1 text-sm font-medium text-slate-600 dark:text-slate-300">Status</Text>
             <View className="mb-3 flex-row flex-wrap">
               {STATUSES.map((s) => (
                 <Pressable
                   key={s}
                   onPress={() => setStatus(s)}
                   className={`mb-2 mr-2 rounded-full border px-3 py-2 ${
-                    status === s ? "border-brand bg-brand" : "border-slate-300 bg-white"
+                    status === s ? "border-brand bg-brand" : "border-slate-300 dark:border-slate-700 bg-white dark:bg-surface-dark dark:bg-surface-dark"
                   }`}
                 >
                   <Text
-                    className={status === s ? "font-medium text-white" : "text-slate-700"}
+                    className={status === s ? "font-medium text-white" : "text-slate-700 dark:text-slate-200"}
                   >
                     {titleCase(s)}
                   </Text>

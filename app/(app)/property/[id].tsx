@@ -12,6 +12,7 @@ import {
   Field,
   Loading,
   Screen,
+  Icon,
 } from "../../../components/ui";
 import { useAuth } from "../../../lib/auth";
 import { cachedSelect } from "../../../lib/cache";
@@ -191,16 +192,16 @@ export default function PropertyDetail() {
           }
           className="p-2"
         >
-          <Ionicons name="chevron-back" size={24} color="#0f766e" />
+          <Icon name="chevron-back" size={24} />
         </Pressable>
-        <Text className="flex-1 text-xl font-bold text-slate-900" numberOfLines={1}>
+        <Text className="flex-1 text-xl font-bold text-slate-900 dark:text-slate-100" numberOfLines={1}>
           {property.name}
         </Text>
         <Pressable onPress={openEdit} className="p-2">
-          <Ionicons name="create-outline" size={22} color="#0f766e" />
+          <Icon name="create-outline" size={22} />
         </Pressable>
         <Pressable onPress={deleteProperty} className="p-2">
-          <Ionicons name="trash-outline" size={22} color="#dc2626" />
+          <Icon name="trash-outline" size={22} tone="danger" />
         </Pressable>
       </View>
 
@@ -208,13 +209,13 @@ export default function PropertyDetail() {
         <Card>
           <View className="flex-row items-center justify-between">
             <Badge label={property.property_type} />
-            <Text className="text-slate-500">{property.currency}</Text>
+            <Text className="text-slate-500 dark:text-slate-400">{property.currency}</Text>
           </View>
           {property.city ? (
-            <Text className="mt-2 text-slate-600">{property.city}</Text>
+            <Text className="mt-2 text-slate-600 dark:text-slate-300">{property.city}</Text>
           ) : null}
           {property.estimated_value ? (
-            <Text className="mt-1 text-slate-500">
+            <Text className="mt-1 text-slate-500 dark:text-slate-400">
               Est. value{" "}
               {formatCurrency(property.estimated_value, property.currency)}
             </Text>
@@ -222,7 +223,7 @@ export default function PropertyDetail() {
         </Card>
 
         <View className="mb-2 mt-4 flex-row items-center justify-between">
-          <Text className="text-lg font-semibold text-slate-900">
+          <Text className="text-lg font-semibold text-slate-900 dark:text-slate-100">
             Units ({units.length})
           </Text>
           <Pressable
@@ -243,15 +244,15 @@ export default function PropertyDetail() {
           units.map((u) => (
             <Card key={u.id} onPress={() => router.push(`/unit/${u.id}`)}>
               <View className="flex-row items-center justify-between">
-                <Text className="flex-1 text-base font-semibold text-slate-900">
+                <Text className="flex-1 text-base font-semibold text-slate-900 dark:text-slate-100">
                   {u.label}
                 </Text>
                 <Badge label={u.status} />
               </View>
               <View className="mt-1 flex-row items-center">
-                <Text className="text-slate-500">{titleCase(u.unit_type)}</Text>
+                <Text className="text-slate-500 dark:text-slate-400">{titleCase(u.unit_type)}</Text>
                 {u.rent_amount ? (
-                  <Text className="text-slate-500">
+                  <Text className="text-slate-500 dark:text-slate-400">
                     {"  ·  "}
                     {formatCurrency(u.rent_amount, u.rent_currency ?? property.currency)}
                   </Text>
@@ -262,11 +263,11 @@ export default function PropertyDetail() {
         )}
 
         {/* Open work orders for this property */}
-        <Text className="mb-2 mt-4 text-lg font-semibold text-slate-900">
+        <Text className="mb-2 mt-4 text-lg font-semibold text-slate-900 dark:text-slate-100">
           Open work orders ({openWorkOrders.length})
         </Text>
         {openWorkOrders.length === 0 ? (
-          <Text className="mb-2 text-slate-400">None open.</Text>
+          <Text className="mb-2 text-slate-400 dark:text-slate-500">None open.</Text>
         ) : (
           openWorkOrders.map((w) => (
             <Card
@@ -274,7 +275,7 @@ export default function PropertyDetail() {
               onPress={() => router.push(`/work-order/${w.id}`)}
             >
               <View className="flex-row items-center justify-between">
-                <Text className="flex-1 pr-2 text-slate-800">{w.title}</Text>
+                <Text className="flex-1 pr-2 text-slate-800 dark:text-slate-200">{w.title}</Text>
                 <Badge label={w.priority} />
               </View>
             </Card>
@@ -282,20 +283,20 @@ export default function PropertyDetail() {
         )}
 
         {/* Assets for this property */}
-        <Text className="mb-2 mt-4 text-lg font-semibold text-slate-900">
+        <Text className="mb-2 mt-4 text-lg font-semibold text-slate-900 dark:text-slate-100">
           Assets ({assets.length})
         </Text>
         {assets.length === 0 ? (
-          <Text className="mb-2 text-slate-400">No assets tracked.</Text>
+          <Text className="mb-2 text-slate-400 dark:text-slate-500">No assets tracked.</Text>
         ) : (
           assets.map((a) => (
             <Card key={a.id} onPress={() => router.push(`/asset/${a.id}`)}>
               <View className="flex-row items-center justify-between">
-                <Text className="flex-1 pr-2 text-slate-800">{a.name}</Text>
+                <Text className="flex-1 pr-2 text-slate-800 dark:text-slate-200">{a.name}</Text>
                 <Badge label={a.status} />
               </View>
               {a.category ? (
-                <Text className="mt-1 text-slate-500">{a.category}</Text>
+                <Text className="mt-1 text-slate-500 dark:text-slate-400">{a.category}</Text>
               ) : null}
             </Card>
           ))
@@ -307,8 +308,8 @@ export default function PropertyDetail() {
         {/* Spend */}
         <Card>
           <View className="flex-row items-center justify-between">
-            <Text className="text-slate-600">Total spend tracked</Text>
-            <Text className="text-lg font-bold text-slate-900">
+            <Text className="text-slate-600 dark:text-slate-300">Total spend tracked</Text>
+            <Text className="text-lg font-bold text-slate-900 dark:text-slate-100">
               {formatCurrency(spend, property.currency)}
             </Text>
           </View>
@@ -318,24 +319,24 @@ export default function PropertyDetail() {
       <Modal visible={editing} animationType="slide" transparent>
         <View className="flex-1 justify-end bg-black/40">
           <ScrollView
-            className="max-h-[88%] rounded-t-3xl bg-slate-50"
+            className="max-h-[88%] rounded-t-3xl bg-slate-50 dark:bg-slate-900 dark:bg-slate-900"
             contentContainerClassName="p-5"
           >
-            <Text className="mb-4 text-xl font-bold text-slate-900">
+            <Text className="mb-4 text-xl font-bold text-slate-900 dark:text-slate-100">
               Edit property
             </Text>
             <Field label="Name" value={eName} onChangeText={setEName} />
-            <Text className="mb-1 text-sm font-medium text-slate-600">Type</Text>
+            <Text className="mb-1 text-sm font-medium text-slate-600 dark:text-slate-300">Type</Text>
             <View className="mb-3 flex-row flex-wrap">
               {PROPERTY_TYPES.map((t) => (
                 <Pressable
                   key={t}
                   onPress={() => setEType(t)}
                   className={`mb-2 mr-2 rounded-full border px-3 py-2 ${
-                    eType === t ? "border-brand bg-brand" : "border-slate-300 bg-white"
+                    eType === t ? "border-brand bg-brand" : "border-slate-300 dark:border-slate-700 bg-white dark:bg-surface-dark dark:bg-surface-dark"
                   }`}
                 >
-                  <Text className={eType === t ? "font-medium text-white" : "text-slate-700"}>
+                  <Text className={eType === t ? "font-medium text-white" : "text-slate-700 dark:text-slate-200"}>
                     {titleCase(t)}
                   </Text>
                 </Pressable>
@@ -382,10 +383,10 @@ export default function PropertyDetail() {
       <Modal visible={adding} animationType="slide" transparent>
         <View className="flex-1 justify-end bg-black/40">
           <ScrollView
-            className="max-h-[85%] rounded-t-3xl bg-slate-50"
+            className="max-h-[85%] rounded-t-3xl bg-slate-50 dark:bg-slate-900 dark:bg-slate-900"
             contentContainerClassName="p-5"
           >
-            <Text className="mb-4 text-xl font-bold text-slate-900">New unit</Text>
+            <Text className="mb-4 text-xl font-bold text-slate-900 dark:text-slate-100">New unit</Text>
 
             <Field
               label="Label"
@@ -394,7 +395,7 @@ export default function PropertyDetail() {
               placeholder="e.g. Apt 2B, Storefront, Main House"
             />
 
-            <Text className="mb-1 text-sm font-medium text-slate-600">Type</Text>
+            <Text className="mb-1 text-sm font-medium text-slate-600 dark:text-slate-300">Type</Text>
             <View className="mb-3 flex-row flex-wrap">
               {UNIT_TYPES.map((t) => (
                 <Pressable
@@ -403,12 +404,12 @@ export default function PropertyDetail() {
                   className={`mb-2 mr-2 rounded-full border px-3 py-2 ${
                     unitType === t
                       ? "border-brand bg-brand"
-                      : "border-slate-300 bg-white"
+                      : "border-slate-300 dark:border-slate-700 bg-white dark:bg-surface-dark dark:bg-surface-dark"
                   }`}
                 >
                   <Text
                     className={
-                      unitType === t ? "font-medium text-white" : "text-slate-700"
+                      unitType === t ? "font-medium text-white" : "text-slate-700 dark:text-slate-200"
                     }
                   >
                     {titleCase(t)}
@@ -417,7 +418,7 @@ export default function PropertyDetail() {
               ))}
             </View>
 
-            <Text className="mb-1 text-sm font-medium text-slate-600">Status</Text>
+            <Text className="mb-1 text-sm font-medium text-slate-600 dark:text-slate-300">Status</Text>
             <View className="mb-3 flex-row flex-wrap">
               {UNIT_STATUSES.map((s) => (
                 <Pressable
@@ -426,12 +427,12 @@ export default function PropertyDetail() {
                   className={`mb-2 mr-2 rounded-full border px-3 py-2 ${
                     status === s
                       ? "border-brand bg-brand"
-                      : "border-slate-300 bg-white"
+                      : "border-slate-300 dark:border-slate-700 bg-white dark:bg-surface-dark dark:bg-surface-dark"
                   }`}
                 >
                   <Text
                     className={
-                      status === s ? "font-medium text-white" : "text-slate-700"
+                      status === s ? "font-medium text-white" : "text-slate-700 dark:text-slate-200"
                     }
                   >
                     {titleCase(s)}
