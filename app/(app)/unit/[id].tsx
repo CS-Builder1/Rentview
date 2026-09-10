@@ -354,6 +354,19 @@ export default function UnitDetail() {
                   ? ` · ${formatCurrency(l.rent_amount, l.rent_currency ?? currency)}`
                   : ""}
               </Text>
+              <Pressable
+                onPress={() => router.push(`/lease/${l.id}`)}
+                className="mt-3 flex-row items-center self-start rounded-full border border-brand px-3 py-1.5"
+              >
+                <Ionicons
+                  name={l.tenant_user_id ? "person-circle-outline" : "key-outline"}
+                  size={16}
+                  color="#0f766e"
+                />
+                <Text className="ml-1 text-sm font-medium text-brand">
+                  {l.tenant_user_id ? "Portal & rent" : "Invite to portal"}
+                </Text>
+              </Pressable>
             </Card>
           ))
         )}

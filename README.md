@@ -47,13 +47,26 @@ Pricing: a generous **Free** tier + a single **Pro** tier (~$19/mo), billed on t
 ```
 app/                     Expo Router routes
   (auth)/login.tsx       Sign in / sign up
-  (app)/                 Authenticated tabs
-    index.tsx            Portfolio overview
-    properties.tsx       Properties list + add
+  claim.tsx              Tenant invite-code claim (either role)
+  (app)/                 Owner app
+    (tabs)/index.tsx     Portfolio overview
+    (tabs)/properties.tsx  Properties list + add
     property/[id].tsx    Property detail + units (varying complexes)
-    work-orders.tsx      Work orders list + add
-    more.tsx             Plan/billing, sign out, in-app account deletion
+    unit/[id].tsx        Unit detail + leases
+    lease/[id].tsx       Tenant invites + rent payment history
+    (tabs)/work-orders.tsx Work orders list + add
+    requests.tsx         Tenant request inbox
+    request/[id].tsx     Triage: status, thread, convert to work order
+    announcements.tsx    Broadcasts to tenants
+    (tabs)/more.tsx      Plan/billing, sign out, in-app account deletion
+  tenant/                Tenant portal (role-gated)
+    (tabs)/index.tsx     My lease + notices
+    (tabs)/requests.tsx  My requests
+    (tabs)/rent.tsx      Rent history
+    new-request.tsx      Report a repair
+    request/[id].tsx     Progress, photos, thread, rating
 components/ui.tsx        Shared UI primitives
+components/RequestConversation.tsx  Photos + message thread (both roles)
 lib/
   supabase.ts            Supabase client
   auth.tsx               Auth context/provider
@@ -85,6 +98,26 @@ supabase functions deploy delete-account
 supabase functions deploy send-reminders   # schedule with supabase/reminders_cron.sql
 ```
 
+## Tenant portal
+
+One codebase, two roles. `profiles.role` decides which app renders — existing accounts
+stay `owner`, and only claiming an invite flips an account to `tenant`.
+
+1. **Invite** — the owner opens a lease (Unit → lease card → *Invite to portal*) and
+   generates a single-use code that expires in 14 days.
+2. **Claim** — the tenant creates a normal account and enters the code under *Join with
+   an invite code*. `claim_tenant_invite` validates it, links the lease, and flips the
+   role. An account that owns properties is never demoted.
+3. **Report** — the tenant submits a request against their own **active** lease. Every
+   scoping column is re-validated in the database, so nothing can be forged.
+4. **Triage** — the request lands in the owner's inbox. Converting it opens a work order
+   and links the two; a trigger mirrors the work order's status back to the request, so
+   the tenant sees progress without ever seeing costs, vendors, parts or notes.
+5. **Close the loop** — the tenant rates the fix once it is resolved.
+
+Rent payments are records the owner logs, visible to that lease's tenant. RentView does
+not process payments.
+
 ### Security notes
 
 `0004_tenant_portal.sql` intentionally uses `SECURITY DEFINER` for the tenant read
@@ -102,11 +135,12 @@ properties/units/leases, assets with QR entry, work orders with photos and parts
 vendors, inventory, expenses, preventive maintenance, document upload, offline-first
 capture with a sync queue, accountant CSV export, and scheduled email reminders.
 
-**Tenant portal — schema only.** `0004_tenant_portal.sql` ships the full backend
-(tenant role, invite codes + claim RPC, `tenant_lease_details`, maintenance requests
-with photos and messaging, rent payment history, announcements, and the work-order →
-request status mirror). The tenant-facing screens and the owner-side invite/triage UI
-are not built yet.
+**Tenant portal — built.** Owners generate a single-use invite code on a lease; the
+tenant claims it at sign-in and the app routes them to the portal instead of the owner
+app. Tenants see their lease, report repairs with photos, message the owner on the
+request, follow status, see the rent the owner has recorded, and rate the fix. Owners
+triage requests in an inbox, convert one into a work order in a tap (costs, vendors and
+parts stay private), and broadcast announcements to a property or the whole portfolio.
 
-**Next:** tenant portal UI, push notifications (`expo-notifications`), and wiring the
-Lemon Squeezy + PayPal checkout.
+**Next:** push notifications (`expo-notifications`) and wiring the Lemon Squeezy +
+PayPal checkout.

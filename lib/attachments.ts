@@ -126,3 +126,28 @@ export async function signedUrl(
 export async function removeAttachment(storagePath: string): Promise<void> {
   await supabase.storage.from(BUCKET).remove([storagePath]);
 }
+
+/**
+ * Upload an already-picked image to an EXACT storage path. Used where the
+ * path is dictated by a storage policy rather than the uploader's uid —
+ * e.g. tenant request photos under `requests/<request_id>/…`, which both the
+ * tenant and the owner must be able to read.
+ */
+export async function uploadPickedImage(
+  storagePath: string,
+  picked: PickedImage,
+): Promise<UploadedImage> {
+  const bytes = decode(picked.base64);
+  const { error } = await supabase.storage
+    .from(BUCKET)
+    .upload(storagePath, bytes, {
+      contentType: picked.contentType,
+      upsert: false,
+    });
+  if (error) throw error;
+  return {
+    storagePath,
+    mimeType: picked.contentType,
+    sizeBytes: bytes.byteLength,
+  };
+}

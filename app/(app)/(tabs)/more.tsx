@@ -28,6 +28,8 @@ function confirm(
 }
 
 const MANAGE_LINKS = [
+  { href: "/requests", label: "Tenant requests", icon: "chatbubbles-outline" },
+  { href: "/announcements", label: "Announcements", icon: "megaphone-outline" },
   { href: "/assets", label: "Assets", icon: "cube-outline" },
   { href: "/scan", label: "Scan asset tag", icon: "qr-code-outline" },
   { href: "/inventory", label: "Inventory & parts", icon: "file-tray-stacked-outline" },
@@ -134,6 +136,18 @@ export default function More() {
             </Card>
           </Pressable>
         ))}
+
+        <Pressable onPress={() => router.push("/claim")}>
+          <Card>
+            <View className="flex-row items-center">
+              <Ionicons name="key-outline" size={20} color="#0f766e" />
+              <Text className="ml-3 flex-1 text-base text-slate-700">
+                Join with an invite code
+              </Text>
+              <Ionicons name="chevron-forward" size={18} color="#cbd5e1" />
+            </View>
+          </Card>
+        </Pressable>
 
         <Text className="mb-2 mt-4 text-sm font-semibold uppercase text-slate-400">
           Reminders
