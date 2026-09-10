@@ -14,7 +14,6 @@ import { cachedSelect } from "../../../lib/cache";
 import type { Tables } from "../../../lib/database.types";
 import { Constants } from "../../../lib/database.types";
 import { formatDate, titleCase } from "../../../lib/format";
-import { notifyPush } from "../../../lib/push";
 import { supabase } from "../../../lib/supabase";
 import { useAuth } from "../../../lib/auth";
 
@@ -87,7 +86,6 @@ export default function OwnerRequestDetail() {
       notify("Could not update", error.message);
       return;
     }
-    notifyPush("request_updated", request.id);
     load();
   }
 
@@ -126,7 +124,6 @@ export default function OwnerRequestDetail() {
         .eq("id", request.id);
       if (linkError) throw linkError;
 
-      notifyPush("request_updated", request.id);
       await load();
       router.push(`/work-order/${wo.id}`);
     } catch (e) {

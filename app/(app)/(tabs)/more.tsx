@@ -4,6 +4,7 @@ import * as WebBrowser from "expo-web-browser";
 import { useCallback, useState } from "react";
 import { Alert, Platform, Pressable, ScrollView, Text, View } from "react-native";
 
+import { NotificationPrefs } from "../../../components/NotificationPrefs";
 import { Button, Card, Screen } from "../../../components/ui";
 import { useAuth } from "../../../lib/auth";
 import { supabase } from "../../../lib/supabase";
@@ -148,6 +149,8 @@ export default function More() {
             </View>
           </Card>
         </Pressable>
+
+        <NotificationPrefs variant="owner" />
 
         <Text className="mb-2 mt-4 text-sm font-semibold uppercase text-slate-400">
           Reminders

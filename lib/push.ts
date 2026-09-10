@@ -8,12 +8,6 @@ import { supabase } from "./supabase";
 /** Expo push only reaches real iOS/Android devices — web and simulators no-op. */
 export const PUSH_SUPPORTED = Platform.OS === "ios" || Platform.OS === "android";
 
-export type PushEvent =
-  | "request_created"
-  | "request_updated"
-  | "request_message"
-  | "announcement";
-
 /**
  * The EAS project id Expo issues push tokens against. It only exists once the
  * project has been linked (`eas init`), so a local checkout without one simply
@@ -105,17 +99,4 @@ export async function unregisterPushToken(): Promise<void> {
   const token = await currentToken();
   if (!token) return;
   await supabase.from("push_tokens").delete().eq("token", token);
-}
-
-/**
- * Tell the backend that something happened that may deserve a notification.
- * Deliberately fire-and-forget: the recipient is derived server-side, and a
- * failed send must never fail the action the user just took.
- */
-export function notifyPush(event: PushEvent, id: string, preview?: string): void {
-  void supabase.functions
-    .invoke("send-push", { body: { event, id, preview } })
-    .catch(() => {
-      // Offline or the function is unavailable — the in-app record still stands.
-    });
 }

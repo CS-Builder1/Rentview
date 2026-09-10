@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { Pressable, ScrollView, Text, View } from "react-native";
 
+import { NotificationPrefs } from "../../../components/NotificationPrefs";
 import { Button, Card, Screen } from "../../../components/ui";
 import { useAuth } from "../../../lib/auth";
 
@@ -37,6 +38,8 @@ export default function TenantMore() {
             else on this device.
           </Text>
         </Card>
+
+        <NotificationPrefs variant="tenant" />
 
         <View className="mt-4">
           <Button title="Sign out" variant="secondary" onPress={signOut} />

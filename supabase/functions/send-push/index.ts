@@ -1,38 +1,43 @@
 // Push notifications for tenant-portal activity, delivered via Expo's push
 // service (https://exp.host/--/api/v2/push/send).
 //
-// The app calls this right after it writes the row that should notify someone.
-// The CALLER never says who to notify: the function loads the row with the
-// service role, checks that the caller is a participant, and derives the
-// recipient itself. So a caller can only ever trigger a notification about a
-// row it is already allowed to see, and never learns the recipient's tokens.
+// CALLED BY THE DATABASE, not by the app. Triggers on maintenance_requests,
+// request_messages and announcements queue the call through pg_net inside the
+// writing transaction, so a notification can never be skipped by a client that
+// died mid-action, and never fires for a write that rolled back.
 //
-// Events:
+// Auth is the shared secret in `x-push-secret` (env PUSH_HOOK_SECRET, matched
+// against the Vault copy the triggers read). JWT verification is off because
+// Postgres has no session to present — the secret IS the authentication, so
+// the function refuses every request without it.
+//
+// Body: { event, id, actor, preview? }
 //   request_created  — tenant filed a request        -> notify the owner
 //   request_updated  — status changed                -> notify the other party
 //   request_message  — someone posted on the thread  -> notify the other party
 //   announcement     — owner posted a notice         -> notify its tenants
 //
-// No secrets beyond the defaults Supabase injects. Expo's push service needs
-// no API key for tokens issued to your own project.
+// `actor` is whoever caused the write; the recipient is derived as the other
+// participant, so nobody is ever notified about their own action.
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
 const CHUNK = 100;
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
-
 type Event =
   | "request_created"
   | "request_updated"
   | "request_message"
   | "announcement";
+
+/** Which notification_prefs column decides whether an event may be sent. */
+const PREF_COLUMN: Record<Event, "requests" | "messages" | "announcements"> = {
+  request_created: "requests",
+  request_updated: "requests",
+  request_message: "messages",
+  announcement: "announcements",
+};
 
 type Recipient = { userId: string; url: string };
 
@@ -48,7 +53,7 @@ type ExpoMessage = {
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json" },
   });
 }
 
@@ -64,33 +69,26 @@ function chunked<T>(items: T[], size: number): T[][] {
 }
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+  const url = Deno.env.get("SUPABASE_URL")!;
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const hookSecret = Deno.env.get("PUSH_HOOK_SECRET");
+
+  // No secret configured means push was never set up on this project. Fail
+  // closed rather than accepting anonymous calls.
+  if (!hookSecret) {
+    return json({ error: "PUSH_HOOK_SECRET is not set" }, 503);
+  }
+  if (req.headers.get("x-push-secret") !== hookSecret) {
+    return json({ error: "Unauthorized" }, 401);
   }
 
-  const url = Deno.env.get("SUPABASE_URL")!;
-  const anon = Deno.env.get("SUPABASE_ANON_KEY")!;
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader) return json({ error: "Missing session" }, 401);
-
-  const userClient = createClient(url, anon, {
-    global: { headers: { Authorization: authHeader } },
-  });
-  const {
-    data: { user },
-    error: userError,
-  } = await userClient.auth.getUser();
-  if (userError || !user) return json({ error: "Invalid session" }, 401);
-
-  let payload: { event?: Event; id?: string; preview?: string };
+  let payload: { event?: Event; id?: string; actor?: string; preview?: string };
   try {
     payload = await req.json();
   } catch {
     return json({ error: "Expected a JSON body" }, 400);
   }
-  const { event, id, preview } = payload;
+  const { event, id, actor, preview } = payload;
   if (!event || !id) return json({ error: "Missing event or id" }, 400);
 
   const admin = createClient(url, serviceKey);
@@ -115,13 +113,14 @@ Deno.serve(async (req) => {
     if (error) return json({ error: error.message }, 500);
     if (!request) return json({ error: "Request not found" }, 404);
 
-    const isOwner = request.owner_id === user.id;
-    const isTenant = request.tenant_user_id === user.id;
-    if (!isOwner && !isTenant) return json({ error: "Not your request" }, 403);
+    const actorIsOwner = request.owner_id === actor;
+    const actorIsTenant = request.tenant_user_id === actor;
+    if (!actorIsOwner && !actorIsTenant) {
+      return json({ sent: 0, recipients: 0, reason: "actor not a participant" });
+    }
 
-    // The person who acted never gets their own notification.
-    const recipientId = isOwner ? request.tenant_user_id : request.owner_id;
-    const recipientIsOwner = !isOwner;
+    const recipientId = actorIsOwner ? request.tenant_user_id : request.owner_id;
+    const recipientIsOwner = !actorIsOwner;
     if (!recipientId) return json({ sent: 0, recipients: 0 });
 
     const unit = (request.units as { label: string } | null)?.label;
@@ -133,7 +132,9 @@ Deno.serve(async (req) => {
       body = clamp(place ? `${place}: ${request.title}` : request.title);
     } else if (event === "request_updated") {
       title = "Request updated";
-      body = clamp(`${request.title} — ${String(request.status).replace(/_/g, " ")}`);
+      body = clamp(
+        `${request.title} — ${String(request.status).replace(/_/g, " ")}`,
+      );
     } else {
       title = "New message";
       body = clamp(preview ? preview : `About: ${request.title}`);
@@ -142,7 +143,9 @@ Deno.serve(async (req) => {
     recipients = [
       {
         userId: recipientId,
-        url: recipientIsOwner ? `/request/${request.id}` : `/tenant/request/${request.id}`,
+        url: recipientIsOwner
+          ? `/request/${request.id}`
+          : `/tenant/request/${request.id}`,
       },
     ];
     data = { url: recipients[0].url, requestId: String(request.id) };
@@ -154,9 +157,6 @@ Deno.serve(async (req) => {
       .maybeSingle();
     if (error) return json({ error: error.message }, 500);
     if (!announcement) return json({ error: "Announcement not found" }, 404);
-    if (announcement.owner_id !== user.id) {
-      return json({ error: "Not your announcement" }, 403);
-    }
 
     // Every tenant on one of this owner's active leases, narrowed to the
     // announcement's property when it targets one.
@@ -188,19 +188,41 @@ Deno.serve(async (req) => {
 
   if (recipients.length === 0) return json({ sent: 0, recipients: 0 });
 
+  // Drop anyone who muted this kind of notification. A missing prefs row means
+  // everything is on, so a user who never opened the settings still hears.
+  const { data: prefs, error: prefError } = await admin
+    .from("notification_prefs")
+    .select("user_id, push_enabled, requests, messages, announcements")
+    .in(
+      "user_id",
+      recipients.map((r) => r.userId),
+    );
+  if (prefError) return json({ error: prefError.message }, 500);
+
+  const column = PREF_COLUMN[event];
+  const muted = new Set(
+    (prefs ?? [])
+      .filter((p) => !p.push_enabled || p[column] === false)
+      .map((p) => p.user_id),
+  );
+  const wanted = recipients.filter((r) => !muted.has(r.userId));
+  if (wanted.length === 0) {
+    return json({ sent: 0, recipients: recipients.length, reason: "muted" });
+  }
+
   const { data: tokens, error: tokenError } = await admin
     .from("push_tokens")
     .select("token, user_id")
     .in(
       "user_id",
-      recipients.map((r) => r.userId),
+      wanted.map((r) => r.userId),
     );
   if (tokenError) return json({ error: tokenError.message }, 500);
   if (!tokens || tokens.length === 0) {
-    return json({ sent: 0, recipients: recipients.length, reason: "no devices" });
+    return json({ sent: 0, recipients: wanted.length, reason: "no devices" });
   }
 
-  const urlFor = new Map(recipients.map((r) => [r.userId, r.url]));
+  const urlFor = new Map(wanted.map((r) => [r.userId, r.url]));
   const messages: ExpoMessage[] = tokens.map((t) => ({
     to: t.token,
     title,
@@ -246,5 +268,5 @@ Deno.serve(async (req) => {
     await admin.from("push_tokens").delete().in("token", stale);
   }
 
-  return json({ sent, recipients: recipients.length, dropped: stale.length });
+  return json({ sent, recipients: wanted.length, dropped: stale.length });
 });

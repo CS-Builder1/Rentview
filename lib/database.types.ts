@@ -596,6 +596,36 @@ export type Database = {
           },
         ]
       }
+      notification_prefs: {
+        Row: {
+          announcements: boolean
+          created_at: string
+          messages: boolean
+          push_enabled: boolean
+          requests: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          announcements?: boolean
+          created_at?: string
+          messages?: boolean
+          push_enabled?: boolean
+          requests?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          announcements?: boolean
+          created_at?: string
+          messages?: boolean
+          push_enabled?: boolean
+          requests?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           base_currency: string

@@ -24,7 +24,6 @@ import { cachedSelect } from "../../lib/cache";
 import { confirmAction } from "../../lib/confirm";
 import type { Tables } from "../../lib/database.types";
 import { formatDate } from "../../lib/format";
-import { notifyPush } from "../../lib/push";
 import { supabase } from "../../lib/supabase";
 
 type Announcement = Tables<"announcements"> & {
@@ -76,22 +75,17 @@ export default function Announcements() {
   async function save() {
     if (!title.trim() || !session) return;
     setSaving(true);
-    const { data, error } = await supabase
-      .from("announcements")
-      .insert({
-        owner_id: session.user.id,
-        property_id: propertyId,
-        title: title.trim(),
-        body: body.trim() || null,
-      })
-      .select("id")
-      .single();
+    const { error } = await supabase.from("announcements").insert({
+      owner_id: session.user.id,
+      property_id: propertyId,
+      title: title.trim(),
+      body: body.trim() || null,
+    });
     setSaving(false);
     if (error) {
       notify("Could not post", error.message);
       return;
     }
-    notifyPush("announcement", data.id);
     setOpen(false);
     setTitle("");
     setBody("");
