@@ -683,6 +683,33 @@ export type Database = {
         }
         Relationships: []
       }
+      push_tokens: {
+        Row: {
+          created_at: string
+          id: string
+          platform: string | null
+          token: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          platform?: string | null
+          token: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          platform?: string | null
+          token?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       rent_payments: {
         Row: {
           amount: number
@@ -1239,6 +1266,10 @@ export type Database = {
     Functions: {
       claim_tenant_invite: { Args: { invite_code: string }; Returns: Json }
       is_tenant_of_lease: { Args: { p_lease: string }; Returns: boolean }
+      register_push_token: {
+        Args: { p_platform?: string; p_token: string }
+        Returns: undefined
+      }
       tenant_lease_matches: {
         Args: {
           p_lease: string

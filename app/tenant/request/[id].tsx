@@ -19,6 +19,7 @@ import {
 import { cachedSelect } from "../../../lib/cache";
 import type { Tables } from "../../../lib/database.types";
 import { formatDate, titleCase } from "../../../lib/format";
+import { notifyPush } from "../../../lib/push";
 import { supabase } from "../../../lib/supabase";
 
 const STATUS_COPY: Record<string, string> = {
@@ -89,6 +90,7 @@ export default function TenantRequestDetail() {
       notify("Could not close", error.message);
       return;
     }
+    notifyPush("request_updated", request.id);
     load();
   }
 

@@ -16,6 +16,7 @@ import { cachedSelect } from "../../lib/cache";
 import type { Tables } from "../../lib/database.types";
 import { Constants } from "../../lib/database.types";
 import { titleCase } from "../../lib/format";
+import { notifyPush } from "../../lib/push";
 import { supabase } from "../../lib/supabase";
 
 type LeaseView = Tables<"tenant_lease_details">;
@@ -96,6 +97,7 @@ export default function NewRequest() {
       notify("Could not submit", error.message);
       return;
     }
+    notifyPush("request_created", data.id);
     router.replace(`/tenant/request/${data.id}`);
   }
 

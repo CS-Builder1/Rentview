@@ -10,6 +10,7 @@ import {
 } from "react";
 
 import { cachedSelect, clearCache } from "./cache";
+import { unregisterPushToken } from "./push";
 import { supabase } from "./supabase";
 
 export type Role = "owner" | "tenant";
@@ -87,6 +88,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       role,
       refreshProfile: async () => (uid ? loadRole(uid) : null),
       signOut: async () => {
+        // Best effort: never block sign-out on the notification service.
+        await unregisterPushToken().catch(() => undefined);
         await supabase.auth.signOut();
         await clearCache();
         setRole(null);

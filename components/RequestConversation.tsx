@@ -18,6 +18,7 @@ import {
 } from "../lib/attachments";
 import { useAuth } from "../lib/auth";
 import type { Tables } from "../lib/database.types";
+import { notifyPush } from "../lib/push";
 import { supabase } from "../lib/supabase";
 
 type Photo = { id: string; path: string; url: string | null };
@@ -123,6 +124,7 @@ export function RequestConversation({
       notify("Could not send", error.message);
       return;
     }
+    notifyPush("request_message", requestId, text);
     setBody("");
     load();
   }

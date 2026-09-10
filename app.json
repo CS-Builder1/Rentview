@@ -39,6 +39,13 @@
         {
           "cameraPermission": "RentView uses the camera to scan asset QR tags."
         }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#0f766e",
+          "defaultChannel": "default"
+        }
       ]
     ],
     "experiments": {
