@@ -4,10 +4,12 @@ import { useAuth } from "../../lib/auth";
 import { Loading } from "../../components/ui";
 
 export default function AppLayout() {
-  const { session, initializing } = useAuth();
+  const { session, initializing, role } = useAuth();
 
   if (initializing) return <Loading />;
   if (!session) return <Redirect href="/(auth)/login" />;
+  // A claimed tenant belongs in the portal, never in the owner app.
+  if (role === "tenant") return <Redirect href="/tenant" />;
 
   // A Stack with the tab bar as the first screen. Detail and management
   // pages push ON TOP of the tabs, so "back" returns to the exact screen
@@ -17,6 +19,7 @@ export default function AppLayout() {
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="property/[id]" />
       <Stack.Screen name="unit/[id]" />
+      <Stack.Screen name="lease/[id]" />
       <Stack.Screen name="work-order/[id]" />
       <Stack.Screen name="asset/[id]" />
       <Stack.Screen name="assets" />
@@ -25,6 +28,9 @@ export default function AppLayout() {
       <Stack.Screen name="maintenance" />
       <Stack.Screen name="documents" />
       <Stack.Screen name="vendors" />
+      <Stack.Screen name="requests" />
+      <Stack.Screen name="request/[id]" />
+      <Stack.Screen name="announcements" />
       <Stack.Screen name="scan" />
       <Stack.Screen name="export" />
     </Stack>

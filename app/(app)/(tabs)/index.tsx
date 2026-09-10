@@ -38,8 +38,17 @@ export default function Dashboard() {
       .slice(0, 10);
 
     try {
-    const [props, units, openWos, expenses, urgentWos, dueSched, inventory, warranties] =
-      await Promise.all([
+    const [
+      props,
+      units,
+      openWos,
+      expenses,
+      urgentWos,
+      dueSched,
+      inventory,
+      warranties,
+      newRequests,
+    ] = await Promise.all([
         supabase.from("properties").select("id", { count: "exact", head: true }),
         supabase.from("units").select("id", { count: "exact", head: true }),
         supabase
@@ -68,6 +77,10 @@ export default function Dashboard() {
           .not("warranty_expiry", "is", null)
           .gte("warranty_expiry", today)
           .lte("warranty_expiry", soon),
+        supabase
+          .from("maintenance_requests")
+          .select("id", { count: "exact", head: true })
+          .eq("status", "submitted"),
       ]);
 
     const ytdSpend = (expenses.data ?? []).reduce(
@@ -87,6 +100,13 @@ export default function Dashboard() {
     setSummary(nextSummary);
 
     const next: Alert[] = [];
+    if ((newRequests.count ?? 0) > 0)
+      next.push({
+        key: "requests",
+        icon: "chatbubble-ellipses",
+        tone: "red",
+        text: `${newRequests.count} new tenant request${newRequests.count === 1 ? "" : "s"} to triage`,
+      });
     if ((urgentWos.count ?? 0) > 0)
       next.push({
         key: "urgent",

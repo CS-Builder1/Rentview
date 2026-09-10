@@ -14,6 +14,41 @@ export type Database = {
   }
   public: {
     Tables: {
+      announcements: {
+        Row: {
+          body: string | null
+          created_at: string
+          id: string
+          owner_id: string
+          property_id: string | null
+          title: string
+        }
+        Insert: {
+          body?: string | null
+          created_at?: string
+          id?: string
+          owner_id: string
+          property_id?: string | null
+          title: string
+        }
+        Update: {
+          body?: string | null
+          created_at?: string
+          id?: string
+          owner_id?: string
+          property_id?: string | null
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "announcements_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       assets: {
         Row: {
           category: string | null
@@ -94,6 +129,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      billing_events: {
+        Row: {
+          event_id: string
+          event_type: string
+          id: string
+          owner_id: string | null
+          payload: Json
+          provider: Database["public"]["Enums"]["sub_provider"]
+          received_at: string
+        }
+        Insert: {
+          event_id: string
+          event_type: string
+          id?: string
+          owner_id?: string | null
+          payload: Json
+          provider: Database["public"]["Enums"]["sub_provider"]
+          received_at?: string
+        }
+        Update: {
+          event_id?: string
+          event_type?: string
+          id?: string
+          owner_id?: string | null
+          payload?: Json
+          provider?: Database["public"]["Enums"]["sub_provider"]
+          received_at?: string
+        }
+        Relationships: []
       }
       documents: {
         Row: {
@@ -342,6 +407,7 @@ export type Database = {
           tenant_email: string | null
           tenant_name: string
           tenant_phone: string | null
+          tenant_user_id: string | null
           unit_id: string
           updated_at: string
         }
@@ -359,6 +425,7 @@ export type Database = {
           tenant_email?: string | null
           tenant_name: string
           tenant_phone?: string | null
+          tenant_user_id?: string | null
           unit_id: string
           updated_at?: string
         }
@@ -376,6 +443,7 @@ export type Database = {
           tenant_email?: string | null
           tenant_name?: string
           tenant_phone?: string | null
+          tenant_user_id?: string | null
           unit_id?: string
           updated_at?: string
         }
@@ -385,6 +453,102 @@ export type Database = {
             columns: ["unit_id"]
             isOneToOne: false
             referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      maintenance_requests: {
+        Row: {
+          category: Database["public"]["Enums"]["request_category"]
+          created_at: string
+          description: string | null
+          id: string
+          lease_id: string
+          owner_id: string
+          property_id: string
+          rating: number | null
+          rating_comment: string | null
+          resolved_at: string | null
+          status: Database["public"]["Enums"]["request_status"]
+          tenant_user_id: string
+          title: string
+          unit_id: string
+          updated_at: string
+          urgency: Database["public"]["Enums"]["wo_priority"]
+          work_order_id: string | null
+        }
+        Insert: {
+          category?: Database["public"]["Enums"]["request_category"]
+          created_at?: string
+          description?: string | null
+          id?: string
+          lease_id: string
+          owner_id: string
+          property_id: string
+          rating?: number | null
+          rating_comment?: string | null
+          resolved_at?: string | null
+          status?: Database["public"]["Enums"]["request_status"]
+          tenant_user_id: string
+          title: string
+          unit_id: string
+          updated_at?: string
+          urgency?: Database["public"]["Enums"]["wo_priority"]
+          work_order_id?: string | null
+        }
+        Update: {
+          category?: Database["public"]["Enums"]["request_category"]
+          created_at?: string
+          description?: string | null
+          id?: string
+          lease_id?: string
+          owner_id?: string
+          property_id?: string
+          rating?: number | null
+          rating_comment?: string | null
+          resolved_at?: string | null
+          status?: Database["public"]["Enums"]["request_status"]
+          tenant_user_id?: string
+          title?: string
+          unit_id?: string
+          updated_at?: string
+          urgency?: Database["public"]["Enums"]["wo_priority"]
+          work_order_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "maintenance_requests_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "leases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "maintenance_requests_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_lease_details"
+            referencedColumns: ["lease_id"]
+          },
+          {
+            foreignKeyName: "maintenance_requests_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "maintenance_requests_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "maintenance_requests_work_order_id_fkey"
+            columns: ["work_order_id"]
+            isOneToOne: false
+            referencedRelation: "work_orders"
             referencedColumns: ["id"]
           },
         ]
@@ -462,6 +626,36 @@ export type Database = {
           },
         ]
       }
+      notification_prefs: {
+        Row: {
+          announcements: boolean
+          created_at: string
+          messages: boolean
+          push_enabled: boolean
+          requests: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          announcements?: boolean
+          created_at?: string
+          messages?: boolean
+          push_enabled?: boolean
+          requests?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          announcements?: boolean
+          created_at?: string
+          messages?: boolean
+          push_enabled?: boolean
+          requests?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           base_currency: string
@@ -470,6 +664,7 @@ export type Database = {
           full_name: string | null
           id: string
           locale: string
+          role: string
           updated_at: string
         }
         Insert: {
@@ -479,6 +674,7 @@ export type Database = {
           full_name?: string | null
           id: string
           locale?: string
+          role?: string
           updated_at?: string
         }
         Update: {
@@ -488,6 +684,7 @@ export type Database = {
           full_name?: string | null
           id?: string
           locale?: string
+          role?: string
           updated_at?: string
         }
         Relationships: []
@@ -545,6 +742,151 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      push_tokens: {
+        Row: {
+          created_at: string
+          id: string
+          platform: string | null
+          token: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          platform?: string | null
+          token: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          platform?: string | null
+          token?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      rent_payments: {
+        Row: {
+          amount: number
+          created_at: string
+          currency: string
+          due_date: string | null
+          id: string
+          lease_id: string
+          method: Database["public"]["Enums"]["payment_method"] | null
+          note: string | null
+          owner_id: string
+          paid_on: string | null
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          currency?: string
+          due_date?: string | null
+          id?: string
+          lease_id: string
+          method?: Database["public"]["Enums"]["payment_method"] | null
+          note?: string | null
+          owner_id: string
+          paid_on?: string | null
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          currency?: string
+          due_date?: string | null
+          id?: string
+          lease_id?: string
+          method?: Database["public"]["Enums"]["payment_method"] | null
+          note?: string | null
+          owner_id?: string
+          paid_on?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rent_payments_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "leases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rent_payments_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_lease_details"
+            referencedColumns: ["lease_id"]
+          },
+        ]
+      }
+      request_messages: {
+        Row: {
+          body: string
+          created_at: string
+          id: string
+          request_id: string
+          sender_id: string
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          id?: string
+          request_id: string
+          sender_id: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          id?: string
+          request_id?: string
+          sender_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "request_messages_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "maintenance_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      request_photos: {
+        Row: {
+          created_at: string
+          id: string
+          request_id: string
+          storage_path: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          request_id: string
+          storage_path: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          request_id?: string
+          storage_path?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "request_photos_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "maintenance_requests"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       subscriptions: {
         Row: {
@@ -645,6 +987,57 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "units"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenant_invites: {
+        Row: {
+          claimed_at: string | null
+          claimed_by: string | null
+          code: string
+          created_at: string
+          email: string | null
+          expires_at: string
+          id: string
+          lease_id: string
+          owner_id: string
+        }
+        Insert: {
+          claimed_at?: string | null
+          claimed_by?: string | null
+          code: string
+          created_at?: string
+          email?: string | null
+          expires_at?: string
+          id?: string
+          lease_id: string
+          owner_id: string
+        }
+        Update: {
+          claimed_at?: string | null
+          claimed_by?: string | null
+          code?: string
+          created_at?: string
+          email?: string | null
+          expires_at?: string
+          id?: string
+          lease_id?: string
+          owner_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_invites_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "leases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_invites_lease_id_fkey"
+            columns: ["lease_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_lease_details"
+            referencedColumns: ["lease_id"]
           },
         ]
       }
@@ -891,10 +1284,61 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      tenant_lease_details: {
+        Row: {
+          address_line1: string | null
+          city: string | null
+          country: string | null
+          deposit_amount: number | null
+          end_date: string | null
+          landlord_name: string | null
+          lease_id: string | null
+          owner_id: string | null
+          property_id: string | null
+          property_name: string | null
+          region: string | null
+          rent_amount: number | null
+          rent_currency: string | null
+          start_date: string | null
+          status: Database["public"]["Enums"]["lease_status"] | null
+          unit_id: string | null
+          unit_label: string | null
+          unit_type: Database["public"]["Enums"]["unit_type"] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "leases_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "units_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
-      [_ in never]: never
+      claim_tenant_invite: { Args: { invite_code: string }; Returns: Json }
+      is_tenant_of_lease: { Args: { p_lease: string }; Returns: boolean }
+      register_push_token: {
+        Args: { p_platform?: string; p_token: string }
+        Returns: undefined
+      }
+      tenant_lease_matches: {
+        Args: {
+          p_lease: string
+          p_owner: string
+          p_property: string
+          p_unit: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
       asset_status:
@@ -921,8 +1365,28 @@ export type Database = {
         | "tax"
         | "other"
       lease_status: "active" | "pending" | "expired" | "terminated"
+      payment_method:
+        | "cash"
+        | "bank_transfer"
+        | "check"
+        | "mobile_money"
+        | "other"
       plan_tier: "free" | "pro"
       property_type: "residential" | "commercial" | "mixed"
+      request_category:
+        | "plumbing"
+        | "electrical"
+        | "appliance"
+        | "hvac"
+        | "pest"
+        | "general"
+        | "other"
+      request_status:
+        | "submitted"
+        | "acknowledged"
+        | "in_progress"
+        | "resolved"
+        | "closed"
       schedule_freq:
         | "daily"
         | "weekly"
@@ -1099,8 +1563,31 @@ export const Constants = {
         "other",
       ],
       lease_status: ["active", "pending", "expired", "terminated"],
+      payment_method: [
+        "cash",
+        "bank_transfer",
+        "check",
+        "mobile_money",
+        "other",
+      ],
       plan_tier: ["free", "pro"],
       property_type: ["residential", "commercial", "mixed"],
+      request_category: [
+        "plumbing",
+        "electrical",
+        "appliance",
+        "hvac",
+        "pest",
+        "general",
+        "other",
+      ],
+      request_status: [
+        "submitted",
+        "acknowledged",
+        "in_progress",
+        "resolved",
+        "closed",
+      ],
       schedule_freq: [
         "daily",
         "weekly",
