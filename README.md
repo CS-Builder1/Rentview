@@ -82,11 +82,31 @@ Supabase project. To re-apply elsewhere, use the Supabase CLI:
 supabase link --project-ref <ref>
 supabase db push
 supabase functions deploy delete-account
+supabase functions deploy send-reminders   # schedule with supabase/reminders_cron.sql
 ```
+
+### Security notes
+
+`0004_tenant_portal.sql` intentionally uses `SECURITY DEFINER` for the tenant read
+surface (`tenant_lease_details`) and for `claim_tenant_invite` / `is_tenant_of_lease` /
+`tenant_lease_matches`. Tenants cannot read `leases` or `tenant_invites` directly, so
+these objects *are* the boundary — each one filters on `auth.uid()` in its own
+`WHERE` clause. Supabase's database linter flags them by design; that is expected, not
+a finding. Enable **leaked password protection** in Auth → Policies for the linter's
+remaining warning.
 
 ## Status
 
-Stage 0/1 foundation is in place: schema + RLS, auth, portfolio overview, properties &
-units (varying-complex aware), and work orders. Next: assets/inventory/parts,
-preventive maintenance, expenses & analytics, document upload, QR codes, offline-first
-capture, and wiring the Lemon Squeezy + PayPal checkout.
+**Owner app — built.** Auth (email + Google), portfolio overview with alerts,
+properties/units/leases, assets with QR entry, work orders with photos and parts,
+vendors, inventory, expenses, preventive maintenance, document upload, offline-first
+capture with a sync queue, accountant CSV export, and scheduled email reminders.
+
+**Tenant portal — schema only.** `0004_tenant_portal.sql` ships the full backend
+(tenant role, invite codes + claim RPC, `tenant_lease_details`, maintenance requests
+with photos and messaging, rent payment history, announcements, and the work-order →
+request status mirror). The tenant-facing screens and the owner-side invite/triage UI
+are not built yet.
+
+**Next:** tenant portal UI, push notifications (`expo-notifications`), and wiring the
+Lemon Squeezy + PayPal checkout.
