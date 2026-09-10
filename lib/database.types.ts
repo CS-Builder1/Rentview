@@ -130,6 +130,36 @@ export type Database = {
           },
         ]
       }
+      billing_events: {
+        Row: {
+          event_id: string
+          event_type: string
+          id: string
+          owner_id: string | null
+          payload: Json
+          provider: Database["public"]["Enums"]["sub_provider"]
+          received_at: string
+        }
+        Insert: {
+          event_id: string
+          event_type: string
+          id?: string
+          owner_id?: string | null
+          payload: Json
+          provider: Database["public"]["Enums"]["sub_provider"]
+          received_at?: string
+        }
+        Update: {
+          event_id?: string
+          event_type?: string
+          id?: string
+          owner_id?: string | null
+          payload?: Json
+          provider?: Database["public"]["Enums"]["sub_provider"]
+          received_at?: string
+        }
+        Relationships: []
+      }
       documents: {
         Row: {
           asset_id: string | null

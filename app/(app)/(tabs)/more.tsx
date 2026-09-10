@@ -5,8 +5,14 @@ import { useCallback, useState } from "react";
 import { Alert, Platform, Pressable, ScrollView, Text, View } from "react-native";
 
 import { NotificationPrefs } from "../../../components/NotificationPrefs";
-import { Button, Card, Screen } from "../../../components/ui";
+import { Badge, Button, Card, Screen } from "../../../components/ui";
 import { useAuth } from "../../../lib/auth";
+import { formatDate } from "../../../lib/format";
+import {
+  FREE_PROPERTY_LIMIT,
+  lemonSqueezyCheckoutUrl,
+  usePlan,
+} from "../../../lib/plan";
 import { supabase } from "../../../lib/supabase";
 
 const LEMONSQUEEZY_URL = process.env.EXPO_PUBLIC_LEMONSQUEEZY_STORE_URL;
@@ -50,6 +56,7 @@ function notify(title: string, message: string) {
 export default function More() {
   const router = useRouter();
   const { session, signOut } = useAuth();
+  const { isPro, subscription, refresh: refreshPlan } = usePlan();
   const [deleting, setDeleting] = useState(false);
   const [reminding, setReminding] = useState(false);
 
@@ -82,15 +89,21 @@ export default function More() {
     }
   }
 
-  const openCheckout = useCallback(async (url?: string) => {
-    if (!url) {
-      const msg =
-        "Billing isn't wired up yet. Set the checkout URL in your environment to enable it.";
-      Platform.OS === "web" ? window.alert(msg) : Alert.alert("Coming soon", msg);
-      return;
-    }
-    await WebBrowser.openBrowserAsync(url);
-  }, []);
+  const openCheckout = useCallback(
+    async (url?: string) => {
+      if (!url) {
+        const msg =
+          "Billing isn't wired up yet. Set the checkout URL in your environment to enable it.";
+        Platform.OS === "web" ? window.alert(msg) : Alert.alert("Coming soon", msg);
+        return;
+      }
+      await WebBrowser.openBrowserAsync(url);
+      // The webhook may land while the browser is still open, so re-read on
+      // return rather than making the user restart the app.
+      refreshPlan();
+    },
+    [refreshPlan],
+  );
 
   const deleteAccount = useCallback(() => {
     confirm(
@@ -171,29 +184,67 @@ export default function More() {
         <Text className="mb-2 mt-4 text-sm font-semibold uppercase text-slate-400">
           Plan & billing
         </Text>
-        <Card>
-          <Text className="text-base font-semibold text-slate-900">
-            RentView Pro
-          </Text>
-          <Text className="mt-1 text-slate-500">
-            Unlimited properties & units, inventory, asset lifecycle,
-            preventive maintenance and analytics.
-          </Text>
-          <View className="mt-4 gap-2">
-            <Button
-              title="Subscribe with Lemon Squeezy"
-              onPress={() => openCheckout(LEMONSQUEEZY_URL)}
-            />
-            <Button
-              title="Subscribe with PayPal"
-              variant="secondary"
-              onPress={() => openCheckout(PAYPAL_URL)}
-            />
-          </View>
-          <Text className="mt-3 text-xs text-slate-400">
-            Manage your subscription on the web. Prices shown at checkout.
-          </Text>
-        </Card>
+        {isPro ? (
+          <Card>
+            <View className="flex-row items-center justify-between">
+              <Text className="text-base font-semibold text-slate-900">
+                RentView Pro
+              </Text>
+              {subscription ? <Badge label={subscription.status} /> : null}
+            </View>
+            <Text className="mt-1 text-slate-500">
+              Unlimited properties, and everything else RentView does.
+            </Text>
+            {subscription?.current_period_end ? (
+              <Text className="mt-3 text-slate-600">
+                {subscription.cancel_at_period_end ||
+                subscription.status === "cancelled"
+                  ? `Ends ${formatDate(subscription.current_period_end)}`
+                  : `Renews ${formatDate(subscription.current_period_end)}`}
+              </Text>
+            ) : null}
+            <Text className="mt-3 text-xs text-slate-400">
+              Manage or cancel from the receipt email your payment provider
+              sent — {subscription?.provider === "paypal" ? "PayPal" : "Lemon Squeezy"}{" "}
+              handles billing.
+            </Text>
+          </Card>
+        ) : (
+          <Card>
+            <Text className="text-base font-semibold text-slate-900">
+              RentView Pro
+            </Text>
+            <Text className="mt-1 text-slate-500">
+              Unlimited properties. Free covers up to {FREE_PROPERTY_LIMIT},
+              with every other feature included.
+            </Text>
+            <View className="mt-4 gap-2">
+              <Button
+                title="Subscribe with Lemon Squeezy"
+                onPress={() =>
+                  openCheckout(
+                    LEMONSQUEEZY_URL && session
+                      ? lemonSqueezyCheckoutUrl(
+                          LEMONSQUEEZY_URL,
+                          session.user.id,
+                          session.user.email,
+                        )
+                      : LEMONSQUEEZY_URL,
+                  )
+                }
+              />
+              <Button
+                title="Subscribe with PayPal"
+                variant="secondary"
+                onPress={() => openCheckout(PAYPAL_URL)}
+              />
+            </View>
+            <Text className="mt-3 text-xs text-slate-400">
+              Prices shown at checkout. With PayPal, pay using the same email
+              as this account so we can match the subscription to it.
+            </Text>
+          </Card>
+        )}
 
         <Text className="mb-2 mt-4 text-sm font-semibold uppercase text-slate-400">
           Account

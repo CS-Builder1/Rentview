@@ -73,10 +73,12 @@ lib/
   auth.tsx               Auth context/provider
   database.types.ts      Generated DB types
   format.ts              i18n-neutral currency/date helpers
-  push.ts                Expo push registration + send triggers
+  push.ts                Expo push device registration
+  plan.ts                Subscription entitlement + free-tier limit
 supabase/
   migrations/            SQL schema (versioned)
-  functions/             Edge Functions (delete-account, send-reminders, send-push)
+  functions/             Edge Functions (delete-account, send-reminders,
+                         send-push, lemonsqueezy-webhook, paypal-webhook)
 ```
 
 ## Getting started
@@ -99,7 +101,13 @@ supabase db push
 supabase functions deploy delete-account
 supabase functions deploy send-reminders   # schedule with supabase/reminders_cron.sql
 supabase functions deploy send-push
+supabase functions deploy lemonsqueezy-webhook
+supabase functions deploy paypal-webhook
 ```
+
+Anything that needs your own accounts or credentials — Expo, Lemon Squeezy,
+PayPal, Resend — is tracked in **[SETUP.md](./SETUP.md)**. The app runs with
+all of it unset; each feature fails soft.
 
 ## Tenant portal
 
@@ -121,18 +129,61 @@ stay `owner`, and only claiming an invite flips an account to `tenant`.
 Rent payments are records the owner logs, visible to that lease's tenant. RentView does
 not process payments.
 
+## Billing
+
+A generous **Free** tier and a single **Pro** tier, billed on the web so most app-store
+commission is avoided. Lemon Squeezy is the merchant of record (it handles VAT and
+receipts); PayPal is offered alongside it because parts of the world reach for PayPal
+first.
+
+**How an account becomes Pro.** The checkout link carries the account id
+(`?checkout[custom][user_id]=…` for Lemon Squeezy), the provider's webhook verifies
+itself, and the function mirrors subscription state into `subscriptions`. The app never
+decides entitlement from a payment — only from that row.
+
+- `lemonsqueezy-webhook` — HMAC-SHA256 over the raw body against `X-Signature`,
+  compared in constant time.
+- `paypal-webhook` — PayPal's own verify-webhook-signature API vouches for each
+  delivery. PayPal has no documented way to carry our account id through a hosted
+  subscribe link, so it matches on the payer's email; unmatched events are still
+  recorded in `billing_events` to be reconciled by hand.
+
+Both are idempotent: every verified delivery is written to `billing_events` first, and
+a repeat of the same state is a no-op.
+
+**Entitlement** (`lib/plan.ts`) is computed, not stored as a boolean. A subscription
+grants Pro while `active`, `trialing` or `past_due`, and a *cancelled* one keeps it
+until `current_period_end` — cutting access the moment someone cancels would be taking
+money for nothing. It is read through the same cache as everything else, so being
+offline never silently downgrades an account.
+
+**What Free costs you:** `FREE_PROPERTY_LIMIT` in `lib/plan.ts` — currently 3
+properties, everything else unlimited. That number is a placeholder pending a decision
+(see [SETUP.md](./SETUP.md)); it is the only line separating the tiers.
+
 ## Push notifications
 
 Notifications are what make the portal work in practice — a request nobody sees is a
 phone call anyway. Delivery runs through Expo's push service.
 
-**How a notification happens.** The app writes the row (request, message, status
-change, announcement), then calls the `send-push` Edge Function with just the event
-name and the row id. The caller never names a recipient: the function loads the row
-with the service role, checks the caller is a participant, and derives who to notify
-itself. So a caller can only ever trigger a notification about a row it is already
-allowed to see, and never learns anyone's device tokens. Sends are fire-and-forget —
-a failed notification never fails the action that caused it.
+**How a notification happens.** The DATABASE fires them, not the app. Triggers on
+`maintenance_requests`, `request_messages` and `announcements` queue a call to the
+`send-push` Edge Function through `pg_net`, inside the transaction that writes the row.
+So a notification cannot be skipped by a client that died mid-action, and cannot fire
+for a write that rolled back. The trigger passes only the event, the row id and the
+actor; `send-push` loads the row with the service role and derives the recipient as the
+other participant, so nobody is notified about their own action and no device token is
+ever exposed.
+
+Delivery is authenticated by a shared secret (`x-push-secret`), held in Supabase Vault
+for the trigger and as a function secret for the endpoint. Neither is in this repo —
+see [SETUP.md](./SETUP.md). When either half is missing, `notify_push()` returns
+immediately and the app runs with notifications off.
+
+**Muting.** `notification_prefs` carries a master switch plus one per category
+(requests, messages, announcements). A missing row means everything is on, so nobody
+needs back-filling. `send-push` drops muted recipients before it builds a message, and
+both More tabs expose the switches.
 
 | Event | Who gets it | Where it opens |
 | ----- | ----------- | -------------- |
@@ -184,8 +235,13 @@ triage requests in an inbox, convert one into a work order in a tap (costs, vend
 parts stay private), and broadcast announcements to a property or the whole portfolio.
 
 **Push notifications — built, pending EAS setup.** Requests, status changes, messages
-and announcements all notify the right party and deep-link into the screen. Registration
-and delivery are wired end to end; the only thing left is the one-time EAS project +
-credentials setup above, which needs a real build.
+and announcements all notify the right party and deep-link into the screen. Fired by
+database triggers, filtered by per-user mute switches. What is left is the one-time EAS
+project, credentials and hook secret in [SETUP.md](./SETUP.md).
 
-**Next:** wiring the Lemon Squeezy + PayPal checkout.
+**Billing — built, pending provider setup.** Both webhooks are deployed and the app
+reads entitlement from `subscriptions`. What is left is creating the products and
+webhooks at Lemon Squeezy and PayPal, and deciding what Free includes.
+
+**Next:** an end-to-end pass with two real accounts, then whatever the first real
+portfolio asks for.

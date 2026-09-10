@@ -1,7 +1,15 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
-import { Modal, Pressable, ScrollView, Text, View } from "react-native";
+import {
+  Alert,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+} from "react-native";
 
 import {
   Badge,
@@ -17,6 +25,7 @@ import { cachedSelect } from "../../../lib/cache";
 import type { Tables } from "../../../lib/database.types";
 import { Constants } from "../../../lib/database.types";
 import { titleCase } from "../../../lib/format";
+import { usePlan } from "../../../lib/plan";
 import { supabase } from "../../../lib/supabase";
 
 type Property = Tables<"properties"> & { units: { count: number }[] };
@@ -26,6 +35,7 @@ const PROPERTY_TYPES = Constants.public.Enums.property_type;
 export default function Properties() {
   const router = useRouter();
   const { session } = useAuth();
+  const { propertyLimit } = usePlan();
   const [properties, setProperties] = useState<Property[] | null>(null);
   const [adding, setAdding] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -52,6 +62,25 @@ export default function Properties() {
       load();
     }, [load]),
   );
+
+  /**
+   * The Free tier caps how many properties an account can hold. Everything
+   * already created stays fully usable — only adding another is blocked.
+   */
+  function startAdd() {
+    const count = properties?.length ?? 0;
+    if (propertyLimit !== null && count >= propertyLimit) {
+      const message =
+        `Free covers ${propertyLimit} propert${propertyLimit === 1 ? "y" : "ies"}. ` +
+        "Upgrade to Pro under More → Plan & billing to add more. Everything you " +
+        "have already stays as it is.";
+      Platform.OS === "web"
+        ? window.alert(`Property limit reached\n\n${message}`)
+        : Alert.alert("Property limit reached", message);
+      return;
+    }
+    setAdding(true);
+  }
 
   function resetForm() {
     setName("");
@@ -85,7 +114,7 @@ export default function Properties() {
       <View className="flex-row items-center justify-between px-5 pb-2 pt-2">
         <Text className="text-2xl font-bold text-slate-900">Properties</Text>
         <Pressable
-          onPress={() => setAdding(true)}
+          onPress={startAdd}
           className="flex-row items-center rounded-full bg-brand px-3 py-2"
         >
           <Ionicons name="add" color="#fff" size={18} />
