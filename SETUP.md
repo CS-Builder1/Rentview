@@ -149,7 +149,21 @@ lift, so it is worth deciding before you charge anyone.
 
 ---
 
-## 9. End-to-end test with two real accounts
+## 9. Standing rule: never expose the `net` schema
+
+Not a task — a thing not to do later.
+
+Push runs on `pg_net`, whose `net.http_*` functions are executable by any signed-in
+role (Supabase installs them that way and it cannot be revoked from the `postgres`
+role). They are unreachable only because PostgREST does not expose the `net` schema.
+
+- [ ] Know that adding `net` under Dashboard → Settings → API → **Exposed schemas**
+      would hand every signed-in user an HTTP client running inside your database.
+      Don't.
+
+---
+
+## 10. End-to-end test with two real accounts
 
 Not credentials — just something no amount of typechecking substitutes for.
 

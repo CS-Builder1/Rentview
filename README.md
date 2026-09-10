@@ -210,6 +210,21 @@ function drops those tokens automatically.
 
 ### Security notes
 
+Two advisor findings are accepted rather than fixed, and both deserve a sentence:
+
+**`billing_events` has RLS enabled with no policies.** That is the point — no policy
+means no user-facing access at all. Only the webhook functions, which run with the
+service role, read or write it.
+
+**`pg_net` is installed in the `public` schema and its `net.http_*` functions are
+executable by PUBLIC.** Both are how Supabase installs it, and neither can be undone
+from the `postgres` role — the grants belong to `supabase_admin`, so a REVOKE from the
+SQL editor or a migration silently does nothing (see `0009_lock_down_pg_net.sql`). What
+keeps it unreachable is that the `net` schema is not among the API's exposed schemas,
+so PostgREST will not route to it. **Do not add `net` to Exposed schemas** under
+Settings → API; that would turn a signed-in session into an HTTP client running inside
+your database.
+
 `0004_tenant_portal.sql` intentionally uses `SECURITY DEFINER` for the tenant read
 surface (`tenant_lease_details`) and for `claim_tenant_invite` / `is_tenant_of_lease` /
 `tenant_lease_matches`; `0005_push_tokens.sql` does the same for
