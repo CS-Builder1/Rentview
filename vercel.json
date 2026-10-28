@@ -1,5 +1,10 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "git": {
+    "deploymentEnabled": {
+      "codex/rentview-trust-and-journeys-20261028": false
+    }
+  },
   "buildCommand": "npx expo export --platform web",
   "outputDirectory": "dist",
   "installCommand": "npm install",

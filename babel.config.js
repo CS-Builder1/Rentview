@@ -2,10 +2,14 @@ module.exports = function (api) {
   api.cache(true);
   return {
     presets: [
-      ["babel-preset-expo", { jsxImportSource: "nativewind" }],
+      // NativeWind's preset supplies Worklets. Disable Expo's automatic copy so
+      // each function is processed once by the SDK-aligned Worklets plugin.
+      ["babel-preset-expo", {
+        jsxImportSource: "nativewind",
+        reanimated: false,
+        worklets: false,
+      }],
       "nativewind/babel",
     ],
-    // react-native-worklets/plugin must be listed last (powers Reanimated v4).
-    plugins: ["react-native-worklets/plugin"],
   };
 };
