@@ -1,13 +1,8 @@
-import { Redirect, Stack } from "expo-router";
-
-import { useAuth } from "../../lib/auth";
-import { Loading } from "../../components/ui";
+import { Stack } from "expo-router";
 
 export default function AuthLayout() {
-  const { session, initializing } = useAuth();
-
-  if (initializing) return <Loading />;
-  if (session) return <Redirect href="/(app)" />;
-
-  return <Stack screenOptions={{ headerShown: false }} />;
+  // Keep the navigator registered while shared-browser auth changes. Removing
+  // it during sign-in churns navigation state in the other tab. Login owns its
+  // signed-in redirect; callback and reset-password keep their own guards.
+  return <Stack screenOptions={{headerShown:false}}/>;
 }

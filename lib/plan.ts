@@ -4,6 +4,7 @@ import { useAuth } from "./auth";
 import { cachedSelect } from "./cache";
 import type { Tables } from "./database.types";
 import { supabase } from "./supabase";
+import { grantsPro } from "./entitlements";
 
 /**
  * How many properties the Free tier allows.
@@ -30,18 +31,7 @@ export type PlanState = {
  * keeps it until the period the customer already paid for runs out — cutting
  * access at the moment someone cancels would be taking money for nothing.
  */
-export function grantsPro(sub: Tables<"subscriptions"> | null): boolean {
-  if (!sub || sub.plan !== "pro") return false;
-  if (sub.status === "active" || sub.status === "trialing" || sub.status === "past_due") {
-    return true;
-  }
-  if (sub.status === "cancelled") {
-    return sub.current_period_end
-      ? new Date(sub.current_period_end).getTime() > Date.now()
-      : false;
-  }
-  return false;
-}
+export { grantsPro } from "./entitlements";
 
 /**
  * The account's current entitlement. Cached like every other read, so the app
