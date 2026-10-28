@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Stack, useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useState } from "react";
+import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, Modal, Platform, Pressable, ScrollView, Text, View } from "react-native";
 
 import {
@@ -13,12 +13,14 @@ import {
   Screen,
 } from "../../components/ui";
 import { useAuth } from "../../lib/auth";
-import { cachedSelect } from "../../lib/cache";
+import { cachedSelectResult } from "../../lib/cache";
 import { useOffline } from "../../lib/offline";
 import type { Tables } from "../../lib/database.types";
 import { Constants } from "../../lib/database.types";
 import { formatCurrency, formatDate, titleCase } from "../../lib/format";
 import { supabase } from "../../lib/supabase";
+import { operationError, readAllPages } from "../../lib/operationsQuery";
+import { localToday, positiveNumber, validCalendarDate } from "../../lib/maintenance";
 
 function notify(title: string, message: string) {
   Platform.OS === "web"
@@ -35,6 +37,10 @@ const STATUSES = Constants.public.Enums.asset_status;
 
 export default function Assets() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ filter?: string; propertyId?: string; unitId?: string; new?: string }>();
+  const [search, setSearch] = useState("");
+  const locationGeneration = useRef(0);
+  const [error, setError] = useState<string | null>(null);
   const { session } = useAuth();
   const { submitInsert } = useOffline();
   const [assets, setAssets] = useState<Asset[] | null>(null);
@@ -54,20 +60,21 @@ export default function Assets() {
 
   const load = useCallback(async () => {
     const [a, p] = await Promise.all([
-      cachedSelect<Asset[]>(
+      cachedSelectResult<Asset[]>(
         "assets",
-        supabase
+        readAllPages<Asset>((from, to) => supabase
           .from("assets")
-          .select("*, properties(name, currency), units(label)")
-          .order("created_at", { ascending: false }),
+          .select("*, properties!assets_property_id_owner_fk(name, currency), units!assets_unit_property_owner_fk(label)", { count: "exact" })
+          .order("created_at", { ascending: false }).order("id").range(from, to)),
       ),
-      cachedSelect<Tables<"properties">[]>(
+      cachedSelectResult<Tables<"properties">[]>(
         "properties_min",
         supabase.from("properties").select("*").order("name"),
       ),
     ]);
-    setAssets(a ?? []);
-    setProperties(p ?? []);
+    setAssets(a.data ?? []);
+    setProperties(p.data ?? []);
+    setError(a.error || p.error);
   }, []);
 
   useFocusEffect(
@@ -77,17 +84,24 @@ export default function Assets() {
   );
 
   async function pickProperty(pid: string) {
+    const ticket = ++locationGeneration.current;
     setPropertyId(pid);
     setUnitId(null);
-    const { data } = await supabase
+    setUnits([]);
+    const { data, error: e } = await supabase
       .from("units")
       .select("*")
       .eq("property_id", pid)
       .order("label");
+    if (ticket !== locationGeneration.current) return;
+    if (e) { notify("Could not load units", e.message); return; }
     setUnits(data ?? []);
   }
 
+  useEffect(() => { if (params.new === "1" && params.propertyId) { void pickProperty(params.propertyId).then(() => setUnitId(params.unitId ?? null)); setAdding(true); } }, [params.new, params.propertyId, params.unitId]);
+
   function resetForm() {
+    locationGeneration.current++;
     setName("");
     setCategory("");
     setPropertyId(null);
@@ -99,7 +113,9 @@ export default function Assets() {
   }
 
   async function save() {
-    if (!name.trim() || !propertyId || !session) return;
+    if (!name.trim() || !propertyId || !session) { notify("Missing details", "Enter a name and choose a property."); return; }
+    try { if (warranty && !validCalendarDate(warranty)) throw new Error("Choose a valid warranty date in YYYY-MM-DD format."); if (life && !Number.isSafeInteger(positiveNumber(life, "Expected life"))) throw new Error("Expected life must be a whole number of years."); }
+    catch (e) { notify("Check asset details", operationError(e)); return; }
     setSaving(true);
     try {
       const result = await submitInsert("assets", {
@@ -123,19 +139,22 @@ export default function Assets() {
         load();
       }
     } catch (e) {
-      notify("Could not save", e instanceof Error ? e.message : String(e));
+      notify("Could not save", operationError(e));
     } finally {
       setSaving(false);
     }
   }
 
   if (!assets) return <Loading />;
+  const visible = assets.filter(a => (!params.propertyId || a.property_id === params.propertyId) && `${a.name} ${a.category ?? ""} ${a.properties?.name ?? ""} ${a.units?.label ?? ""}`.toLowerCase().includes(search.toLowerCase()) && (params.filter !== "warranty" || (!!a.warranty_expiry && a.warranty_expiry >= localToday() && a.warranty_expiry <= new Date(Date.now() + 60 * 86400000).toISOString().slice(0, 10))));
 
   return (
     <Screen>
       <Stack.Screen options={{ headerShown: false }} />
       <View className="flex-row items-center px-4 pb-2 pt-2">
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Back"
           onPress={() =>
             router.canGoBack() ? router.back() : router.replace("/more")
           }
@@ -144,7 +163,7 @@ export default function Assets() {
           <Ionicons name="chevron-back" size={24} color="#0f766e" />
         </Pressable>
         <Text className="flex-1 text-xl font-bold text-slate-900">Assets</Text>
-        <Pressable onPress={() => router.push("/scan")} className="p-2">
+        <Pressable accessibilityRole="button" accessibilityLabel="Scan asset QR tag" onPress={() => router.push("/scan")} className="p-2">
           <Ionicons name="qr-code-outline" size={22} color="#0f766e" />
         </Pressable>
         <Pressable
@@ -156,14 +175,14 @@ export default function Assets() {
         </Pressable>
       </View>
 
-      <ScrollView contentContainerClassName="px-5 pb-10">
-        {assets.length === 0 ? (
+      <ScrollView contentContainerClassName="px-5 pb-10"><Field label="Search assets" value={search} onChangeText={setSearch} placeholder="Name, property, unit or category" />{error ? <><Text accessibilityRole="alert" className="mb-2 text-red-700">{error}</Text><Button title="Retry" variant="secondary" onPress={() => void load()} /></> : null}{params.filter === "warranty" ? <View className="mb-3"><Button title="Show all assets" variant="secondary" onPress={() => router.setParams({ filter: "all" })} /></View> : null}
+        {visible.length === 0 && !error ? (
           <EmptyState
             title="No assets tracked"
             subtitle="Track appliances, HVAC, and fixtures — make, warranty, and expected life for replacement forecasting."
           />
         ) : (
-          assets.map((a) => (
+          visible.map((a) => (
             <Card key={a.id} onPress={() => router.push(`/asset/${a.id}`)}>
               <View className="flex-row items-center justify-between">
                 <Text className="flex-1 pr-2 text-base font-semibold text-slate-900">
@@ -194,7 +213,7 @@ export default function Assets() {
         )}
       </ScrollView>
 
-      <Modal visible={adding} animationType="slide" transparent>
+      <Modal visible={adding} onRequestClose={() => !saving && setAdding(false)} animationType="slide" transparent>
         <View className="flex-1 justify-end bg-black/40">
           <ScrollView
             className="max-h-[88%] rounded-t-3xl bg-slate-50"

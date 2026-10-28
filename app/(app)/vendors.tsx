@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Stack, useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
-import { Modal, Pressable, ScrollView, Text, View } from "react-native";
+import { Linking, Modal, Pressable, ScrollView, Text, View } from "react-native";
 
 import {
   Button,
@@ -12,13 +12,17 @@ import {
   Screen,
 } from "../../components/ui";
 import { useAuth } from "../../lib/auth";
-import { cachedSelect } from "../../lib/cache";
+import { cachedSelectResult } from "../../lib/cache";
 import { confirmAction } from "../../lib/confirm";
 import type { Tables } from "../../lib/database.types";
 import { supabase } from "../../lib/supabase";
+import { operationError, readAllPages } from "../../lib/operationsQuery";
+import { notify } from "../../lib/feedback";
 
 export default function Vendors() {
   const router = useRouter();
+  const [search, setSearch] = useState("");
+  const [error, setError] = useState<string | null>(null);
   const { session } = useAuth();
   const [vendors, setVendors] = useState<Tables<"vendors">[] | null>(null);
   const [open, setOpen] = useState(false);
@@ -33,11 +37,12 @@ export default function Vendors() {
   const [notes, setNotes] = useState("");
 
   const load = useCallback(async () => {
-    const data = await cachedSelect<Tables<"vendors">[]>(
+    const result = await cachedSelectResult<Tables<"vendors">[]>(
       "vendors",
-      supabase.from("vendors").select("*").order("name"),
+      readAllPages<Tables<"vendors">>((from, to) => supabase.from("vendors").select("*", { count: "exact" }).order("name").order("id").range(from, to)),
     );
-    setVendors(data ?? []);
+    setVendors(result.data ?? []);
+    setError(result.error);
   }, []);
 
   useFocusEffect(
@@ -73,27 +78,17 @@ export default function Vendors() {
   }
 
   async function save() {
-    if (!name.trim() || !session) return;
-    setSaving(true);
-    const payload = {
-      name: name.trim(),
-      trade: trade.trim() || null,
-      phone: phone.trim() || null,
-      email: email.trim() || null,
-      company: company.trim() || null,
-      notes: notes.trim() || null,
-    };
-    const { error } = editingId
-      ? await supabase.from("vendors").update(payload).eq("id", editingId)
-      : await supabase
-          .from("vendors")
-          .insert({ ...payload, owner_id: session.user.id });
-    setSaving(false);
-    if (!error) {
-      setOpen(false);
-      reset();
-      load();
-    }
+    if (!session || saving) return;
+    try {
+      if (!name.trim()) throw new Error("Enter the vendor name.");
+      if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) throw new Error("Enter a valid email address.");
+      setSaving(true);
+      const payload = { name: name.trim(), trade: trade.trim() || null, phone: phone.trim() || null, email: email.trim() || null, company: company.trim() || null, notes: notes.trim() || null };
+      const { error: e } = editingId ? await supabase.from("vendors").update(payload).eq("id", editingId).select("id").single() : await supabase.from("vendors").insert({ ...payload, owner_id: session.user.id }).select("id").single();
+      if (e) throw e;
+      setOpen(false); reset(); await load();
+    } catch (e) { notify("Could not save vendor", operationError(e)); }
+    finally { setSaving(false); }
   }
 
   function remove() {
@@ -102,7 +97,8 @@ export default function Vendors() {
       "Delete vendor",
       "This removes the vendor. Work orders keep their history but are unassigned. This cannot be undone.",
       async () => {
-        await supabase.from("vendors").delete().eq("id", editingId);
+        const { error: e } = await supabase.from("vendors").delete().eq("id", editingId).select("id").single();
+        if (e) { notify("Could not delete vendor", e.message); return; }
         setOpen(false);
         reset();
         load();
@@ -111,12 +107,15 @@ export default function Vendors() {
   }
 
   if (!vendors) return <Loading />;
+  const visible = vendors.filter(v => `${v.name} ${v.trade ?? ""} ${v.company ?? ""}`.toLowerCase().includes(search.toLowerCase()));
 
   return (
     <Screen>
       <Stack.Screen options={{ headerShown: false }} />
       <View className="flex-row items-center px-4 pb-2 pt-2">
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Back"
           onPress={() =>
             router.canGoBack() ? router.back() : router.replace("/more")
           }
@@ -136,14 +135,14 @@ export default function Vendors() {
         </Pressable>
       </View>
 
-      <ScrollView contentContainerClassName="px-5 pb-10">
-        {vendors.length === 0 ? (
+      <ScrollView contentContainerClassName="px-5 pb-10"><Field label="Search vendors" value={search} onChangeText={setSearch} placeholder="Name, trade or company" />{error ? <><Text accessibilityRole="alert" className="mb-2 text-red-700">{error}</Text><Button title="Retry" variant="secondary" onPress={() => void load()} /></> : null}
+        {visible.length === 0 && !error ? (
           <EmptyState
             title="No vendors"
             subtitle="Add the plumbers, electricians and technicians you dispatch to jobs."
           />
         ) : (
-          vendors.map((v) => (
+          visible.map((v) => (
             <Card key={v.id} onPress={() => openEdit(v)}>
               <View className="flex-row items-center justify-between">
                 <Text className="flex-1 pr-2 text-base font-semibold text-slate-900">
@@ -163,7 +162,7 @@ export default function Vendors() {
         )}
       </ScrollView>
 
-      <Modal visible={open} animationType="slide" transparent>
+      <Modal visible={open} onRequestClose={() => !saving && setOpen(false)} animationType="slide" transparent>
         <View className="flex-1 justify-end bg-black/40">
           <ScrollView
             className="max-h-[88%] rounded-t-3xl bg-slate-50"
@@ -172,6 +171,7 @@ export default function Vendors() {
             <Text className="mb-4 text-xl font-bold text-slate-900">
               {editingId ? "Edit vendor" : "New vendor"}
             </Text>
+            {editingId ? <View className="mb-3 flex-row gap-2">{phone ? <Button title="Call vendor" variant="secondary" onPress={() => { void Linking.openURL(`tel:${phone.replace(/[^+0-9]/g, "")}`).catch(() => notify("Could not call", "Use the phone number below.")); }} /> : null}{email ? <Button title="Email vendor" variant="secondary" onPress={() => { void Linking.openURL(`mailto:${encodeURIComponent(email)}`).catch(() => notify("Could not email", "Use the email address below.")); }} /> : null}</View> : null}
             <Field label="Name" value={name} onChangeText={setName} placeholder="e.g. Island Plumbing Co." />
             <Field label="Trade" value={trade} onChangeText={setTrade} placeholder="Plumber, Electrician…" />
             <Field label="Phone" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />

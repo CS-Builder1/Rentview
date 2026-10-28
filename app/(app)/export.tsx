@@ -8,6 +8,8 @@ import { exportText, toCsv } from "../../lib/csv";
 import type { Tables } from "../../lib/database.types";
 import { titleCase } from "../../lib/format";
 import { supabase } from "../../lib/supabase";
+import { totalsByCurrency } from "../../lib/dashboard";
+import { operationError, readAllPages } from "../../lib/operationsQuery";
 
 type Period = "this_year" | "last_year" | "all";
 
@@ -40,10 +42,12 @@ export default function ExportPacket() {
   const [propertyId, setPropertyId] = useState<string | null>(null); // null = all
   const [period, setPeriod] = useState<Period>("this_year");
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const { data } = await supabase.from("properties").select("*").order("name");
-    setProperties(data ?? []);
+    const result = await readAllPages<Tables<"properties">>((from, to) => supabase.from("properties").select("*", { count: "exact" }).order("name").order("id").range(from, to));
+    setProperties(result.data ?? []);
+    setError(result.error ? operationError(result.error) : null);
   }, []);
 
   useFocusEffect(
@@ -59,14 +63,15 @@ export default function ExportPacket() {
       let q = supabase
         .from("expenses")
         .select(
-          "incurred_on, amount, currency, category, description, properties(name), units(label), vendors(name)",
+          "incurred_on, amount, currency, category, description, properties!expenses_property_id_owner_fk(name), units!expenses_unit_property_owner_fk(label), vendors!expenses_vendor_id_owner_fk(name)",
+          { count: "exact" },
         )
-        .order("incurred_on", { ascending: true });
+        .order("incurred_on", { ascending: true }).order("id");
       if (propertyId) q = q.eq("property_id", propertyId);
       if (bounds.start) q = q.gte("incurred_on", bounds.start);
       if (bounds.end) q = q.lte("incurred_on", bounds.end);
 
-      const { data, error } = await q;
+      const { data, error } = await readAllPages((from, to) => q.range(from, to));
       if (error) throw error;
       const rows = (data ?? []) as unknown as Array<{
         incurred_on: string;
@@ -106,9 +111,7 @@ export default function ExportPacket() {
       ]);
 
       // Totals per currency appended after a blank row.
-      const totals = new Map<string, number>();
-      for (const r of rows)
-        totals.set(r.currency, (totals.get(r.currency) ?? 0) + Number(r.amount));
+      const totals = Object.entries(totalsByCurrency(rows));
       const totalRows: (string | number)[][] = [[]];
       for (const [cur, total] of totals)
         totalRows.push(["", "", "", "", "", `Total (${cur})`, total.toFixed(2), cur]);
@@ -151,6 +154,7 @@ export default function ExportPacket() {
       </View>
 
       <ScrollView contentContainerClassName="px-5 pb-10">
+        {error ? <Card><Text accessibilityRole="alert" className="mb-2 text-red-700">{error}</Text><Button title="Retry" onPress={() => void load()} /></Card> : null}
         <Text className="mb-4 text-slate-500">
           Export expenses as a CSV to share with your accountant. Choose a
           property and period.

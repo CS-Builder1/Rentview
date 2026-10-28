@@ -1,249 +1,84 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect } from "expo-router";
+import { Href, useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import { RefreshControl, ScrollView, Text, View } from "react-native";
 
-import { Card, Loading, Screen } from "../../../components/ui";
-import { cacheGet, cacheSet } from "../../../lib/cache";
-import { formatCurrency, formatDate } from "../../../lib/format";
+import { Button, Card, Loading, Screen } from "../../../components/ui";
+import { cachedSelectResult } from "../../../lib/cache";
+import { requiredCount, totalsByCurrency } from "../../../lib/dashboard";
+import { formatCurrency } from "../../../lib/format";
+import { localToday } from "../../../lib/maintenance";
+import { operationError, readAllPages } from "../../../lib/operationsQuery";
 import { supabase } from "../../../lib/supabase";
 
-type Summary = {
-  properties: number;
-  units: number;
-  openWorkOrders: number;
-  ytdSpend: number;
-};
+type Attention = { key: string; icon: keyof typeof Ionicons.glyphMap; text: string; href: Href };
+type Snapshot = { properties: number; units: number; jobs: number; spending: Record<string, number>; attention: Attention[] };
 
-type Alert = {
-  key: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  text: string;
-  tone: "amber" | "red" | "slate";
-};
-
-const SOON_DAYS = 60;
+async function fetchSnapshot(): Promise<{ data: Snapshot | null; error: unknown }> {
+  try {
+    const today = localToday();
+    const yearStart = `${today.slice(0, 4)}-01-01`;
+    const soon = localToday(new Date(Date.now() + 60 * 86400000));
+    const [properties, units, jobs, expenses, urgent, overdue, maintenance, inventory, warranties, requests] = await Promise.all([
+      supabase.from("properties").select("id", { count: "exact", head: true }),
+      supabase.from("units").select("id", { count: "exact", head: true }),
+      supabase.from("work_orders").select("id", { count: "exact", head: true }).in("status", ["open", "in_progress", "on_hold"]),
+      readAllPages<{ amount: number; currency: string }>((from, to) => supabase.from("expenses").select("amount,currency", { count: "exact" }).gte("incurred_on", yearStart).lte("incurred_on", today).order("id").range(from, to)),
+      supabase.from("work_orders").select("id", { count: "exact", head: true }).eq("priority", "urgent").in("status", ["open", "in_progress", "on_hold"]),
+      supabase.from("work_orders").select("id", { count: "exact", head: true }).lt("due_date", today).in("status", ["open", "in_progress", "on_hold"]),
+      supabase.from("maintenance_schedules").select("id", { count: "exact", head: true }).eq("is_active", true).lte("next_due", today),
+      readAllPages<{ quantity: number; low_stock_threshold: number | null }>((from, to) => supabase.from("inventory_items").select("quantity,low_stock_threshold", { count: "exact" }).not("low_stock_threshold", "is", null).order("id").range(from, to)),
+      supabase.from("assets").select("id", { count: "exact", head: true }).gte("warranty_expiry", today).lte("warranty_expiry", soon),
+      supabase.from("maintenance_requests").select("id", { count: "exact", head: true }).eq("status", "submitted"),
+    ]);
+    if (expenses.error) throw expenses.error;
+    if (inventory.error) throw inventory.error;
+    const attention: Attention[] = [];
+    const add = (key: string, count: number, text: string, icon: Attention["icon"], href: Href) => { if (count) attention.push({ key, text: `${count} ${text}`, icon, href }); };
+    add("requests", requiredCount(requests), "new tenant requests to triage", "chatbubble-ellipses", "/requests?filter=submitted");
+    add("urgent", requiredCount(urgent), "urgent jobs", "alert-circle", "/work-orders?filter=urgent");
+    add("overdue", requiredCount(overdue), "overdue jobs", "time-outline", "/work-orders?filter=overdue");
+    add("maintenance", requiredCount(maintenance), "maintenance tasks due", "calendar", "/maintenance?filter=due");
+    add("stock", (inventory.data ?? []).filter(row => Number(row.quantity) <= Number(row.low_stock_threshold)).length, "items low on stock", "file-tray", "/inventory?filter=low");
+    add("warranties", requiredCount(warranties), "warranties expiring within 60 days", "shield-checkmark", "/assets?filter=warranty");
+    return { data: { properties: requiredCount(properties), units: requiredCount(units), jobs: requiredCount(jobs), spending: totalsByCurrency(expenses.data ?? []), attention }, error: null };
+  } catch (error) { return { data: null, error }; }
+}
 
 export default function Dashboard() {
-  const [summary, setSummary] = useState<Summary | null>(null);
-  const [alerts, setAlerts] = useState<Alert[]>([]);
-  const [refreshing, setRefreshing] = useState(false);
-
+  const router = useRouter();
+  const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [stale, setStale] = useState(false);
   const load = useCallback(async () => {
-    const now = new Date();
-    const yearStart = `${now.getFullYear()}-01-01`;
-    const today = now.toISOString().slice(0, 10);
-    const soon = new Date(now.getTime() + SOON_DAYS * 86400000)
-      .toISOString()
-      .slice(0, 10);
-
-    try {
-    const [
-      props,
-      units,
-      openWos,
-      expenses,
-      urgentWos,
-      dueSched,
-      inventory,
-      warranties,
-      newRequests,
-    ] = await Promise.all([
-        supabase.from("properties").select("id", { count: "exact", head: true }),
-        supabase.from("units").select("id", { count: "exact", head: true }),
-        supabase
-          .from("work_orders")
-          .select("id", { count: "exact", head: true })
-          .in("status", ["open", "in_progress", "on_hold"]),
-        supabase.from("expenses").select("amount").gte("incurred_on", yearStart),
-        supabase
-          .from("work_orders")
-          .select("id", { count: "exact", head: true })
-          .eq("priority", "urgent")
-          .in("status", ["open", "in_progress", "on_hold"]),
-        supabase
-          .from("maintenance_schedules")
-          .select("id", { count: "exact", head: true })
-          .eq("is_active", true)
-          .not("next_due", "is", null)
-          .lte("next_due", today),
-        supabase
-          .from("inventory_items")
-          .select("quantity, low_stock_threshold")
-          .not("low_stock_threshold", "is", null),
-        supabase
-          .from("assets")
-          .select("id", { count: "exact", head: true })
-          .not("warranty_expiry", "is", null)
-          .gte("warranty_expiry", today)
-          .lte("warranty_expiry", soon),
-        supabase
-          .from("maintenance_requests")
-          .select("id", { count: "exact", head: true })
-          .eq("status", "submitted"),
-      ]);
-
-    const ytdSpend = (expenses.data ?? []).reduce(
-      (sum, row) => sum + Number(row.amount ?? 0),
-      0,
-    );
-    const lowStock = (inventory.data ?? []).filter(
-      (i) => Number(i.quantity) <= Number(i.low_stock_threshold),
-    ).length;
-
-    const nextSummary: Summary = {
-      properties: props.count ?? 0,
-      units: units.count ?? 0,
-      openWorkOrders: openWos.count ?? 0,
-      ytdSpend,
-    };
-    setSummary(nextSummary);
-
-    const next: Alert[] = [];
-    if ((newRequests.count ?? 0) > 0)
-      next.push({
-        key: "requests",
-        icon: "chatbubble-ellipses",
-        tone: "red",
-        text: `${newRequests.count} new tenant request${newRequests.count === 1 ? "" : "s"} to triage`,
-      });
-    if ((urgentWos.count ?? 0) > 0)
-      next.push({
-        key: "urgent",
-        icon: "alert-circle",
-        tone: "red",
-        text: `${urgentWos.count} urgent work order${urgentWos.count === 1 ? "" : "s"} open`,
-      });
-    if ((dueSched.count ?? 0) > 0)
-      next.push({
-        key: "maint",
-        icon: "calendar",
-        tone: "amber",
-        text: `${dueSched.count} maintenance task${dueSched.count === 1 ? "" : "s"} due`,
-      });
-    if (lowStock > 0)
-      next.push({
-        key: "stock",
-        icon: "file-tray",
-        tone: "amber",
-        text: `${lowStock} item${lowStock === 1 ? "" : "s"} low on stock`,
-      });
-    if ((warranties.count ?? 0) > 0)
-      next.push({
-        key: "warranty",
-        icon: "shield-checkmark",
-        tone: "slate",
-        text: `${warranties.count} warrant${warranties.count === 1 ? "y" : "ies"} expiring within ${SOON_DAYS} days`,
-      });
-    setAlerts(next);
-      await cacheSet("dashboard", { summary: nextSummary, alerts: next });
-    } catch {
-      // Offline (or a transient failure): fall back to the last snapshot.
-      const cached = await cacheGet<{ summary: Summary; alerts: Alert[] }>(
-        "dashboard",
-      );
-      setSummary(cached?.summary ?? {
-        properties: 0,
-        units: 0,
-        openWorkOrders: 0,
-        ytdSpend: 0,
-      });
-      setAlerts(cached?.alerts ?? []);
-    }
+    setLoading(true);
+    const result = await cachedSelectResult<Snapshot>("dashboard:v3", fetchSnapshot());
+    setSnapshot(result.data);
+    setStale(result.stale);
+    setError(result.error ? operationError(result.error) : null);
+    setLoading(false);
   }, []);
-
-  useFocusEffect(
-    useCallback(() => {
-      load();
-    }, [load]),
-  );
-
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await load();
-    setRefreshing(false);
-  }, [load]);
-
-  if (!summary) return <Loading />;
-
-  const tiles = [
-    { label: "Properties", value: String(summary.properties) },
-    { label: "Units", value: String(summary.units) },
-    { label: "Open work orders", value: String(summary.openWorkOrders) },
-    { label: "Spend this year", value: formatCurrency(summary.ytdSpend) },
-  ];
-
-  const toneColor = {
-    red: "text-red-600",
-    amber: "text-amber-600",
-    slate: "text-slate-600",
-  };
-
-  return (
-    <Screen>
-      <ScrollView
-        contentContainerClassName="px-5 pb-10"
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
-      >
-        <Text className="mb-1 mt-2 text-2xl font-bold text-slate-900">
-          Overview
-        </Text>
-        <Text className="mb-5 text-slate-500">Your portfolio at a glance.</Text>
-
-        <View className="flex-row flex-wrap justify-between">
-          {tiles.map((t) => (
-            <View key={t.label} className="mb-3 w-[48%]">
-              <Card>
-                <Text className="text-3xl font-bold text-brand">{t.value}</Text>
-                <Text className="mt-1 text-slate-500">{t.label}</Text>
-              </Card>
-            </View>
-          ))}
-        </View>
-
-        <Text className="mb-2 mt-3 text-sm font-semibold uppercase text-slate-400">
-          Needs attention
-        </Text>
-        {alerts.length === 0 ? (
-          <Card>
-            <View className="flex-row items-center">
-              <Ionicons name="checkmark-circle" size={20} color="#16a34a" />
-              <Text className="ml-2 text-slate-600">All clear — nothing pressing.</Text>
-            </View>
-          </Card>
-        ) : (
-          <Card>
-            {alerts.map((a, idx) => (
-              <View
-                key={a.key}
-                className={`flex-row items-center py-2 ${
-                  idx < alerts.length - 1 ? "border-b border-slate-100" : ""
-                }`}
-              >
-                <Ionicons
-                  name={a.icon}
-                  size={18}
-                  color={
-                    a.tone === "red"
-                      ? "#dc2626"
-                      : a.tone === "amber"
-                        ? "#d97706"
-                        : "#475569"
-                  }
-                />
-                <Text className={`ml-3 ${toneColor[a.tone]}`}>{a.text}</Text>
-              </View>
-            ))}
-          </Card>
-        )}
-
-        <Text className="mt-5 text-slate-400">
-          Pull down to refresh. Manage assets, inventory, maintenance and
-          expenses from the More tab.
-        </Text>
-      </ScrollView>
-    </Screen>
-  );
+  useFocusEffect(useCallback(() => { void load(); }, [load]));
+  if (loading && !snapshot) return <Loading />;
+  return <Screen><ScrollView contentContainerClassName="px-5 pb-10" refreshControl={<RefreshControl refreshing={loading} onRefresh={() => void load()} />}>
+    <Text className="mb-1 mt-2 text-2xl font-bold text-slate-900">Home</Text>
+    <Text className="mb-5 text-slate-500">What needs attention in your portfolio.</Text>
+    {error ? <Card><Text accessibilityRole="alert" className="mb-3 text-red-700">{stale ? "Showing the last saved snapshot. " : "The portfolio could not be loaded. "}{error}</Text><Button title="Retry" onPress={() => void load()} /></Card> : null}
+    {snapshot ? <>
+      <View className="flex-row flex-wrap justify-between">{[
+        { label: "Properties", value: snapshot.properties, href: "/properties" as Href },
+        { label: "Units", value: snapshot.units, href: "/properties" as Href },
+        { label: "Open jobs", value: snapshot.jobs, href: "/work-orders?filter=active" as Href },
+      ].map(tile => <View className="mb-2 w-[48%]" key={tile.label}><Card onPress={() => router.push(tile.href)}><Text className="text-3xl font-bold text-brand">{tile.value}</Text><Text className="text-slate-600">{tile.label}</Text></Card></View>)}</View>
+      {snapshot.properties === 0 && !error ? <Card><Text className="mb-2 text-lg font-semibold text-slate-900">Set up your first property</Text><Text className="mb-3 text-slate-600">Add a home, store or building, then its units. Next, invite a tenant or log your first maintenance job.</Text><Button title="Add a property" onPress={() => router.push("/properties?new=1")} /></Card> : null}
+      <Text className="mb-3 mt-3 text-lg font-semibold text-slate-900">Needs attention</Text>
+      {snapshot.attention.map(item => <Card key={item.key} onPress={() => router.push(item.href)}><View className="flex-row items-center"><Ionicons name={item.icon} size={22} color="#0f766e" /><Text className="ml-3 flex-1 text-slate-800">{item.text}</Text><Ionicons name="chevron-forward" size={18} color="#64748b" /></View></Card>)}
+      {!snapshot.attention.length && !error && !stale ? <Card><Text className="text-slate-600">All clear — no current alerts.</Text></Card> : null}
+      {!snapshot.attention.length && (error || stale) ? <Text className="mb-3 text-slate-600">Current alerts could not be confirmed. Open Work or retry.</Text> : null}
+      <Text className="mb-3 mt-4 text-lg font-semibold text-slate-900">Spend this year</Text>
+      <Card onPress={() => router.push("/expenses")}>{Object.entries(snapshot.spending).map(([currency, amount]) => <Text key={currency} className="text-xl font-bold text-brand">{formatCurrency(amount, currency)}</Text>)}{!Object.keys(snapshot.spending).length ? <Text className="text-slate-500">No expenses recorded this year.</Text> : null}<Text className="mt-2 text-slate-500">Totals stay separate for each currency.</Text></Card>
+    </> : null}
+    <View className="mt-4 gap-3"><Button title="Open Work" onPress={() => router.push("/work-orders")} /><Button title="View assets" variant="secondary" onPress={() => router.push("/assets")} /><Button title="Tenant requests" variant="secondary" onPress={() => router.push("/requests")} /></View>
+  </ScrollView></Screen>;
 }

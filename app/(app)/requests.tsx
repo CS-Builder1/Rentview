@@ -1,13 +1,14 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Stack, useFocusEffect, useRouter } from "expo-router";
+import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 
-import { Badge, Card, EmptyState, Loading, Screen } from "../../components/ui";
-import { cachedSelect } from "../../lib/cache";
+import { Badge, Button, Card, EmptyState, Field, Loading, Screen } from "../../components/ui";
+import { cachedSelectResult } from "../../lib/cache";
 import type { Tables } from "../../lib/database.types";
 import { formatDate, titleCase } from "../../lib/format";
 import { supabase } from "../../lib/supabase";
+import { readAllPages } from "../../lib/operationsQuery";
 
 type RequestRow = Tables<"maintenance_requests"> & {
   properties: { name: string } | null;
@@ -19,18 +20,22 @@ const OPEN_STATUSES = ["submitted", "acknowledged", "in_progress"] as const;
 
 export default function Requests() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ filter?: string; propertyId?: string }>();
+  const [search, setSearch] = useState("");
+  const [error, setError] = useState<string | null>(null);
   const [requests, setRequests] = useState<RequestRow[] | null>(null);
-  const [showAll, setShowAll] = useState(false);
+  const [showAll, setShowAll] = useState(params.filter === "all");
 
   const load = useCallback(async () => {
-    const data = await cachedSelect<RequestRow[]>(
+    const result = await cachedSelectResult<RequestRow[]>(
       "requests",
-      supabase
+      readAllPages<RequestRow>((from, to) => supabase
         .from("maintenance_requests")
-        .select("*, properties(name), units(label)")
-        .order("created_at", { ascending: false }),
+        .select("*, properties!maintenance_requests_property_id_owner_fk(name), units!maintenance_requests_unit_property_owner_fk(label)", { count: "exact" })
+        .order("created_at", { ascending: false }).order("id").range(from, to)),
     );
-    setRequests(data ?? []);
+    setError(result.error);
+    setRequests(result.data ?? []);
   }, []);
 
   useFocusEffect(
@@ -44,15 +49,20 @@ export default function Requests() {
   const openCount = requests.filter((r) =>
     (OPEN_STATUSES as readonly string[]).includes(r.status),
   ).length;
-  const visible = showAll
-    ? requests
-    : requests.filter((r) => (OPEN_STATUSES as readonly string[]).includes(r.status));
+  const visible = requests.filter((r) =>
+    (showAll || (OPEN_STATUSES as readonly string[]).includes(r.status)) &&
+    (params.filter !== "submitted" || r.status === "submitted") &&
+    (!params.propertyId || r.property_id === params.propertyId) &&
+    `${r.title} ${r.properties?.name ?? ""} ${r.units?.label ?? ""}`.toLowerCase().includes(search.toLowerCase())
+  ).sort((a, b) => Number(b.urgency === "urgent") - Number(a.urgency === "urgent") || a.created_at.localeCompare(b.created_at));
 
   return (
     <Screen>
       <Stack.Screen options={{ headerShown: false }} />
       <View className="flex-row items-center px-4 pb-2 pt-2">
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Back"
           onPress={() =>
             router.canGoBack() ? router.back() : router.replace("/more")
           }
@@ -65,6 +75,7 @@ export default function Requests() {
         </Text>
       </View>
 
+      <View className="px-5"><Field label="Search requests" value={search} onChangeText={setSearch} placeholder="Title, property or unit" />{error ? <><Text accessibilityRole="alert" className="mb-2 text-red-700">{error}</Text><Button title="Retry" variant="secondary" onPress={() => void load()} /></> : null}</View>
       <View className="flex-row px-5 pb-3">
         {[
           { key: false, label: `Open (${openCount})` },
@@ -72,7 +83,7 @@ export default function Requests() {
         ].map((tab) => (
           <Pressable
             key={String(tab.key)}
-            onPress={() => setShowAll(tab.key)}
+            onPress={() => { setShowAll(tab.key); if (params.filter === "submitted") router.setParams({ filter: "active" }); }}
             className={`mr-2 rounded-full border px-3 py-1.5 ${
               showAll === tab.key
                 ? "border-brand bg-brand"
@@ -91,7 +102,7 @@ export default function Requests() {
       </View>
 
       <ScrollView contentContainerClassName="px-5 pb-10">
-        {visible.length === 0 ? (
+        {visible.length === 0 && !error ? (
           <EmptyState
             title={showAll ? "No requests yet" : "Nothing open"}
             subtitle={
