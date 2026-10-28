@@ -1,0 +1,410 @@
+[
+  {
+    "table": "properties",
+    "policy": "owner_select_properties",
+    "column": "owner_id",
+    "command": "r"
+  },
+  {
+    "table": "properties",
+    "policy": "owner_insert_properties",
+    "column": "owner_id",
+    "command": "a"
+  },
+  {
+    "table": "properties",
+    "policy": "owner_update_properties",
+    "column": "owner_id",
+    "command": "w"
+  },
+  {
+    "table": "properties",
+    "policy": "owner_delete_properties",
+    "column": "owner_id",
+    "command": "d"
+  },
+  {
+    "table": "units",
+    "policy": "owner_select_units",
+    "column": "owner_id",
+    "command": "r"
+  },
+  {
+    "table": "units",
+    "policy": "owner_insert_units",
+    "column": "owner_id",
+    "command": "a"
+  },
+  {
+    "table": "units",
+    "policy": "owner_update_units",
+    "column": "owner_id",
+    "command": "w"
+  },
+  {
+    "table": "units",
+    "policy": "owner_delete_units",
+    "column": "owner_id",
+    "command": "d"
+  },
+  {
+    "table": "leases",
+    "policy": "owner_select_leases",
+    "column": "owner_id",
+    "command": "r"
+  },
+  {
+    "table": "leases",
+    "policy": "owner_insert_leases",
+    "column": "owner_id",
+    "command": "a"
+  },
+  {
+    "table": "leases",
+    "policy": "owner_update_leases",
+    "column": "owner_id",
+    "command": "w"
+  },
+  {
+    "table": "leases",
+    "policy": "owner_delete_leases",
+    "column": "owner_id",
+    "command": "d"
+  },
+  {
+    "table": "vendors",
+    "policy": "owner_select_vendors",
+    "column": "owner_id",
+    "command": "r"
+  },
+  {
+    "table": "vendors",
+    "policy": "owner_insert_vendors",
+    "column": "owner_id",
+    "command": "a"
+  },
+  {
+    "table": "vendors",
+    "policy": "owner_update_vendors",
+    "column": "owner_id",
+    "command": "w"
+  },
+  {
+    "table": "vendors",
+    "policy": "owner_delete_vendors",
+    "column": "owner_id",
+    "command": "d"
+  },
+  {
+    "table": "assets",
+    "policy": "owner_select_assets",
+    "column": "owner_id",
+    "command": "r"
+  },
+  {
+    "table": "assets",
+    "policy": "owner_insert_assets",
+    "column": "owner_id",
+    "command": "a"
+  },
+  {
+    "table": "assets",
+    "policy": "owner_update_assets",
+    "column": "owner_id",
+    "command": "w"
+  },
+  {
+    "table": "assets",
+    "policy": "owner_delete_assets",
+    "column": "owner_id",
+    "command": "d"
+  },
+  {
+    "table": "work_orders",
+    "policy": "owner_select_work_orders",
+    "column": "owner_id",
+    "command": "r"
+  },
+  {
+    "table": "work_orders",
+    "policy": "owner_insert_work_orders",
+    "column": "owner_id",
+    "command": "a"
+  },
+  {
+    "table": "work_orders",
+    "policy": "owner_update_work_orders",
+    "column": "owner_id",
+    "command": "w"
+  },
+  {
+    "table": "work_orders",
+    "policy": "owner_delete_work_orders",
+    "column": "owner_id",
+    "command": "d"
+  },
+  {
+    "table": "inventory_items",
+    "policy": "owner_select_inventory_items",
+    "column": "owner_id",
+    "command": "r"
+  },
+  {
+    "table": "inventory_items",
+    "policy": "owner_insert_inventory_items",
+    "column": "owner_id",
+    "command": "a"
+  },
+  {
+    "table": "inventory_items",
+    "policy": "owner_update_inventory_items",
+    "column": "owner_id",
+    "command": "w"
+  },
+  {
+    "table": "inventory_items",
+    "policy": "owner_delete_inventory_items",
+    "column": "owner_id",
+    "command": "d"
+  },
+  {
+    "table": "work_order_parts",
+    "policy": "owner_select_work_order_parts",
+    "column": "owner_id",
+    "command": "r"
+  },
+  {
+    "table": "work_order_parts",
+    "policy": "owner_insert_work_order_parts",
+    "column": "owner_id",
+    "command": "a"
+  },
+  {
+    "table": "work_order_parts",
+    "policy": "owner_update_work_order_parts",
+    "column": "owner_id",
+    "command": "w"
+  },
+  {
+    "table": "work_order_parts",
+    "policy": "owner_delete_work_order_parts",
+    "column": "owner_id",
+    "command": "d"
+  },
+  {
+    "table": "expenses",
+    "policy": "owner_select_expenses",
+    "column": "owner_id",
+    "command": "r"
+  },
+  {
+    "table": "expenses",
+    "policy": "owner_insert_expenses",
+    "column": "owner_id",
+    "command": "a"
+  },
+  {
+    "table": "expenses",
+    "policy": "owner_update_expenses",
+    "column": "owner_id",
+    "command": "w"
+  },
+  {
+    "table": "expenses",
+    "policy": "owner_delete_expenses",
+    "column": "owner_id",
+    "command": "d"
+  },
+  {
+    "table": "tasks",
+    "policy": "owner_select_tasks",
+    "column": "owner_id",
+    "command": "r"
+  },
+  {
+    "table": "tasks",
+    "policy": "owner_insert_tasks",
+    "column": "owner_id",
+    "command": "a"
+  },
+  {
+    "table": "tasks",
+    "policy": "owner_update_tasks",
+    "column": "owner_id",
+    "command": "w"
+  },
+  {
+    "table": "tasks",
+    "policy": "owner_delete_tasks",
+    "column": "owner_id",
+    "command": "d"
+  },
+  {
+    "table": "maintenance_schedules",
+    "policy": "owner_select_maintenance_schedules",
+    "column": "owner_id",
+    "command": "r"
+  },
+  {
+    "table": "maintenance_schedules",
+    "policy": "owner_insert_maintenance_schedules",
+    "column": "owner_id",
+    "command": "a"
+  },
+  {
+    "table": "maintenance_schedules",
+    "policy": "owner_update_maintenance_schedules",
+    "column": "owner_id",
+    "command": "w"
+  },
+  {
+    "table": "maintenance_schedules",
+    "policy": "owner_delete_maintenance_schedules",
+    "column": "owner_id",
+    "command": "d"
+  },
+  {
+    "table": "documents",
+    "policy": "owner_select_documents",
+    "column": "owner_id",
+    "command": "r"
+  },
+  {
+    "table": "documents",
+    "policy": "owner_insert_documents",
+    "column": "owner_id",
+    "command": "a"
+  },
+  {
+    "table": "documents",
+    "policy": "owner_update_documents",
+    "column": "owner_id",
+    "command": "w"
+  },
+  {
+    "table": "documents",
+    "policy": "owner_delete_documents",
+    "column": "owner_id",
+    "command": "d"
+  },
+  {
+    "table": "subscriptions",
+    "policy": "owner_select_subscriptions",
+    "column": "owner_id",
+    "command": "r"
+  },
+  {
+    "table": "profiles",
+    "policy": "profiles_select_self",
+    "column": "id",
+    "command": "r"
+  },
+  {
+    "table": "profiles",
+    "policy": "profiles_update_self",
+    "column": "id",
+    "command": "w"
+  },
+  {
+    "table": "profiles",
+    "policy": "profiles_insert_self",
+    "column": "id",
+    "command": "a"
+  },
+  {
+    "table": "tenant_invites",
+    "policy": "owner_select_tenant_invites",
+    "column": "owner_id",
+    "command": "r"
+  },
+  {
+    "table": "tenant_invites",
+    "policy": "owner_delete_tenant_invites",
+    "column": "owner_id",
+    "command": "d"
+  },
+  {
+    "table": "rent_payments",
+    "policy": "owner_select_rent_payments",
+    "column": "owner_id",
+    "command": "r"
+  },
+  {
+    "table": "rent_payments",
+    "policy": "owner_insert_rent_payments",
+    "column": "owner_id",
+    "command": "a"
+  },
+  {
+    "table": "rent_payments",
+    "policy": "owner_update_rent_payments",
+    "column": "owner_id",
+    "command": "w"
+  },
+  {
+    "table": "rent_payments",
+    "policy": "owner_delete_rent_payments",
+    "column": "owner_id",
+    "command": "d"
+  },
+  {
+    "table": "announcements",
+    "policy": "owner_select_announcements",
+    "column": "owner_id",
+    "command": "r"
+  },
+  {
+    "table": "announcements",
+    "policy": "owner_insert_announcements",
+    "column": "owner_id",
+    "command": "a"
+  },
+  {
+    "table": "announcements",
+    "policy": "owner_update_announcements",
+    "column": "owner_id",
+    "command": "w"
+  },
+  {
+    "table": "announcements",
+    "policy": "owner_delete_announcements",
+    "column": "owner_id",
+    "command": "d"
+  },
+  {
+    "table": "notification_prefs",
+    "policy": "own_update_notification_prefs",
+    "column": "user_id",
+    "command": "w"
+  },
+  {
+    "table": "push_tokens",
+    "policy": "own_select_push_tokens",
+    "column": "user_id",
+    "command": "r"
+  },
+  {
+    "table": "push_tokens",
+    "policy": "own_delete_push_tokens",
+    "column": "user_id",
+    "command": "d"
+  },
+  {
+    "table": "notification_prefs",
+    "policy": "own_select_notification_prefs",
+    "column": "user_id",
+    "command": "r"
+  },
+  {
+    "table": "notification_prefs",
+    "policy": "own_insert_notification_prefs",
+    "column": "user_id",
+    "command": "a"
+  },
+  {
+    "table": "notification_prefs",
+    "policy": "own_delete_notification_prefs",
+    "column": "user_id",
+    "command": "d"
+  }
+]
