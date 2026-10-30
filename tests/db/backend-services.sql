@@ -83,10 +83,14 @@ do $$ declare claim public.reminder_deliveries%rowtype; duplicate public.reminde
 end $$;
 
 do $$ declare f record; begin
- for f in select p.oid from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname in ('apply_billing_event','claim_notification_batch','finish_notification','claim_reminder','finish_reminder','due_reminder_owners','prepare_identity_deletion','owned_storage_paths','forget_deleted_uploads','dispatch_due_notifications','dispatch_due_reminders') loop
+ for f in select p.oid,p.proname,p.pronargs from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname in ('apply_billing_event','claim_notification_batch','finish_notification','claim_reminder','finish_reminder','due_reminder_owners','prepare_identity_deletion','owned_storage_paths','forget_deleted_uploads','dispatch_due_notifications','dispatch_due_reminders') loop
   assert not has_function_privilege('authenticated',f.oid,'execute'),'browser can call backend-only function';
   assert not has_function_privilege('anon',f.oid,'execute'),'anonymous can call backend-only function';
-  assert has_function_privilege('service_role',f.oid,'execute');
+  if f.proname in ('owned_storage_paths','forget_deleted_uploads') and f.pronargs=2 then
+   assert not has_function_privilege('service_role',f.oid,'execute'),'old cleanup helper bypasses worker claim';
+  else
+   assert has_function_privilege('service_role',f.oid,'execute');
+  end if;
  end loop;
  assert not has_table_privilege('authenticated','public.billing_subscription_states','select');
  assert not has_table_privilege('authenticated','public.notification_outbox','select');

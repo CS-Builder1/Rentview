@@ -18,6 +18,6 @@ Deno.serve(async req => {
     // records this verified event as unmatched without granting any access.
     const { data, error } = await admin.rpc("apply_billing_event", billingArguments(event));
     if (error) throw error; // No event is marked applied unless the same transaction updates access.
-    return json({ result: data }, data === "unmatched" ? 202 : 200);
+    return json({ result: data }, ["unmatched", "ambiguous"].includes(data) ? 202 : 200);
   } catch (error) { return errorResponse(error); }
 });

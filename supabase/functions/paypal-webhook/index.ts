@@ -28,6 +28,6 @@ Deno.serve(async req => {
     const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
     const { data, error } = await admin.rpc("apply_billing_event", billingArguments(event));
     if (error) throw error;
-    return json({ result: data }, data === "unmatched" ? 202 : 200);
+    return json({ result: data }, ["unmatched", "ambiguous"].includes(data) ? 202 : 200);
   } catch (error) { return errorResponse(error); }
 });

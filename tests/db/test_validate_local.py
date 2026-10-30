@@ -9,6 +9,7 @@ import sys
 import tempfile
 import unittest
 from unittest.mock import patch
+from types import SimpleNamespace
 
 
 DIRECTORY = Path(__file__).resolve().parent
@@ -33,10 +34,76 @@ class RunnerGuards(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "exactly one"):
                 RUNNER.reviewed_identity_source(root)
 
+    def test_followup_sources_require_exactly_one_each_and_reviewed_order(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            migrations = root / "supabase/migrations"
+            migrations.mkdir(parents=True)
+            with self.assertRaisesRegex(RuntimeError, "exactly one"):
+                RUNNER.reviewed_followup_sources(root)
+            expected = [migrations / name for name in (
+                "20261030110348_repair_review_operations.sql",
+                "20261030110358_reconcile_billing_safely.sql",
+                "20261030110404_notification_terminal_delivery.sql",
+                "20261030111719_identity_deletion_worker_claim.sql",
+            )]
+            for path in expected:
+                path.write_text("-- fixture")
+            self.assertEqual(RUNNER.reviewed_followup_sources(root), expected)
+            duplicate = migrations / "20261031110348_repair_review_operations.sql"
+            duplicate.write_text("-- ambiguous")
+            with self.assertRaisesRegex(RuntimeError, "exactly one"):
+                RUNNER.reviewed_followup_sources(root)
+            duplicate.unlink()
+            expected[0].rename(migrations / "20261031110348_repair_review_operations.sql")
+            with self.assertRaisesRegex(RuntimeError, "order changed"):
+                RUNNER.reviewed_followup_sources(root)
+
+    def test_unapproved_container_rejected_before_client_discovery(self):
+        with patch("concurrency.shutil.which", side_effect=AssertionError("No client discovery allowed")) as discover:
+            with self.assertRaisesRegex(RuntimeError, "unapproved database container"):
+                RUNNER.LocalDB("production-or-arbitrary-container")
+            discover.assert_not_called()
+
+    def test_expected_failure_requires_error_state_and_specific_gate_message(self):
+        database = RUNNER.LocalDB.__new__(RUNNER.LocalDB)
+        database.container = "supabase_db_rentview-review-followup"
+        database.prefix = ["source-only-fake-docker"]
+        database.env = {}
+        expected = "Legacy billing reconciliation required before migration"
+        for result in (
+            SimpleNamespace(returncode=0, stdout="", stderr="23514 " + expected),
+            SimpleNamespace(returncode=1, stdout="", stderr="42501 " + expected),
+            SimpleNamespace(returncode=1, stdout="", stderr="23514 unrelated constraint failure"),
+        ):
+            with patch("concurrency.subprocess.run", return_value=result):
+                with self.assertRaisesRegex(AssertionError, "Expected SQLSTATE 23514"):
+                    database.sql("source-only fake SQL", expected_state="23514", expected_message=expected)
+        result = SimpleNamespace(returncode=1, stdout="", stderr="23514 " + expected)
+        with patch("concurrency.subprocess.run", return_value=result):
+            self.assertEqual(database.sql("source-only fake SQL", expected_state="23514", expected_message=expected), "")
+
+    def test_storage_owner_method_keeps_exact_container_socket_and_fixed_role(self):
+        database = RUNNER.LocalDB.__new__(RUNNER.LocalDB)
+        database.container = "supabase_db_rentview-review-followup"
+        database.prefix = ["source-only-fake-docker", "--host=unix:///var/run/docker.sock"]
+        database.env = {}
+        result = SimpleNamespace(returncode=0, stdout="source-only", stderr="")
+        with patch("concurrency.subprocess.run", return_value=result) as execute:
+            self.assertEqual(database.sql_as_storage_owner("source-only SQL"), "source-only")
+            command = execute.call_args.args[0]
+            self.assertEqual(command[1], "--host=unix:///var/run/docker.sock")
+            self.assertEqual(command[4], "supabase_db_rentview-review-followup")
+            self.assertEqual(command[command.index("-U") + 1], "supabase_storage_admin")
+            self.assertEqual(command[command.index("-d") + 1], "postgres")
+            self.assertNotIn("SET ROLE", execute.call_args.kwargs["input"].upper())
+
     def fixture_reports(self):
         plan = ["baseline", "draft", "legacy", "identity", "rls", "regression"]
         report = {
             "draft_sha256": "draft-hash", "hosted_changes": False,
+            "runner_contract_version": 2, "container": "supabase_db_rentview-review-followup",
+            "followup_migrations": [{"path": "operations.sql", "sha256": "operations-hash"}],
             "identity_migration_path": "migration.sql", "identity_migration_sha256": "identity-hash",
             "validation_stage_plan": plan,
             "validation_input_sha256": {"fixture.sql": "fixture-hash"},
@@ -61,6 +128,9 @@ class RunnerGuards(unittest.TestCase):
             ("validation_stage_plan", ["baseline", "draft", "legacy", "regression"]),
             ("validation_input_sha256", {"fixture.sql": "changed-fixture"}),
             ("identity_migration_sha256", "changed-migration"),
+            ("followup_migrations", [{"path": "operations.sql", "sha256": "changed"}]),
+            ("runner_contract_version", 1),
+            ("container", "supabase_db_rentview-local-test"),
         ):
             with self.subTest(field=field):
                 report, previous, plan, setup = self.fixture_reports()
@@ -104,8 +174,10 @@ class RunnerGuards(unittest.TestCase):
         preflight = (DIRECTORY / "preflight.sql").read_text()
 
         class SourceOnlyDatabase:
-            def sql(self, statement):
-                statements.append(statement)
+            def __init__(self, container):
+                self.container = container
+            def sql(self, statement, expected_state=None, expected_message=None):
+                statements.append((statement, expected_state, expected_message))
                 if statement == fresh_guard:
                     return "true"
                 if statement == preflight:
@@ -114,6 +186,9 @@ class RunnerGuards(unittest.TestCase):
                         "maintenance_requests.lease_id ownership", "maintenance_requests.unit_id ownership", "maintenance_requests.property_id ownership",
                     ))
                 return "source-only fake execution; no SQL was sent"
+            def sql_as_storage_owner(self, statement, expected_state=None, expected_message=None):
+                statements.append((statement, expected_state or "supabase_storage_admin", expected_message))
+                return "source-only fake owner execution; no SQL was sent"
 
         with tempfile.TemporaryDirectory(prefix="rentview-runner-order-", dir="/workspace/scratch") as directory:
             output = Path(directory) / "results"
@@ -126,13 +201,39 @@ class RunnerGuards(unittest.TestCase):
             self.assertEqual(report["identity_migration_path"], str(identity.relative_to(root)))
             self.assertEqual(report["identity_migration_sha256"], RUNNER.hashlib.sha256(identity.read_bytes()).hexdigest())
             self.assertEqual([stage["name"] for stage in report["stages"]], report["validation_stage_plan"])
-            self.assertEqual(len(report["stages"]), 20)
-            legacy_position = statements.index((DIRECTORY / "legacy-check.sql").read_text())
-            identity_position = statements.index(identity.read_text())
-            regression_position = statements.index((DIRECTORY / "rls-performance.sql").read_text())
+            self.assertEqual(len(report["stages"]), 34)
+            self.assertEqual(report["container"], "supabase_db_rentview-review-followup")
+            self.assertEqual(report["runner_contract_version"], 2)
+            legacy_position = statements.index(((DIRECTORY / "legacy-check.sql").read_text(), None, None))
+            identity_position = statements.index((identity.read_text(), None, None))
+            regression_position = statements.index(((DIRECTORY / "rls-performance.sql").read_text(), None, None))
             self.assertLess(legacy_position, identity_position)
             self.assertLess(identity_position, regression_position)
             self.assertIn("tests/db/rls-performance.sql", report["validation_input_sha256"])
+            followups = RUNNER.reviewed_followup_sources(root)
+            positions = [statements.index((path.read_text(), None, None)) for path in followups]
+            self.assertEqual(positions, sorted(positions))
+            quota = root / "supabase/privileged/index_storage_owner_quota.sql"
+            wrong_owner_position = statements.index((quota.read_text(), "42501", "Run only as the actual Storage table owner; no changes were made"))
+            owner_position = statements.index((quota.read_text(), "supabase_storage_admin", None))
+            missing_index_position = statements.index((followups[0].read_text(), "55000", "Storage quota index owner maintenance required before review operations migration"))
+            self.assertLess(identity_position, missing_index_position)
+            self.assertLess(missing_index_position, wrong_owner_position)
+            self.assertLess(wrong_owner_position, owner_position)
+            self.assertLess(owner_position, positions[0])
+            self.assertLess(positions[-1], regression_position)
+            draft_statement = "begin;\n" + RUNNER.reviewed_sql_source(root).read_text() + "\ncommit;"
+            rejected_position = statements.index((draft_statement, "23514", "Legacy billing reconciliation required before migration"))
+            bootstrap = root / "supabase/privileged/prepare_legacy_billing_reconciliation.sql"
+            bootstrap_position = statements.index((bootstrap.read_text(), None, None))
+            stage_position = statements.index(((DIRECTORY / "legacy-billing-stage.sql").read_text(), None, None))
+            applied_position = statements.index((draft_statement, None, None))
+            self.assertLess(rejected_position, bootstrap_position)
+            self.assertLess(bootstrap_position, stage_position)
+            self.assertLess(stage_position, applied_position)
+            self.assertLess(applied_position, legacy_position)
+            for path in followups + [bootstrap, quota, DIRECTORY / "review-operations.sql", DIRECTORY / "billing-reconciliation.sql", DIRECTORY / "notification-delivery.sql", DIRECTORY / "deletion-worker.sql"]:
+                self.assertEqual(report["validation_input_sha256"][str(path.relative_to(root))], RUNNER.hashlib.sha256(path.read_bytes()).hexdigest())
 
 
 if __name__ == "__main__":

@@ -15,7 +15,8 @@ import uuid
 
 CONTAINER = "supabase_db_rentview-local-test"
 REPLAY_CONTAINER = "supabase_db_rentview-migration-replay"
-ALLOWED_CONTAINERS = frozenset((CONTAINER, REPLAY_CONTAINER))
+FOLLOWUP_CONTAINER = "supabase_db_rentview-review-followup"
+ALLOWED_CONTAINERS = frozenset((CONTAINER, REPLAY_CONTAINER, FOLLOWUP_CONTAINER))
 OWNER = "a1000000-0000-4000-8000-000000000001"
 PROPERTY = "a2000000-0000-4000-8000-000000000001"
 JOBS = [f"a3000000-0000-4000-8000-{i:012d}" for i in range(1, 4)]
@@ -43,15 +44,29 @@ class LocalDB:
         return self.prefix + ["exec", "--interactive", self.container, "psql", "--no-psqlrc", "--quiet",
                               "--tuples-only", "--no-align", "--set", "ON_ERROR_STOP=1", "-U", "postgres", "-d", "postgres"]
 
-    def sql(self, statement, expected_state=None):
-        result = subprocess.run(self.command(), env=self.env, input="\\set VERBOSITY verbose\nset plpgsql.check_asserts=on;\n" + statement,
+    def _execute_sql(self, command, statement, expected_state=None, expected_message=None):
+        result = subprocess.run(command, env=self.env, input="\\set VERBOSITY verbose\nset plpgsql.check_asserts=on;\n" + statement,
                                 capture_output=True, text=True, timeout=20)
         if expected_state:
-            if result.returncode == 0 or expected_state not in result.stderr:
+            if result.returncode == 0 or expected_state not in result.stderr or (expected_message is not None and expected_message not in result.stderr):
                 raise AssertionError(f"Expected SQLSTATE {expected_state}; exit={result.returncode}; {result.stderr[:1500]}")
         elif result.returncode:
             raise AssertionError(result.stderr[:1500])
         return result.stdout.strip()
+
+    def sql(self, statement, expected_state=None, expected_message=None):
+        return self._execute_sql(self.command(), statement, expected_state, expected_message)
+
+    def sql_as_storage_owner(self, statement, expected_state=None, expected_message=None):
+        """Fixed authorized local owner, not a caller-selected database role.
+
+        This connects as the actual platform Storage owner inside the already
+        allowlisted disposable container. It never SET ROLEs, grants privileges,
+        accepts credentials/URLs, or executes against a hosted target.
+        """
+        command = self.command()
+        command[command.index("-U") + 1] = "supabase_storage_admin"
+        return self._execute_sql(command, statement, expected_state, expected_message)
 
     def actor(self):
         return (f"begin; set local statement_timeout='12s'; set local role authenticated;\n"

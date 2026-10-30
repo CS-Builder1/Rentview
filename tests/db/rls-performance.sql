@@ -241,6 +241,10 @@ do $$ declare plan jsonb; begin
    where node->>'Parent Relationship'='InitPlan' and (node->>'Actual Loops')::int=1
      and ((node->'Output')::text like '%auth.uid()%' or (node->'Output')::text like '%request.jwt.claim.sub%')),
    'actual auth identity InitPlan executes once');
+ perform pg_temp.assert_true(exists(select 1 from pg_temp.plan_nodes(plan->0->'Plan') node
+   where node->>'Parent Relationship'='InitPlan' and (node->>'Actual Loops')::int=1
+     and (node->'Output')::text like '%current_account_is_active()%'),
+   'actual restrictive active-account InitPlan executes once');
  raise notice 'RLS analyzed plan evidence: %',plan;
 end $$;
 

@@ -15,6 +15,31 @@
 -- Auth deletion. Late external checkout after identity deletion requires provider
 -- reconciliation; backend cannot cancel a provider session it does not own.
 
+-- Fail before any trust/entitlement changes if legacy paid/provider-linked rows
+-- have no independently reviewed decision. The optional private ledger is created
+-- only by the operator bootstrap; old client-writable rows are never proof.
+do $$ declare unresolved bigint; begin
+  lock table public.subscriptions in share row exclusive mode;
+  if exists(select 1 from public.subscriptions where plan='pro' or provider_subscription_id is not null) then
+    if to_regclass('rentview_private.legacy_billing_reconciliation') is null then
+      raise exception 'Legacy billing reconciliation required before migration' using errcode='23514';
+    end if;
+    lock table rentview_private.legacy_billing_reconciliation in share mode;
+    if has_table_privilege('authenticated','rentview_private.legacy_billing_reconciliation','INSERT,UPDATE,DELETE,SELECT')
+       or has_table_privilege('anon','rentview_private.legacy_billing_reconciliation','INSERT,UPDATE,DELETE,SELECT') then
+      raise exception 'Legacy billing evidence ledger must be operator-only' using errcode='42501';
+    end if;
+    select count(*) into unresolved from public.subscriptions s
+      where (s.plan='pro' or s.provider_subscription_id is not null) and not exists(
+        select 1 from rentview_private.legacy_billing_reconciliation r
+        where r.owner_id=s.owner_id and r.legacy_snapshot=to_jsonb(s)
+          and r.decision in ('verified','rejected'));
+    if unresolved<>0 then
+      raise exception 'Legacy billing reconciliation required before migration (% unresolved accounts)',unresolved using errcode='23514';
+    end if;
+  end if;
+end $$;
+
 -- RentView: trusted ownership boundaries and atomic maintenance operations.
 -- Existing records are retained. NOT VALID constraints protect new writes while
 -- allowing administrators to inspect and repair any legacy inconsistency first.
@@ -909,11 +934,25 @@ create index on public.billing_subscription_states(owner_id);
 alter table public.billing_subscription_states enable row level security;
 revoke all on public.billing_subscription_states from public,anon,authenticated;
 grant all on public.billing_subscription_states to service_role;
--- Preserve already trusted provider linkage; legacy deliveries remain reprocessable.
-insert into public.billing_subscription_states(provider,subscription_id,owner_id,customer_id,plan,status,period_end,cancel_at_period_end,event_at,first_seen_at)
-select provider,provider_subscription_id,owner_id,provider_customer_id,plan,status,current_period_end,cancel_at_period_end,updated_at,created_at
-from public.subscriptions where provider_subscription_id is not null and billing_verified_at is not null
-on conflict do nothing;
+-- Backfill only independently verified operator evidence, never the newly
+-- added NULL column or client-supplied provider IDs. Rejected claims retain their
+-- original values solely in the private audit snapshot and receive Free access.
+do $$ begin
+ if to_regclass('rentview_private.legacy_billing_reconciliation') is not null then
+  insert into public.billing_subscription_states(provider,subscription_id,owner_id,customer_id,plan,status,period_end,cancel_at_period_end,event_at,first_seen_at)
+  select r.provider,r.subscription_id,r.owner_id,r.customer_id,r.plan,r.status,r.period_end,r.cancel_at_period_end,r.provider_updated_at,r.verified_at
+  from rentview_private.legacy_billing_reconciliation r join public.subscriptions s on s.owner_id=r.owner_id
+  where r.decision='verified' and r.legacy_snapshot=to_jsonb(s)-'billing_verified_at'
+  on conflict(provider,subscription_id) do nothing;
+  update public.subscriptions s set provider=r.provider,provider_subscription_id=r.subscription_id,
+    provider_customer_id=r.customer_id,plan=r.plan,status=r.status,current_period_end=r.period_end,
+    cancel_at_period_end=r.cancel_at_period_end,billing_verified_at=r.verified_at
+  from rentview_private.legacy_billing_reconciliation r where r.owner_id=s.owner_id and r.decision='verified' and r.legacy_snapshot=to_jsonb(s)-'billing_verified_at';
+  update public.subscriptions s set provider_subscription_id=null,provider_customer_id=null,
+    plan='free',status='expired',current_period_end=null,cancel_at_period_end=false
+  from rentview_private.legacy_billing_reconciliation r where r.owner_id=s.owner_id and r.decision='rejected' and r.legacy_snapshot=to_jsonb(s)-'billing_verified_at';
+ end if;
+end $$;
 
 create or replace function public.apply_billing_event(
   p_provider text,p_event_id text,p_event_type text,p_owner_id uuid,p_subscription_id text,

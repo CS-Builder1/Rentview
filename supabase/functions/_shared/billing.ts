@@ -59,19 +59,26 @@ export function lemonEvent(payload: Record<string, unknown>, config: { variantId
   if (!eventType || !LEMON_EVENTS.has(eventType)) return null;
   if (data.type !== "subscriptions") throw new HttpError(400, "Unexpected resource type");
   const attributes = asObject(data.attributes);
-  if (String(attributes.variant_id) !== config.variantId || String(attributes.store_id) !== config.storeId || attributes.test_mode !== config.testMode) {
-    throw new HttpError(400, "Subscription does not belong to this product or environment");
-  }
+  const variantId = id(attributes.variant_id), storeId = id(attributes.store_id);
+  if (!variantId || !storeId || typeof attributes.test_mode !== "boolean") throw new HttpError(400, "Missing product or environment identity");
+  // Authentication happens before parsing. A shared, authentic webhook can
+  // carry other products/environments; acknowledge those without granting any
+  // access or causing the provider to retry a permanently irrelevant event.
+  if (variantId !== config.variantId || storeId !== config.storeId || attributes.test_mode !== config.testMode) return null;
   const status = String(attributes.status);
   const subscriptionId = id(data.id), mapped = Object.hasOwn(LEMON_STATUS, status) ? LEMON_STATUS[status] : undefined;
   if (!subscriptionId || !mapped) throw new HttpError(400, "Invalid subscription state");
   const occurredAt = time(attributes.updated_at, true)!;
   const custom = meta.custom_data ? asObject(meta.custom_data) : {};
+  const periodEnd = time(attributes.ends_at) ?? time(attributes.renews_at);
+  const cancelAtPeriodEnd = attributes.cancelled === true || mapped.status === "cancelled";
   return {
-    provider: "lemonsqueezy", eventId: `${eventType}:${subscriptionId}:${occurredAt}`, eventType,
+    // Lemon has no delivery ID here and timestamps can have only one-second
+    // precision. Distinct states at that timestamp must reach the ledger's
+    // ambiguity/reconciliation handling instead of colliding as duplicates.
+    provider: "lemonsqueezy", eventId: `${eventType}:${subscriptionId}:${occurredAt}:${status}:${cancelAtPeriodEnd}:${periodEnd ?? ""}`, eventType,
     ownerId: owner(custom.user_id), subscriptionId, customerId: id(attributes.customer_id),
-    ...mapped, periodEnd: time(attributes.ends_at) ?? time(attributes.renews_at),
-    cancelAtPeriodEnd: attributes.cancelled === true || mapped.status === "cancelled", occurredAt, payload,
+    ...mapped, periodEnd, cancelAtPeriodEnd, occurredAt, payload,
   };
 }
 
@@ -85,7 +92,9 @@ export function paypalEvent(payload: Record<string, unknown>, planId: string): B
   const eventType = text(payload.event_type);
   if (!eventType || !PAYPAL_EVENTS.has(eventType)) return null;
   const resource = asObject(payload.resource);
-  if (resource.plan_id !== planId) throw new HttpError(400, "Subscription does not belong to this product");
+  const resourcePlanId = text(resource.plan_id);
+  if (!resourcePlanId) throw new HttpError(400, "Missing product identity");
+  if (resourcePlanId !== planId) return null;
   const status = String(resource.status);
   const eventId = text(payload.id), subscriptionId = text(resource.id), mapped = Object.hasOwn(PAYPAL_STATUS, status) ? PAYPAL_STATUS[status] : undefined;
   if (!eventId || !subscriptionId || !mapped) throw new HttpError(400, "Invalid subscription event");

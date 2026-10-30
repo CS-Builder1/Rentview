@@ -1,10 +1,11 @@
 export type Delivery = {
-  status: "accepted" | "delivered" | "failed" | "skipped";
+  status: "accepted" | "delivered" | "failed" | "skipped" | "uncertain";
   channel: "push" | "email";
   userId: string;
   ticketId?: string;
   error?: string;
   attemptedAt: string;
+  retryable?: boolean;
 };
 export type Deliveries = Record<string, Delivery>;
 
@@ -24,7 +25,7 @@ export function chunked<T>(items: T[], size = 100): T[][] {
 export function accepted(delivery: Delivery | undefined): boolean { return delivery?.status === "accepted" || delivery?.status === "delivered"; }
 export function safeDeliveryMap(value: unknown): Deliveries {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-  return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry && typeof entry === "object" && ["accepted", "delivered", "failed", "skipped"].includes(entry.status) && ["push", "email"].includes(entry.channel) && typeof entry.userId === "string"));
+  return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry && typeof entry === "object" && ["accepted", "delivered", "failed", "skipped", "uncertain"].includes(entry.status) && ["push", "email"].includes(entry.channel) && typeof entry.userId === "string"));
 }
 export function notificationEmail(title: string, body: string): { html: string; text: string } {
   return {
@@ -39,4 +40,13 @@ export function reminderCalendar(now: Date, timeZone: string): { today: string; 
   const date = new Date(`${today}T12:00:00Z`);
   date.setUTCDate(date.getUTCDate() + 30);
   return { today, soon: date.toISOString().slice(0, 10), hour: Number(part("hour")) };
+}
+
+/** Only an explicit rejection is safe to resend. A lost or malformed acceptance
+ * response may already have reached a device; preserve it for operator review. */
+export function retryablePushError(error: string): boolean {
+  return error === "MessageRateExceeded" || error === "ProviderUnavailable";
+}
+export function receiptFailureState(attempts: number): "pending" | "failed" {
+  return attempts >= 8 ? "failed" : "pending";
 }

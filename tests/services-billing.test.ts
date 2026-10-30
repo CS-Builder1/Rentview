@@ -12,9 +12,9 @@ const bad = (fn: () => unknown, status = 400) => assert.throws(fn, error => erro
 test("Lemon Squeezy only grants configured subscription product and environment", () => {
   const event = lemonEvent(lemon(), config)!;
   assert.equal(event.ownerId, uid); assert.equal(event.plan, "pro"); assert.equal(event.occurredAt, "2026-10-26T12:00:00.000Z");
-  bad(() => lemonEvent(lemon(), { ...config, variantId: "other" }));
-  bad(() => lemonEvent(lemon(), { ...config, storeId: "other" }));
-  bad(() => lemonEvent(lemon(), { ...config, testMode: true }));
+  assert.equal(lemonEvent(lemon(), { ...config, variantId: "other" }), null);
+  assert.equal(lemonEvent(lemon(), { ...config, storeId: "other" }), null);
+  assert.equal(lemonEvent(lemon(), { ...config, testMode: true }), null);
   const wrongType = lemon(); wrongType.data.type = "subscription-invoices";
   bad(() => lemonEvent(wrongType, config));
 });
@@ -59,6 +59,21 @@ test("Provider calendar timestamps reject normalized impossible dates and preser
   const same = lemon(); same.data.attributes.updated_at = "2028-02-29T12:00:00.123456Z";
   assert.equal(lemonEvent(first, config)!.eventId, lemonEvent(same, config)!.eventId);
 });
+test("Different subscription states within one provider second do not collide as duplicate events", () => {
+  const active = lemon(), cancelled = lemon(), changedPeriod = lemon();
+  cancelled.data.attributes.status = "cancelled";
+  changedPeriod.data.attributes.renews_at = "2026-12-26T12:00:00Z";
+  assert.notEqual(lemonEvent(active, config)!.eventId, lemonEvent(cancelled, config)!.eventId);
+  assert.notEqual(lemonEvent(active, config)!.eventId, lemonEvent(changedPeriod, config)!.eventId);
+  assert.equal(lemonEvent(active, config)!.eventId, lemonEvent(lemon(), config)!.eventId);
+});
+test("Missing product identity is malformed, while an explicit other authenticated product is ignored", () => {
+  const missing = lemon(); Object.assign(missing.data.attributes, { variant_id: null });
+  bad(() => lemonEvent(missing, config));
+  const missingEnvironment = lemon(); Object.assign(missingEnvironment.data.attributes, { test_mode: null });
+  bad(() => lemonEvent(missingEnvironment, config));
+  bad(() => paypalEvent({ event_type: "BILLING.SUBSCRIPTION.UPDATED", resource: { status: "ACTIVE" } }, "P-1"));
+});
 test("Paused/unpaid/expired subscription never grants Pro", () => {
   for (const status of ["paused", "unpaid", "expired"]) { const payload = lemon(); payload.data.attributes.status = status; assert.equal(lemonEvent(payload, config)!.plan, "free"); }
 });
@@ -75,7 +90,7 @@ test("HMAC rejects wrong key, changed body and malformed signature", async () =>
 test("PayPal requires configured plan and event identity while treating custom_id as an untrusted hint", () => {
   const payload = { id: "WH-1", event_type: "BILLING.SUBSCRIPTION.ACTIVATED", create_time: "2026-10-26T12:00:00Z", resource: { id: "I-1", plan_id: "P-1", status: "ACTIVE", custom_id: uid, subscriber: { email_address: "other@example.com", payer_id: "payer" } } };
   assert.equal(paypalEvent(payload, "P-1")!.ownerId, uid);
-  bad(() => paypalEvent(payload, "wrong"));
+  assert.equal(paypalEvent(payload, "wrong"), null);
   payload.resource.custom_id = "";
   assert.equal(paypalEvent(payload, "P-1")!.ownerId, null);
   payload.id = ""; bad(() => paypalEvent(payload, "P-1"));

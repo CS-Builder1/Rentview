@@ -6,7 +6,8 @@ begin;
 insert into auth.users(id,email,email_confirmed_at,raw_user_meta_data) values
  ('90000000-0000-4000-8000-000000000001','legacy-owner-a@example.test',now(),'{}'),
  ('90000000-0000-4000-8000-000000000002','legacy-owner-b@example.test',now(),'{}'),
- ('90000000-0000-4000-8000-000000000003','legacy-tenant@example.test',now(),'{}');
+ ('90000000-0000-4000-8000-000000000003','legacy-tenant@example.test',now(),'{}'),
+ ('90000000-0000-4000-8000-000000000004','legacy-verified-payer@example.test',now(),'{}');
 insert into public.properties(id,owner_id,name) values
  ('91000000-0000-4000-8000-000000000001','90000000-0000-4000-8000-000000000001','Synthetic legacy A'),
  ('91000000-0000-4000-8000-000000000002','90000000-0000-4000-8000-000000000002','Synthetic legacy B');
@@ -24,5 +25,6 @@ insert into public.tenant_invites(id,owner_id,lease_id,code) values
 insert into public.expenses(id,owner_id,property_id,category,description,amount,currency,incurred_on) values
  ('96000000-0000-4000-8000-000000000001','90000000-0000-4000-8000-000000000001','91000000-0000-4000-8000-000000000002','repair','Inconsistent legacy invoice',1,'USD',current_date);
 insert into public.subscriptions(owner_id,provider,provider_subscription_id,plan,status) values
- ('90000000-0000-4000-8000-000000000001','paypal','synthetic-unverified-legacy-subscription','pro','active');
+ ('90000000-0000-4000-8000-000000000001','paypal','synthetic-unverified-legacy-subscription','pro','active'),
+ ('90000000-0000-4000-8000-000000000004','paypal','synthetic-client-written-wrong-id','pro','active');
 commit;
