@@ -1,6 +1,6 @@
 import { Platform } from "react-native";
 
-export { toCsv } from "./csvCore";
+export { toCsv, decimalCell } from "./csvCore";
 
 /** Save/share text content cross-platform (web download; native share sheet). */
 export async function exportText(

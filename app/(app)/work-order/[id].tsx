@@ -39,7 +39,7 @@ import { formatCurrency, formatDate, titleCase } from "../../../lib/format";
 import { supabase } from "../../../lib/supabase";
 import { operationError } from "../../../lib/operationsQuery";
 import { newRecordId } from "../../../lib/id";
-import { partTotalsByCurrency, positiveNumber, validCalendarDate } from "../../../lib/maintenance";
+import { localTimeZone, partTotalsByCurrency, positiveNumber, validCalendarDate } from "../../../lib/maintenance";
 
 type WO = Tables<"work_orders"> & {
   properties: { name: string; currency: string } | null;
@@ -204,7 +204,7 @@ export default function WorkOrderDetail() {
       const labor = positiveNumber(laborAmount, "Labor cost", true);
       if ([...partTotalsByCurrency(parts, currency).keys()].some(c => c !== currency)) throw new Error(`Parts use different currencies. Correct them to ${currency} before posting this job cost.`);
       setBusy(true);
-      const { error } = await supabase.rpc("complete_work_order", { p_work_order_id: wo.id, p_labor_amount: labor, p_currency: currency, p_summary: completionSummary.trim() || null, p_use_existing_expenses: useExistingExpenses });
+      const { error } = await supabase.rpc("complete_work_order", { p_work_order_id: wo.id, p_labor_amount: labor, p_currency: currency, p_summary: completionSummary.trim() || null, p_use_existing_expenses: useExistingExpenses, p_time_zone: localTimeZone() });
       if (error) throw error;
       setCompleting(false); await load();
     } catch (e) { notify("Could not complete job", operationError(e)); }

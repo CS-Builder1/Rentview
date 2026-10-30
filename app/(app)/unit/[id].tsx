@@ -28,6 +28,8 @@ import { supabase } from "../../../lib/supabase";
 import { notify } from "../../../lib/feedback";
 import { calendarDate, currencyCode, nonNegativeMoney } from "../../../lib/validation";
 import { operationError, readAllPages } from "../../../lib/operationsQuery";
+import { newRecordId } from "../../../lib/id";
+import { createInsertDraft, insertDraftIdentity, type InsertDraft } from "../../../lib/insertDraft";
 
 const UNIT_TYPES = Constants.public.Enums.unit_type;
 const UNIT_STATUSES = Constants.public.Enums.unit_status;
@@ -51,7 +53,7 @@ export default function UnitDetail() {
   const router = useRouter();
   const generation = useRef(0);
   const { session } = useAuth();
-  const { submitInsert } = useOffline();
+  const { submitInsert, operations } = useOffline();
 
   const [unit, setUnit] = useState<Unit | null>(null);
   const [loading, setLoading] = useState(true);
@@ -63,6 +65,8 @@ export default function UnitDetail() {
   // add-lease modal
   const [adding, setAdding] = useState(false);
   const [saving, setSaving] = useState(false);
+  const leaseDraft = useRef<InsertDraft | null>(null);
+  const savingRef = useRef(false);
   const [tenantName, setTenantName] = useState("");
   const [tenantPhone, setTenantPhone] = useState("");
   const [tenantEmail, setTenantEmail] = useState("");
@@ -116,6 +120,7 @@ export default function UnitDetail() {
   );
 
   function resetForm() {
+    leaseDraft.current = null;
     setTenantName("");
     setTenantPhone("");
     setTenantEmail(""); setDeposit(""); setLeaseCurrency(currency);
@@ -127,11 +132,16 @@ export default function UnitDetail() {
   }
 
   function openAddLease() {
-    resetForm();
-    setAdding(true);
+    if (savingRef.current) return;
+    try {
+      const identity = session ? createInsertDraft(session.user.id, newRecordId) : null;
+      resetForm(); leaseDraft.current = identity; setAdding(true);
+    } catch (error) { notify("Could not open lease", operationError(error)); }
   }
 
   function openEditLease(l: Tables<"leases">) {
+    if (savingRef.current) return;
+    leaseDraft.current = null;
     setTenantName(l.tenant_name);
     setTenantPhone(l.tenant_phone ?? "");
     setTenantEmail(l.tenant_email ?? "");
@@ -146,7 +156,9 @@ export default function UnitDetail() {
   }
 
   async function saveLease() {
+    if (savingRef.current) return;
     if (!tenantName.trim() || !session || !id) { notify("Missing tenant name", "Enter the tenant's name."); return; }
+    savingRef.current = true;
     setSaving(true);
     try {
       const email = tenantEmail.trim().toLowerCase();
@@ -167,26 +179,30 @@ export default function UnitDetail() {
         if (error) throw error;
         setAdding(false); resetForm(); await load();
       } else {
-        const result = await submitInsert("leases", { ...payload, owner_id: session.user.id, unit_id: id });
+        const identity = insertDraftIdentity(leaseDraft.current, session.user.id, operations, "lease");
+        const result = await submitInsert("leases", { ...payload, ...identity, unit_id: id });
         setAdding(false); resetForm();
         if (result === "queued") notify("Saved on this device", "Review this lease under Sync activity until it uploads.");
         else await load();
       }
     } catch (error) { notify("Could not save lease", operationError(error)); }
-    finally { setSaving(false); }
+    finally { savingRef.current = false; setSaving(false); }
   }
 
   function removeLease() {
-    if (!editingLeaseId) return;
+    if (!editingLeaseId || savingRef.current) return;
     confirmAction(
       "Delete lease",
       "This permanently removes the lease record. This cannot be undone.",
       async () => {
+        if (savingRef.current) return;
+        savingRef.current = true; setSaving(true);
         try {
           const { error } = await supabase.from("leases").delete().eq("id", editingLeaseId).select("id").single();
           if (error) throw error;
           setAdding(false); resetForm(); await load();
         } catch (error) { notify("Could not delete lease", operationError(error)); }
+        finally { savingRef.current = false; setSaving(false); }
       },
     );
   }
@@ -308,6 +324,7 @@ export default function UnitDetail() {
             Lease & tenant
           </Text>
           <Pressable
+            disabled={saving}
             onPress={openAddLease}
             className="flex-row items-center rounded-full bg-brand px-3 py-1.5"
           >
@@ -484,7 +501,7 @@ export default function UnitDetail() {
         </View>
       </Modal>
 
-      <Modal visible={adding} onRequestClose={() => !saving && setAdding(false)} animationType="slide" transparent>
+      <Modal visible={adding} onRequestClose={() => !savingRef.current && setAdding(false)} animationType="slide" transparent>
         <View className="flex-1 justify-end bg-black/40">
           <ScrollView
             className="max-h-[88%] rounded-t-3xl bg-slate-50"
@@ -496,22 +513,25 @@ export default function UnitDetail() {
             <Field
               label="Tenant name"
               value={tenantName}
+              editable={!saving}
               onChangeText={setTenantName}
               placeholder="Full name"
             />
             <Field
               label="Phone (optional)"
               value={tenantPhone}
+              editable={!saving}
               onChangeText={setTenantPhone}
               placeholder="+1-758-…"
               keyboardType="phone-pad"
             />
-            <Field label="Tenant email (optional)" value={tenantEmail} onChangeText={setTenantEmail} keyboardType="email-address" autoCapitalize="none" autoComplete="email" />
+            <Field label="Tenant email (optional)" value={tenantEmail} editable={!saving} onChangeText={setTenantEmail} keyboardType="email-address" autoCapitalize="none" autoComplete="email" />
             <View className="flex-row gap-3">
               <View className="flex-1">
                 <Field
                   label="Start (YYYY-MM-DD, optional)"
                   value={startDate}
+              editable={!saving}
                   onChangeText={setStartDate}
                   placeholder="2026-07-01"
                   autoCapitalize="none"
@@ -521,17 +541,19 @@ export default function UnitDetail() {
                 <Field
                   label="End (optional)"
                   value={endDate}
+              editable={!saving}
                   onChangeText={setEndDate}
                   placeholder="2027-06-30"
                   autoCapitalize="none"
                 />
               </View>
             </View>
-            <Field label="Lease currency" value={leaseCurrency} onChangeText={setLeaseCurrency} autoCapitalize="characters" maxLength={3} />
-            <Field label={`Deposit (${leaseCurrency}, optional)`} value={deposit} onChangeText={setDeposit} keyboardType="decimal-pad" />
+            <Field label="Lease currency" value={leaseCurrency} editable={!saving} onChangeText={setLeaseCurrency} autoCapitalize="characters" maxLength={3} />
+            <Field label={`Deposit (${leaseCurrency}, optional)`} value={deposit} editable={!saving} onChangeText={setDeposit} keyboardType="decimal-pad" />
             <Field
               label={`Rent (${leaseCurrency})`}
               value={rent}
+              editable={!saving}
               onChangeText={setRent}
               placeholder={
                 unit.rent_amount != null ? String(unit.rent_amount) : "0.00"
@@ -543,6 +565,7 @@ export default function UnitDetail() {
               {LEASE_STATUSES.map((s) => (
                 <Pressable
                   key={s}
+                  disabled={saving}
                   onPress={() => setLeaseStatus(s)}
                   className={`mb-2 mr-2 rounded-full border px-3 py-2 ${
                     leaseStatus === s
@@ -567,6 +590,7 @@ export default function UnitDetail() {
                   disabled={saving}
                   variant="secondary"
                   onPress={() => {
+                    if (savingRef.current) return;
                     setAdding(false);
                     resetForm();
                   }}
@@ -578,7 +602,7 @@ export default function UnitDetail() {
             </View>
             {editingLeaseId ? (
               <View className="mt-3">
-                <Button title="Delete lease" variant="danger" onPress={removeLease} />
+                <Button title="Delete lease" disabled={saving} variant="danger" onPress={removeLease} />
               </View>
             ) : null}
           </ScrollView>

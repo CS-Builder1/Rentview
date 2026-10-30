@@ -6,6 +6,7 @@ import { useAuth } from "../lib/auth";
 import type { Tables } from "../lib/database.types";
 import { supabase } from "../lib/supabase";
 import { newRecordId } from "../lib/id";
+import { createRequestPhotoLinks } from "../lib/requestPhotoLinks";
 import { Button } from "./ui";
 
 type Photo={id:string;url:string|null};
@@ -20,8 +21,9 @@ export function RequestConversation({requestId,locked=false}:{requestId:string;l
  const preview=photos.find(photo=>photo.id===previewId)?.url??null;
  const identity=useRef("");const key=`${requestId}:${uid??""}`;identity.current=key;
  const generation=useRef(0);const inflight=useRef(false);const messageIds=useRef(new Set<string>());const mounted=useRef(true);const pendingMessage=useRef<{id:string;body:string}|null>(null);const sendLock=useRef(false);
+ const photoLinks=useRef(createRequestPhotoLinks());
  const load=useCallback(async()=>{
-  if(!uid||inflight.current||identity.current!==key)return;inflight.current=true;const ticket=generation.current;
+  if(!uid||inflight.current||identity.current!==key)return;inflight.current=true;const ticket=generation.current;const links=photoLinks.current;
   try{
    const [requestRes,photoRes,messageRes]=await Promise.all([
     supabase.from("maintenance_requests").select("id").eq("id",requestId).maybeSingle(),
@@ -30,18 +32,19 @@ export function RequestConversation({requestId,locked=false}:{requestId:string;l
    ]);
    if(!mounted.current||ticket!==generation.current||identity.current!==key)return;
    if(requestRes.error)throw requestRes.error;
-   if(!requestRes.data){setMessages([]);setPhotos([]);setPreviewId(null);setBody("");throw new Error("This request is no longer available to this account.");}
+   if(!requestRes.data){photoLinks.current=createRequestPhotoLinks();setMessages([]);setPhotos([]);setPreviewId(null);setBody("");throw new Error("This request is no longer available to this account.");}
    if(photoRes.error)throw photoRes.error;if(messageRes.error)throw messageRes.error;
-   const resolved=await Promise.all(photoRes.data.map(async p=>({id:p.id,url:await signedUrl(p.storage_path,60)})));
-   if(!mounted.current||ticket!==generation.current||identity.current!==key)return;
    const fresh=messageRes.data;const newReplies=fresh.filter(m=>!messageIds.current.has(m.id)&&m.sender_id!==uid);
    if(messageIds.current.size>0&&newReplies.length)setUnread(n=>n+newReplies.length);
-   if(messageIds.current.size===0)setHasOlder(fresh.length===100);fresh.forEach(m=>messageIds.current.add(m.id));setMessages(previous=>mergeMessages(previous,fresh));setPhotos(resolved);setError("");
+   if(messageIds.current.size===0)setHasOlder(fresh.length===100);fresh.forEach(m=>messageIds.current.add(m.id));setMessages(previous=>mergeMessages(previous,fresh));setError("");setLoading(false);
+   const resolved=await links.resolve(photoRes.data,signedUrl);
+   if(!mounted.current||ticket!==generation.current||identity.current!==key)return;
+   setPhotos(resolved);
   }catch(e){if(mounted.current&&ticket===generation.current&&identity.current===key)setError(e instanceof Error?e.message:"Conversation could not refresh. Check your connection and retry.");}
   finally{if(ticket===generation.current){inflight.current=false;if(mounted.current&&identity.current===key)setLoading(false);}}
  },[requestId,uid,key]);
  useEffect(()=>{
-  mounted.current=true;generation.current+=1;inflight.current=false;sendLock.current=false;setLoading(true);setSending(false);setUploading(false);setMessages([]);setPhotos([]);setBody("");setPreviewId(null);setUnread(0);setHasOlder(false);setOlder(false);setError("");messageIds.current.clear();pendingMessage.current=null;
+  mounted.current=true;generation.current+=1;inflight.current=false;sendLock.current=false;photoLinks.current=createRequestPhotoLinks();setLoading(true);setSending(false);setUploading(false);setMessages([]);setPhotos([]);setBody("");setPreviewId(null);setUnread(0);setHasOlder(false);setOlder(false);setError("");messageIds.current.clear();pendingMessage.current=null;
   void load();const interval=setInterval(()=>{if(AppState.currentState==="active")void load();},12000);
   const foreground=AppState.addEventListener("change",state=>{if(state==="active")void load();});
   const channel=supabase.channel(`conversation:${requestId}:${uid}`).on("postgres_changes",{event:"INSERT",schema:"public",table:"request_messages",filter:`request_id=eq.${requestId}`},()=>void load()).on("postgres_changes",{event:"INSERT",schema:"public",table:"request_photos",filter:`request_id=eq.${requestId}`},()=>void load()).subscribe();
@@ -66,6 +69,7 @@ export function RequestConversation({requestId,locked=false}:{requestId:string;l
   <View className="mb-2 mt-4 flex-row items-center justify-between"><Text className="text-lg font-semibold text-slate-900">Photos ({photos.length})</Text>{!locked?<Button title={uploading?"Uploading…":"Add photo"} variant="secondary" onPress={addPhoto} loading={uploading}/>:null}</View>
   {photos.length===100?<Text className="mb-2 text-xs text-slate-500">Showing the 100 most recent photos.</Text>:null}
   {!loading&&!photos.length?<Text className="mb-2 text-slate-500">No photos yet.</Text>:null}<View className="flex-row flex-wrap">{photos.map((photo,index)=>photo.url?<Pressable accessibilityRole="button" accessibilityLabel={`Open repair photo ${index+1}`} key={photo.id} onPress={()=>setPreviewId(photo.id)} className="mb-2 mr-2"><Image accessibilityLabel={`Repair photo ${index+1}`} source={{uri:photo.url}} className="h-24 w-24 rounded-xl"/></Pressable>:<Text key={photo.id} className="mr-2 text-slate-500">Photo unavailable. Refresh to retry.</Text>)}</View>
+  {photos.some(photo=>!photo.url)?<Button title="Retry unavailable photos" variant="secondary" onPress={()=>{photoLinks.current.retryUnavailable();void load();}}/>:null}
   <View className="mb-2 mt-4 flex-row items-center justify-between"><Text className="text-lg font-semibold text-slate-900">Messages</Text><Pressable accessibilityRole="button" onPress={()=>{setUnread(0);void load();}} className="p-2"><Text className="text-brand">{unread?`${unread} new ${unread===1?"reply":"replies"} · Mark read`:"Refresh"}</Text></Pressable></View>
   {hasOlder?<Button title="Load older messages" variant="secondary" onPress={loadOlder} loading={older}/>:null}
   {!loading&&!messages.length?<Text className="mb-2 text-slate-500">No messages yet. Both you and your landlord can read this conversation.</Text>:null}

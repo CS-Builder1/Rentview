@@ -5,7 +5,7 @@ import {
   useLocalSearchParams,
   useRouter,
 } from "expo-router";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, Platform, Pressable, ScrollView, Text, View } from "react-native";
 
 import { RequestConversation } from "../../../components/RequestConversation";
@@ -16,6 +16,7 @@ import { Constants } from "../../../lib/database.types";
 import { formatDate, titleCase } from "../../../lib/format";
 import { supabase } from "../../../lib/supabase";
 import { operationError } from "../../../lib/operationsQuery";
+import { useAuth } from "../../../lib/auth";
 
 type RequestRow = Tables<"maintenance_requests"> & {
   properties: { name: string } | null;
@@ -45,27 +46,40 @@ function Row({ label, value }: { label: string; value: string }) {
 export default function OwnerRequestDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const { session } = useAuth();
+  const uid = session?.user.id;
+  const identity = `${uid ?? ""}:${id ?? ""}`;
+  const currentIdentity = useRef(identity); currentIdentity.current = identity;
+  const loadRevision = useRef(0);
   const [request, setRequest] = useState<RequestRow | null>(null);
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    if (!id) return;
+    if (!id || !uid) return;
+    const revision = ++loadRevision.current;
     const result = await cachedSelectResult<RequestRow>(
-      `request:${id}`,
+      `request:owner:v2:${id}`,
       supabase
         .from("maintenance_requests")
         .select(
           "*, properties!maintenance_requests_property_id_owner_fk(name), units!maintenance_requests_unit_property_owner_fk(label), leases!requests_lease_unit_owner_fk(tenant_name, tenant_phone)",
         )
         .eq("id", id)
+        .eq("owner_id", uid)
         .single(),
     );
+    if (currentIdentity.current !== identity || revision !== loadRevision.current) return;
     setRequest(result.data);
     setLoadError(result.error);
     setLoaded(true);
-  }, [id]);
+  }, [id, uid, identity]);
+
+  useEffect(() => {
+    setRequest(null); setLoaded(false); setBusy(false); setLoadError(null);
+    return () => { loadRevision.current++; };
+  }, [identity]);
 
   useFocusEffect(
     useCallback(() => {
@@ -74,7 +88,7 @@ export default function OwnerRequestDetail() {
   );
 
   async function setStatus(status: (typeof STATUSES)[number]) {
-    if (!request) return;
+    if (!request || !uid || request.owner_id !== uid || busy) return;
     setBusy(true);
     const { error } = await supabase
       .from("maintenance_requests")
@@ -83,7 +97,9 @@ export default function OwnerRequestDetail() {
         resolved_at:
           status === "resolved" ? new Date().toISOString() : request.resolved_at,
       })
-      .eq("id", request.id);
+      .eq("id", request.id)
+      .eq("owner_id", uid);
+    if (currentIdentity.current !== identity) return;
     setBusy(false);
     if (error) {
       notify("Could not update", error.message);
@@ -98,19 +114,21 @@ export default function OwnerRequestDetail() {
    * mirrors the work order's status back onto the request as it progresses.
    */
   async function convertToWorkOrder() {
-    if (!request) return;
+    if (!request || !uid || request.owner_id !== uid || busy) return;
     setBusy(true);
     try {
       const { data: workOrderId, error } = await supabase.rpc("convert_request_to_work_order", { p_request_id: request.id });
       if (error) throw error;
       if (!workOrderId) throw new Error("The work order could not be created. Please retry.");
+      if (currentIdentity.current !== identity) return;
 
       await load();
+      if (currentIdentity.current !== identity) return;
       router.push(`/work-order/${workOrderId}`);
     } catch (e) {
-      notify("Could not convert", operationError(e));
+      if (currentIdentity.current === identity) notify("Could not convert", operationError(e));
     } finally {
-      setBusy(false);
+      if (currentIdentity.current === identity) setBusy(false);
     }
   }
 

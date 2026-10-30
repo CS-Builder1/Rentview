@@ -13,6 +13,8 @@ import { notify } from "../../../lib/feedback";
 import { supabase } from "../../../lib/supabase";
 import { operationError } from "../../../lib/operationsQuery";
 import { localToday } from "../../../lib/maintenance";
+import { newRecordId } from "../../../lib/id";
+import { createInsertDraft, insertDraftIdentity, type InsertDraft } from "../../../lib/insertDraft";
 
 type WorkOrder = Tables<"work_orders"> & { properties: { name: string } | null; units: { label: string } | null };
 const PRIORITIES = Constants.public.Enums.wo_priority;
@@ -23,7 +25,7 @@ export default function WorkOrders() {
   const router = useRouter();
   const params = useLocalSearchParams<{ filter?: string; priority?: string; status?: string; propertyId?: string; unitId?: string; assetId?: string; new?: string }>();
   const { session } = useAuth();
-  const { submitInsert } = useOffline();
+  const { submitInsert, operations } = useOffline();
   const [orders, setOrders] = useState<WorkOrder[]>([]);
   const [properties, setProperties] = useState<Tables<"properties">[]>([]);
   const [units, setUnits] = useState<Tables<"units">[]>([]);
@@ -36,6 +38,8 @@ export default function WorkOrders() {
   const generation = useRef(0);
   const locationGeneration = useRef(0);
   const [adding, setAdding] = useState(false), [saving, setSaving] = useState(false);
+  const draft = useRef<InsertDraft | null>(null);
+  const savingRef = useRef(false);
   const [title, setTitle] = useState(""), [description, setDescription] = useState("");
   const [propertyId, setPropertyId] = useState<string | null>(null), [unitId, setUnitId] = useState<string | null>(null), [assetId, setAssetId] = useState<string | null>(null);
   const [priority, setPriority] = useState<typeof PRIORITIES[number]>("medium");
@@ -83,27 +87,41 @@ export default function WorkOrders() {
     setUnits(u.data ?? []); setAssets(a.data ?? []);
   }
   useEffect(() => {
-    if (params.new === "1" && params.propertyId) { void pickProperty(params.propertyId, params.unitId ?? null, params.assetId ?? null); setAdding(true); }
+    if (params.new !== "1" || !params.propertyId || savingRef.current) return;
+    if (!beginDraft()) return;
+    void pickProperty(params.propertyId, params.unitId ?? null, params.assetId ?? null);
   }, [params.new, params.propertyId, params.unitId, params.assetId]);
-  function resetForm() { locationGeneration.current++; setTitle(""); setDescription(""); setPropertyId(null); setUnitId(null); setAssetId(null); setUnits([]); setAssets([]); setPriority("medium"); }
+  function resetForm() { draft.current = null; locationGeneration.current++; setTitle(""); setDescription(""); setPropertyId(null); setUnitId(null); setAssetId(null); setUnits([]); setAssets([]); setPriority("medium"); }
+  function beginDraft(): boolean {
+    if (savingRef.current) return false;
+    try {
+      const identity = session ? createInsertDraft(session.user.id, newRecordId) : null;
+      resetForm(); draft.current = identity; setAdding(true);
+      return true;
+    } catch (error) { notify("Could not open work order", operationError(error)); return false; }
+  }
+  function openAdd() { beginDraft(); }
   async function save() {
+    if (savingRef.current) return;
     if (!title.trim() || !propertyId || !session) { notify("Missing details", "Enter a title and choose a property."); return; }
+    savingRef.current = true;
     setSaving(true);
     try {
-      const result = await submitInsert("work_orders", { owner_id: session.user.id, property_id: propertyId, unit_id: unitId, asset_id: assetId, title: title.trim(), description: description.trim() || null, priority });
+      const identity = insertDraftIdentity(draft.current, session.user.id, operations, "work order");
+      const result = await submitInsert("work_orders", { ...identity, property_id: propertyId, unit_id: unitId, asset_id: assetId, title: title.trim(), description: description.trim() || null, priority });
       setAdding(false); resetForm();
       if (result === "queued") notify("Saved on this device", "Your work order is in Sync activity until it is uploaded.");
       else await loadPage();
     } catch (e) { notify("Could not save", operationError(e)); }
-    finally { setSaving(false); }
+    finally { savingRef.current = false; setSaving(false); }
   }
-  const chip = (label: string, selected: boolean, onPress: () => void) => <Pressable key={label} accessibilityRole="button" accessibilityState={{ selected }} onPress={onPress} className={`mb-2 mr-2 rounded-full border px-3 py-2 ${selected ? "border-brand bg-brand" : "border-slate-300 bg-white"}`}><Text className={selected ? "font-medium text-white" : "text-slate-700"}>{label}</Text></Pressable>;
+  const chip = (label: string, selected: boolean, onPress: () => void) => <Pressable key={label} accessibilityRole="button" disabled={saving} accessibilityState={{ selected, disabled: saving }} onPress={onPress} className={`mb-2 mr-2 rounded-full border px-3 py-2 ${selected ? "border-brand bg-brand" : "border-slate-300 bg-white"}`}><Text className={selected ? "font-medium text-white" : "text-slate-700"}>{label}</Text></Pressable>;
   return <Screen>
-    <View className="flex-row items-center justify-between px-5 pb-2 pt-2"><Text className="text-2xl font-bold text-slate-900">Work</Text><Button title="New job" onPress={() => { resetForm(); setAdding(true); }} /></View>
+    <View className="flex-row items-center justify-between px-5 pb-2 pt-2"><Text className="text-2xl font-bold text-slate-900">Work</Text><Button title="New job" disabled={saving} onPress={openAdd} /></View>
     <View className="px-5"><View className="mb-3 flex-row gap-2"><View className="flex-1"><Button title="Tenant requests" variant="secondary" onPress={() => router.push("/requests")} /></View><View className="flex-1"><Button title="Maintenance" variant="secondary" onPress={() => router.push("/maintenance")} /></View></View><Field label="Search job titles" value={search} onChangeText={setSearch} placeholder="e.g. AC repair" /><ScrollView horizontal contentContainerClassName="pb-1">{FILTERS.map(f => chip(titleCase(f), filter === f, () => { setFilter(f); router.setParams({ filter: f }); }))}</ScrollView><ScrollView horizontal contentContainerClassName="pb-1">{chip("All properties", !propertyFilter, () => { setPropertyFilter(""); router.setParams({ propertyId: "" }); })}{properties.map(p => chip(p.name, propertyFilter === p.id, () => { setPropertyFilter(p.id); router.setParams({ propertyId: p.id }); }))}</ScrollView></View>
     {error ? <View className="px-5"><Text accessibilityRole="alert" className="mb-2 text-red-700">{error}</Text><Button title="Retry" variant="secondary" onPress={() => void loadPage()} /></View> : null}
     {loading && !orders.length ? <Loading /> : <FlatList data={orders} keyExtractor={o => o.id} contentContainerStyle={{ padding: 20, paddingBottom: 40 }} onRefresh={() => void loadPage()} refreshing={loading} ListEmptyComponent={!error ? <EmptyState title="No jobs match" subtitle="Choose another filter or create a maintenance job." /> : null} ListFooterComponent={hasMore ? <Button title="Load more" loading={loadingMore} onPress={() => void loadPage(orders.length)} /> : null} renderItem={({ item: o }) => <Card onPress={() => router.push(`/work-order/${o.id}`)}><View className="flex-row items-center justify-between"><Text className="flex-1 pr-2 text-base font-semibold text-slate-900">{o.title}</Text><Badge label={o.priority} /></View><Text className="mt-1 text-slate-500">{o.properties?.name ?? "—"}{o.units?.label ? ` · ${o.units.label}` : " · Shared"}</Text><View className="mt-2 flex-row items-center justify-between"><Badge label={o.status} /><Text className="text-xs text-slate-500">{o.due_date ? `Due ${formatDate(o.due_date)}` : `Opened ${formatDate(o.created_at)}`}</Text></View></Card>} />}
-    {adding ? <Modal visible onRequestClose={() => !saving && setAdding(false)} animationType="slide" transparent><View className="flex-1 justify-end bg-black/40"><ScrollView keyboardShouldPersistTaps="handled" className="max-h-[90%] rounded-t-3xl bg-slate-50" contentContainerClassName="p-5"><Text className="mb-4 text-xl font-bold text-slate-900">New work order</Text><Field label="Title" value={title} onChangeText={setTitle} /><Field label="Description (optional)" value={description} onChangeText={setDescription} multiline /><Text className="mb-2 font-medium text-slate-600">Property</Text><View className="flex-row flex-wrap">{properties.map(p => chip(p.name, propertyId === p.id, () => void pickProperty(p.id)))}</View>{!properties.length ? <Button title="Add your first property" variant="secondary" onPress={() => { setAdding(false); router.push("/properties"); }} /> : null}
-      {propertyId ? <><Text className="mb-2 mt-2 font-medium text-slate-600">Unit</Text><View className="flex-row flex-wrap">{chip("Shared / common", !unitId, () => { setUnitId(null); setAssetId(null); })}{units.map(u => chip(u.label, unitId === u.id, () => { setUnitId(u.id); setAssetId(null); }))}</View><Text className="mb-2 mt-2 font-medium text-slate-600">Asset (optional)</Text><View className="flex-row flex-wrap">{chip("No asset", !assetId, () => setAssetId(null))}{assets.filter(a => !a.unit_id || a.unit_id === unitId).map(a => chip(a.name, assetId === a.id, () => setAssetId(a.id)))}</View></> : null}<Text className="mb-2 mt-2 font-medium text-slate-600">Priority</Text><View className="flex-row flex-wrap">{PRIORITIES.map(p => chip(titleCase(p), priority === p, () => setPriority(p)))}</View><View className="mt-3 flex-row gap-3"><View className="flex-1"><Button title="Cancel" variant="secondary" disabled={saving} onPress={() => setAdding(false)} /></View><View className="flex-1"><Button title="Save" loading={saving} onPress={() => void save()} /></View></View></ScrollView></View></Modal> : null}
+    {adding ? <Modal visible onRequestClose={() => !savingRef.current && setAdding(false)} animationType="slide" transparent><View className="flex-1 justify-end bg-black/40"><ScrollView keyboardShouldPersistTaps="handled" className="max-h-[90%] rounded-t-3xl bg-slate-50" contentContainerClassName="p-5"><Text className="mb-4 text-xl font-bold text-slate-900">New work order</Text><Field label="Title" editable={!saving} value={title} onChangeText={setTitle} /><Field label="Description (optional)" editable={!saving} value={description} onChangeText={setDescription} multiline /><Text className="mb-2 font-medium text-slate-600">Property</Text><View className="flex-row flex-wrap">{properties.map(p => chip(p.name, propertyId === p.id, () => void pickProperty(p.id)))}</View>{!properties.length ? <Button title="Add your first property" disabled={saving} variant="secondary" onPress={() => { setAdding(false); router.push("/properties"); }} /> : null}
+      {propertyId ? <><Text className="mb-2 mt-2 font-medium text-slate-600">Unit</Text><View className="flex-row flex-wrap">{chip("Shared / common", !unitId, () => { setUnitId(null); setAssetId(null); })}{units.map(u => chip(u.label, unitId === u.id, () => { setUnitId(u.id); setAssetId(null); }))}</View><Text className="mb-2 mt-2 font-medium text-slate-600">Asset (optional)</Text><View className="flex-row flex-wrap">{chip("No asset", !assetId, () => setAssetId(null))}{assets.filter(a => !a.unit_id || a.unit_id === unitId).map(a => chip(a.name, assetId === a.id, () => setAssetId(a.id)))}</View></> : null}<Text className="mb-2 mt-2 font-medium text-slate-600">Priority</Text><View className="flex-row flex-wrap">{PRIORITIES.map(p => chip(titleCase(p), priority === p, () => setPriority(p)))}</View><View className="mt-3 flex-row gap-3"><View className="flex-1"><Button title="Cancel" variant="secondary" disabled={saving} onPress={() => { if (!savingRef.current) setAdding(false); }} /></View><View className="flex-1"><Button title="Save" loading={saving} onPress={() => void save()} /></View></View></ScrollView></View></Modal> : null}
   </Screen>;
 }

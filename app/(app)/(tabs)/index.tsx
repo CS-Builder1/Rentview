@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Href, useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { RefreshControl, ScrollView, Text, View } from "react-native";
 
 import { Button, Card, Loading, Screen } from "../../../components/ui";
@@ -10,11 +10,12 @@ import { formatCurrency } from "../../../lib/format";
 import { localToday } from "../../../lib/maintenance";
 import { operationError, readAllPages } from "../../../lib/operationsQuery";
 import { supabase } from "../../../lib/supabase";
+import { useAuth } from "../../../lib/auth";
 
 type Attention = { key: string; icon: keyof typeof Ionicons.glyphMap; text: string; href: Href };
 type Snapshot = { properties: number; units: number; jobs: number; spending: Record<string, number>; attention: Attention[] };
 
-async function fetchSnapshot(): Promise<{ data: Snapshot | null; error: unknown }> {
+async function fetchSnapshot(ownerId: string): Promise<{ data: Snapshot | null; error: unknown }> {
   try {
     const today = localToday();
     const yearStart = `${today.slice(0, 4)}-01-01`;
@@ -29,7 +30,7 @@ async function fetchSnapshot(): Promise<{ data: Snapshot | null; error: unknown 
       supabase.from("maintenance_schedules").select("id", { count: "exact", head: true }).eq("is_active", true).lte("next_due", today),
       readAllPages<{ quantity: number; low_stock_threshold: number | null }>((from, to) => supabase.from("inventory_items").select("quantity,low_stock_threshold", { count: "exact" }).not("low_stock_threshold", "is", null).order("id").range(from, to)),
       supabase.from("assets").select("id", { count: "exact", head: true }).gte("warranty_expiry", today).lte("warranty_expiry", soon),
-      supabase.from("maintenance_requests").select("id", { count: "exact", head: true }).eq("status", "submitted"),
+      supabase.from("maintenance_requests").select("id", { count: "exact", head: true }).eq("owner_id", ownerId).eq("status", "submitted"),
     ]);
     if (expenses.error) throw expenses.error;
     if (inventory.error) throw inventory.error;
@@ -47,18 +48,26 @@ async function fetchSnapshot(): Promise<{ data: Snapshot | null; error: unknown 
 
 export default function Dashboard() {
   const router = useRouter();
+  const { session } = useAuth();
+  const uid = session?.user.id;
+  const currentAccount = useRef(uid); currentAccount.current = uid;
+  const loadRevision = useRef(0);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [stale, setStale] = useState(false);
   const load = useCallback(async () => {
+    if (!uid) return;
+    const revision = ++loadRevision.current;
     setLoading(true);
-    const result = await cachedSelectResult<Snapshot>("dashboard:v3", fetchSnapshot());
+    const result = await cachedSelectResult<Snapshot>("dashboard:v4", fetchSnapshot(uid));
+    if (currentAccount.current !== uid || revision !== loadRevision.current) return;
     setSnapshot(result.data);
     setStale(result.stale);
     setError(result.error ? operationError(result.error) : null);
     setLoading(false);
-  }, []);
+  }, [uid]);
+  useEffect(() => { setSnapshot(null); setLoading(true); setError(null); setStale(false); return () => { loadRevision.current++; }; }, [uid]);
   useFocusEffect(useCallback(() => { void load(); }, [load]));
   if (loading && !snapshot) return <Loading />;
   return <Screen><ScrollView contentContainerClassName="px-5 pb-10" refreshControl={<RefreshControl refreshing={loading} onRefresh={() => void load()} />}>

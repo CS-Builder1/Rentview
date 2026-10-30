@@ -39,7 +39,8 @@ function notify(title: string, message: string) {
 export default function More() {
   const router = useRouter();
   const { session, signOut } = useAuth();
-  const { isPro, subscription } = usePlan();
+  const { isPro, subscription, known: planKnown, loading: planLoading,
+    error: planError, stale: planStale, reconciliationPending, refresh: refreshPlan } = usePlan();
   const [reminding, setReminding] = useState(false);
 
   async function sendReminders() {
@@ -129,8 +130,13 @@ export default function More() {
         <Text className="mb-2 mt-4 text-sm font-semibold uppercase text-slate-400">
           Plan & billing
         </Text>
-        {subscription?.plan === "pro" && !subscription.billing_verified_at ? <Card><Text className="text-amber-800">Your subscription needs verification. Please contact support before starting another subscription.</Text></Card> : null}
-        {isPro ? (
+        {planError ? <Card><Text accessibilityRole="alert" className="text-amber-800">{planError}</Text></Card> : null}
+        {planStale ? <Text className="mb-2 text-sm text-amber-800">Showing saved billing information.</Text> : null}
+        {reconciliationPending || (subscription?.plan === "pro" && !subscription.billing_verified_at) ? (
+          <Card><Text accessibilityRole="alert" className="text-amber-800">Your billing status needs verification. Contact support with your provider receipt.{reconciliationPending ? " Account deletion is paused until the billing review is complete." : ""}</Text></Card>
+        ) : null}
+        <View className="mb-3"><Button title="Refresh billing" variant="secondary" loading={planLoading} onPress={() => void refreshPlan()} /></View>
+        {!planKnown ? <Card><Text className="text-slate-600">{planLoading ? "Checking your plan…" : "Your plan is currently unavailable. Refresh billing to try again."}</Text></Card> : isPro ? (
           <Card>
             <View className="flex-row items-center justify-between">
               <Text className="text-base font-semibold text-slate-900">

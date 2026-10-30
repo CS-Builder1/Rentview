@@ -9,7 +9,7 @@ import type { Tables } from "../../lib/database.types";
 import { Constants } from "../../lib/database.types";
 import { notify } from "../../lib/feedback";
 import { formatDate, titleCase } from "../../lib/format";
-import { localToday, nextMaintenanceDate, validCalendarDate } from "../../lib/maintenance";
+import { localTimeZone, localToday, nextMaintenanceDate, validCalendarDate } from "../../lib/maintenance";
 import { supabase } from "../../lib/supabase";
 import { operationError, readAllPages } from "../../lib/operationsQuery";
 
@@ -65,7 +65,7 @@ export default function Maintenance() {
     if (!completing || busy) return;
     if (!validCalendarDate(completedOn) || completedOn > localToday()) { notify("Invalid completion date", "Choose today or a past date in YYYY-MM-DD format."); return; }
     setBusy(true);
-    try { const { error: e } = await supabase.rpc("complete_maintenance_schedule", { p_schedule_id: completing.id, p_completed_on: completedOn, p_notes: notes.trim() || null }); if (e) throw e; setCompleting(null); setNotes(""); await load(); }
+    try { const { error: e } = await supabase.rpc("complete_maintenance_schedule", { p_schedule_id: completing.id, p_completed_on: completedOn, p_notes: notes.trim() || null, p_time_zone: localTimeZone() }); if (e) throw e; setCompleting(null); setNotes(""); await load(); }
     catch (e) { notify("Could not record maintenance", operationError(e)); }
     finally { setBusy(false); }
   }

@@ -4,7 +4,8 @@ import { useCallback, useState } from "react";
 import { Alert, Platform, Pressable, ScrollView, Text, View } from "react-native";
 
 import { Button, Card, Loading, Screen } from "../../components/ui";
-import { exportText, toCsv } from "../../lib/csv";
+import { exportText, toCsv, decimalCell } from "../../lib/csv";
+import type { Cell } from "../../lib/csvCore";
 import type { Tables } from "../../lib/database.types";
 import { titleCase } from "../../lib/format";
 import { supabase } from "../../lib/supabase";
@@ -106,15 +107,15 @@ export default function ExportPacket() {
         titleCase(r.category),
         r.description ?? "",
         r.vendors?.name ?? "",
-        Number(r.amount).toFixed(2),
+        decimalCell(Number(r.amount)),
         r.currency,
       ]);
 
       // Totals per currency appended after a blank row.
       const totals = Object.entries(totalsByCurrency(rows));
-      const totalRows: (string | number)[][] = [[]];
+      const totalRows: Cell[][] = [[]];
       for (const [cur, total] of totals)
-        totalRows.push(["", "", "", "", "", `Total (${cur})`, total.toFixed(2), cur]);
+        totalRows.push(["", "", "", "", "", `Total (${cur})`, decimalCell(total), cur]);
 
       const csv = toCsv(headers, [...body, ...totalRows]);
       const prop = propertyId

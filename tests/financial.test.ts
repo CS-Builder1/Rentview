@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { formatDate } from "../lib/format";
 import { totalsByCurrency, requiredCount } from "../lib/dashboard";
-import { escapeCell, toCsv } from "../lib/csvCore";
+import { escapeCell, toCsv, decimalCell } from "../lib/csvCore";
 import { grantsPro } from "../lib/entitlements";
 import { currencyCode, calendarDate, nonNegativeMoney } from "../lib/validation";
 
@@ -48,6 +48,11 @@ test("CSV escapes data and neutralizes spreadsheet formula injection", () => {
   assert.equal(escapeCell(-12), "-12");
   assert.equal(escapeCell('hello, "world"'), '"hello, ""world"""');
   assert.equal(toCsv(["Amount"], [[12], [null]]), "Amount\r\n12\r\n");
+});
+test("explicit CSV amounts retain numeric negative cents while arbitrary text stays escaped", () => {
+  assert.equal(toCsv(["Amount", "Description"], [[decimalCell(-12.34), "-12.34"], [decimalCell(0), "=1+1"]]),
+    "Amount,Description\r\n-12.34,'-12.34\r\n0.00,'=1+1");
+  for (const invalid of [NaN, Infinity, 12.345, 1e21]) assert.throws(() => decimalCell(invalid));
 });
 test("legacy or self-written paid states never grant verified entitlement", () => {
   const base = { plan: "pro", status: "active", current_period_end: null, billing_verified_at: null };

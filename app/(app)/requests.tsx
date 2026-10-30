@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 
 import { Badge, Button, Card, EmptyState, Field, Loading, Screen } from "../../components/ui";
@@ -9,6 +9,7 @@ import type { Tables } from "../../lib/database.types";
 import { formatDate, titleCase } from "../../lib/format";
 import { supabase } from "../../lib/supabase";
 import { readAllPages } from "../../lib/operationsQuery";
+import { useAuth } from "../../lib/auth";
 
 type RequestRow = Tables<"maintenance_requests"> & {
   properties: { name: string } | null;
@@ -20,6 +21,10 @@ const OPEN_STATUSES = ["submitted", "acknowledged", "in_progress"] as const;
 
 export default function Requests() {
   const router = useRouter();
+  const { session } = useAuth();
+  const uid = session?.user.id;
+  const currentAccount = useRef(uid); currentAccount.current = uid;
+  const loadRevision = useRef(0);
   const params = useLocalSearchParams<{ filter?: string; propertyId?: string }>();
   const [search, setSearch] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -27,16 +32,22 @@ export default function Requests() {
   const [showAll, setShowAll] = useState(params.filter === "all");
 
   const load = useCallback(async () => {
+    if (!uid) return;
+    const revision = ++loadRevision.current;
     const result = await cachedSelectResult<RequestRow[]>(
-      "requests",
+      "requests:owner:v2",
       readAllPages<RequestRow>((from, to) => supabase
         .from("maintenance_requests")
         .select("*, properties!maintenance_requests_property_id_owner_fk(name), units!maintenance_requests_unit_property_owner_fk(label)", { count: "exact" })
+        .eq("owner_id", uid)
         .order("created_at", { ascending: false }).order("id").range(from, to)),
     );
+    if (currentAccount.current !== uid || revision !== loadRevision.current) return;
     setError(result.error);
     setRequests(result.data ?? []);
-  }, []);
+  }, [uid]);
+
+  useEffect(() => { setRequests(null); setError(null); return () => { loadRevision.current++; }; }, [uid]);
 
   useFocusEffect(
     useCallback(() => {

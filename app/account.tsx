@@ -17,6 +17,7 @@ export default function Account() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [deletionPending, setDeletionPending] = useState(false);
+  const [deletionReview, setDeletionReview] = useState(false);
   const [profileLoaded, setProfileLoaded] = useState(false);
   const [profileLoading, setProfileLoading] = useState(false);
   const [profileReload, setProfileReload] = useState(0);
@@ -25,12 +26,12 @@ export default function Account() {
   const currentUid = useRef(uid);
   const actionLock = useRef(false);
   currentUid.current = uid;
-  const recoveryMode = Boolean(profileError) || deletionPending || !profileLoaded;
+  const recoveryMode = Boolean(profileError) || deletionPending || deletionReview || !profileLoaded;
 
   useEffect(() => {
     // A deletion confirmation or profile draft belongs only to its original user.
     setName(""); setEmail(""); setConfirmation(""); setError(""); setMessage("");
-    setDeletionPending(false); setProfileLoaded(false); setBusy(false);
+    setDeletionPending(false); setDeletionReview(false); setProfileLoaded(false); setBusy(false);
     setStateUid(uid);
     actionLock.current = false;
   }, [uid]);
@@ -125,7 +126,7 @@ export default function Account() {
   }
 
   async function remove() {
-    if (confirmation !== "DELETE") return;
+    if (confirmation !== "DELETE" || deletionReview) return;
     const action = beginAction(); if (!action) return;
     const { snapshot, guard } = action;
     try {
@@ -134,13 +135,17 @@ export default function Account() {
       guard();
       if (deleteError) {
         const context = (deleteError as { context?: Response }).context;
-        let detail = "";
-        try { const payload = await context?.json(); detail = payload?.error ?? payload?.message ?? ""; } catch { /* Use SDK error below. */ }
+        let payload: { error?: unknown; message?: unknown; pending?: boolean; requiresReview?: boolean } | undefined;
+        try { payload = await context?.json(); } catch { /* Use SDK error below. */ }
         guard();
+        if (payload?.pending === true) setDeletionPending(true);
+        if (payload?.requiresReview === true) setDeletionReview(true);
+        const detail = payload?.error ?? payload?.message;
         throw new Error(typeof detail === "string" && detail ? detail : deleteError.message);
       }
       if (data?.pending) {
         setDeletionPending(true);
+        setDeletionReview(data.requiresReview === true);
         setMessage(typeof data.message === "string" ? data.message : "Your files are being removed. Continue deletion to finish.");
         return;
       }
@@ -163,8 +168,8 @@ export default function Account() {
         {message ? <Text accessibilityLiveRegion="polite" className="mb-4 text-teal-800">{message}</Text> : null}
         {recoveryMode ? (
           <Card>
-            <Text className="mb-2 font-semibold text-slate-900">{deletionPending ? "Account deletion is in progress" : profileLoading ? "Loading account access…" : "Account access needs attention"}</Text>
-            <Text className="mb-4 text-slate-600">{deletionPending ? "Your profile is unavailable while files are being removed. Continue deletion below to finish. Signing out will not cancel deletion." : profileError || "Profile editing is unavailable until your account can be read. Retry account access, or continue below if you already started deletion."}</Text>
+            <Text className="mb-2 font-semibold text-slate-900">{deletionReview ? "Account deletion needs support review" : deletionPending ? "Account deletion is in progress" : profileLoading ? "Loading account access…" : "Account access needs attention"}</Text>
+            <Text className="mb-4 text-slate-600">{deletionReview ? "A previous deletion step could not be confirmed. Contact support to reconcile it before continuing. Return to this screen after support confirms it is safe to continue. Signing out will not cancel deletion." : deletionPending ? "Your profile is unavailable while files are being removed. Continue deletion below to finish. Signing out will not cancel deletion." : profileError || "Profile editing is unavailable until your account can be read. Retry account access, or continue below if you already started deletion."}</Text>
             {!deletionPending ? <Button title="Retry account access" variant="secondary" loading={busy} onPress={retryAccess} /> : null}
           </Card>
         ) : (
@@ -188,8 +193,9 @@ export default function Account() {
             <Text className="font-semibold text-slate-900">Delete account</Text>
             <Text className="mt-2 text-slate-600">Deletion is permanent and includes your uploaded files. Owners should export required records first. Resolve active billing through your provider before deleting; account deletion must not be treated as proof that a subscription was cancelled.</Text>
             <View className="mt-4">
-              <Field label="Type DELETE to confirm" value={confirmation} onChangeText={setConfirmation} autoCapitalize="characters" autoCorrect={false} editable={!busy} />
-              <Button title={deletionPending ? "Continue account deletion" : "Permanently delete account"} variant="danger" onPress={remove} disabled={confirmation !== "DELETE"} loading={busy} />
+              <Field label="Type DELETE to confirm" value={confirmation} onChangeText={setConfirmation} autoCapitalize="characters" autoCorrect={false} editable={!busy && !deletionReview} />
+              {deletionReview ? <Text accessibilityRole="alert" accessibilityLiveRegion="polite" className="mb-3 text-amber-800">Deletion is paused for support review. Further deletion attempts are disabled on this screen.</Text> : null}
+              <Button title={deletionReview ? "Deletion needs support review" : deletionPending ? "Continue account deletion" : "Permanently delete account"} variant="danger" onPress={remove} disabled={confirmation !== "DELETE" || deletionReview} loading={busy} />
             </View>
           </Card>
         </View>

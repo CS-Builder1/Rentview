@@ -1,16 +1,17 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useAuth } from "./auth";
-import { cachedSelect } from "./cache";
+import { createAccountSession } from "./accountSession";
+import { cachedSelectResult } from "./cache";
 import type { Tables } from "./database.types";
-import { supabase } from "./supabase";
 import { grantsPro } from "./entitlements";
 
 /**
  * How many properties the Free tier allows.
  *
  * BUSINESS DECISION — this is the only number that separates Free from Pro
- * today. Change it here and the whole app follows. Everything else (units,
+ * today. This UI value must match the database capacity guard; changing the
+ * limit requires an explicit reviewed migration and a UI update. Everything else (units,
  * work orders, assets, inventory, documents, offline capture) is unlimited on
  * Free, which is what "a generous free tier" is meant to mean.
  */
@@ -20,8 +21,12 @@ export type PlanState = {
   /** True when the account may use Pro-only capacity right now. */
   isPro: boolean;
   subscription: Tables<"subscriptions"> | null;
-  /** Null while Pro — there is no cap to show. */
+  /** Null for Pro or an unknown plan; the database always enforces capacity. */
   propertyLimit: number | null;
+  known: boolean;
+  reconciliationPending: boolean | null;
+  error: string | null;
+  stale: boolean;
   loading: boolean;
   refresh: () => Promise<void>;
 };
@@ -39,48 +44,85 @@ export { grantsPro } from "./entitlements";
  */
 export function usePlan(): PlanState {
   const { session } = useAuth();
-  const [subscription, setSubscription] = useState<Tables<"subscriptions"> | null>(
-    null,
-  );
-  const [loading, setLoading] = useState(true);
   const userId = session?.user.id ?? null;
+  const currentUser = useRef(userId);
+  currentUser.current = userId;
+  const revision = useRef(0);
+  const mounted = useRef(false);
+  const [state, setState] = useState<{
+    accountId: string | null;
+    subscription: Tables<"subscriptions"> | null;
+    known: boolean;
+    reconciliationPending: boolean | null;
+    error: string | null;
+    stale: boolean;
+    loading: boolean;
+  }>({ accountId: null, subscription: null, known: false, reconciliationPending: null, error: null, stale: false, loading: true });
 
   const refresh = useCallback(async () => {
-    if (!userId) {
-      setSubscription(null);
-      setLoading(false);
+    const snapshot = session;
+    const accountId = snapshot?.user.id ?? null;
+    const request = ++revision.current;
+    const current = () => mounted.current && request === revision.current && currentUser.current === accountId;
+    if (!snapshot || !accountId) {
+      if (current()) setState({ accountId: null, subscription: null, known: false, reconciliationPending: null, error: null, stale: false, loading: false });
       return;
     }
-    const data = await cachedSelect<Tables<"subscriptions"> | null>(
-      `subscription:${userId}`,
-      supabase
-        .from("subscriptions")
-        .select("*")
-        .eq("owner_id", userId)
-        .maybeSingle(),
-    );
-    setSubscription(data ?? null);
-    setLoading(false);
-  }, [userId]);
+    setState(previous => previous.accountId === accountId
+      ? { ...previous, loading: true, error: null }
+      : { accountId, subscription: null, known: false, reconciliationPending: null, error: null, stale: false, loading: true });
+    try {
+      // Both reads retain the initiating bearer token even if another tab signs
+      // into a different account while their requests are waiting.
+      const client = createAccountSession(snapshot);
+      const [plan, review] = await Promise.all([
+        cachedSelectResult<Tables<"subscriptions"> | null>(`subscription:${accountId}`,
+          client.from("subscriptions").select("*").eq("owner_id", accountId).maybeSingle()),
+        cachedSelectResult<boolean>(`billing-reconciliation:${accountId}`, client.rpc("billing_reconciliation_pending")),
+      ]);
+      if (!current()) return;
+      const reviewKnown = typeof review.data === "boolean";
+      const errors = [
+        plan.error ? "Your plan could not be refreshed. Saved information is shown when available." : null,
+        review.error || !reviewKnown ? "Billing review status is unavailable. Please retry." : null,
+      ].filter(Boolean);
+      setState({ accountId, subscription: plan.data, known: plan.source !== "none",
+        reconciliationPending: typeof review.data === "boolean" ? review.data : null,
+        error: errors.length ? errors.join(" ") : null,
+        stale: plan.stale || review.stale, loading: false });
+    } catch {
+      if (!current()) return;
+      setState(previous => ({ ...previous, loading: false, stale: previous.known,
+        error: "Billing information is unavailable. Refresh your session and retry." }));
+    }
+  }, [session]);
 
   useEffect(() => {
-    refresh();
+    mounted.current = true;
+    void refresh();
+    return () => { mounted.current = false; revision.current++; };
   }, [refresh]);
 
+  // Hide the previous account's state during the render before effects reset it.
+  const belongsToCurrentUser = !!userId && state.accountId === userId;
+  const subscription = belongsToCurrentUser ? state.subscription : null;
+  const known = belongsToCurrentUser && state.known;
   const isPro = grantsPro(subscription);
   return {
-    isPro,
-    subscription,
-    propertyLimit: isPro ? null : FREE_PROPERTY_LIMIT,
-    loading,
+    isPro, subscription, known,
+    propertyLimit: known && !isPro ? FREE_PROPERTY_LIMIT : null,
+    reconciliationPending: belongsToCurrentUser ? state.reconciliationPending : null,
+    error: belongsToCurrentUser ? state.error : null,
+    stale: belongsToCurrentUser && state.stale,
+    loading: !belongsToCurrentUser || state.loading,
     refresh,
   };
 }
 
 /**
- * Add the account id (and email) to a Lemon Squeezy checkout link so the
- * webhook can match the payment to this user. Lemon Squeezy returns these as
- * `meta.custom_data` on every subscription event.
+ * Append customer-controlled convenience hints to a Lemon Squeezy link. These
+ * values never authorize a billing binding; the backend requires independent
+ * service-owned account provenance. Paid checkout remains disabled.
  */
 export function lemonSqueezyCheckoutUrl(
   base: string,

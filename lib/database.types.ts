@@ -1806,6 +1806,7 @@ export type Database = {
       }
     }
     Functions: {
+      billing_reconciliation_pending: { Args: Record<PropertyKey, never>; Returns: boolean }
       current_account_is_active: { Args: Record<PropertyKey, never>; Returns: boolean }
       create_tenant_invite: {
         Args: { p_lease_id: string; p_email?: string | null }
@@ -1831,11 +1832,11 @@ export type Database = {
       }
       remove_work_order_part: { Args: { p_part_id: string }; Returns: undefined }
       complete_work_order: {
-        Args: { p_work_order_id: string; p_labor_amount: number; p_currency: string; p_summary?: string | null; p_use_existing_expenses?: boolean }
+        Args: { p_work_order_id: string; p_labor_amount: number; p_currency: string; p_summary?: string | null; p_use_existing_expenses?: boolean; p_time_zone?: string }
         Returns: string
       }
       complete_maintenance_schedule: {
-        Args: { p_schedule_id: string; p_completed_on?: string; p_notes?: string | null }
+        Args: { p_schedule_id: string; p_completed_on?: string; p_notes?: string | null; p_time_zone?: string }
         Returns: string
       }
       asset_cost_totals: { Args: { p_asset_id: string }; Returns: { currency: string; total: number }[] }
