@@ -5,7 +5,7 @@
       "codex/rentview-trust-and-journeys-20261028": false
     }
   },
-  "buildCommand": "npx expo export --platform web",
+  "buildCommand": "npm run build:web",
   "outputDirectory": "dist",
   "installCommand": "npm install",
   "framework": null,
