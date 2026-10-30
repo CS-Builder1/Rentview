@@ -1,6 +1,6 @@
 {
-  "state": "verified_implementation_for_draft_source_review",
-  "source_ref": "c8cbe8f9af78d9c28ca23a7804707399709a5c7e",
+  "state": "bounded_review_followup_locally_verified_release_gates_open",
+  "source_ref": "verified review follow-up worktree based on 522270386c5af39f61c20dc244242f419868683c; publication branch HEAD identifies the resulting commits",
   "branch": "codex/rentview-trust-and-journeys-20261028",
   "hosted_changes": false,
   "implemented_local": [
@@ -30,35 +30,26 @@
   "checks": {
     "unit_and_handler_fixtures": {
       "status": "passed",
-      "command": "npm test",
-      "tests": 108,
-      "pass": 108,
+      "tests": 146,
+      "pass": 146,
       "fail": 0,
-      "cancelled": 0,
       "skipped": 0,
-      "todo": 0,
-      "log": "/workspace/scratch/rentview-journey-coverage/unit-candidate1.log",
-      "previous_log": "/workspace/scratch/rentview-warning-triage/unit-tests.log"
+      "log": "/workspace/scratch/rentview-review-followup/unit-container/check.log"
     },
     "application_types": {
       "status": "passed",
-      "command": "npm run typecheck",
-      "log": "/workspace/scratch/rentview-journey-coverage/typecheck-final.log"
+      "log": "/workspace/scratch/rentview-review-followup/types-container3/check.log"
     },
     "test_types": {
       "status": "passed",
-      "command": "npm run typecheck:tests",
-      "log": "/workspace/scratch/rentview-journey-coverage/typecheck-tests-final.log"
+      "log": "/workspace/scratch/rentview-review-followup/test-types-container3/check.log"
     },
     "web_export": {
       "status": "passed",
-      "configuration": "approved disposable loopback54321 backend and actual local public key; paid URLs empty",
-      "output": "/workspace/scratch/rentview-journey-coverage/candidate2-build",
-      "previous_output": "/workspace/scratch/rentview-warning-triage/web-build",
-      "log": "/workspace/scratch/rentview-journey-coverage/candidate2-export.log",
-      "app_origin": "http://localhost:8081",
-      "source_manifest": "/workspace/scratch/rentview-journey-coverage/candidate2-source-hashes.json",
-      "source_files_matched_after_testing": 82
+      "configuration": "explicit disposable local public settings; empty paid URLs",
+      "log": "/workspace/scratch/rentview-review-followup/build-container4/check.log",
+      "source_manifest": "/workspace/scratch/rentview-review-followup/candidate2-source-hashes.json",
+      "source_files_matched_after_testing": 85
     },
     "whitespace": {
       "status": "passed",
@@ -69,9 +60,8 @@
       "mismatches": 0,
       "expo_version": "56.0.12",
       "router_version": "56.2.11",
-      "version_guidance": "Installed Expo56.0.12 bundledNativeModules metadata; Router56.2.11 registry peer metadata verified",
       "offline_metadata_caveat": true,
-      "dependency_installation": "completed with lockfile; single React/Screens/Reanimated/Worklets copies verified"
+      "log": "/workspace/scratch/rentview-review-followup/sdk-container/check.log"
     },
     "lint": {
       "status": "not_run",
@@ -79,24 +69,20 @@
     },
     "sql_regressions": {
       "status": "passed",
-      "baseline_report": "/workspace/scratch/rentview-local-db-retry1/results.json",
-      "numeric_report": "/workspace/scratch/rentview-finite-numerics/results.json",
-      "projection_report": "/workspace/scratch/rentview-tenant-projection/results.json",
+      "primary_sql_suites": 11,
+      "primary_report": "/workspace/scratch/rentview-review-followup/primary-apply-results.json",
+      "final_function_focused_checks": 3,
       "real_concurrent_transactions": 3,
-      "special_numeric_rejections": 48,
-      "returning_report": "/workspace/scratch/rentview-request-returning/results.json"
+      "focused_final_report": "/workspace/scratch/rentview-review-followup/billing-rpc-results.json"
     },
     "browser_to_database_e2e": {
       "status": "passed",
       "checkpoints": 13,
-      "report": "/workspace/scratch/rentview-journey-coverage/core-final-retry1/results.json",
-      "synthetic_users_cleaned": 5,
-      "cleanup_errors": 0,
+      "report": "/workspace/scratch/rentview-review-followup/browser-core-container3/results/results.json",
       "page_errors": 0,
       "external_requests": 0,
-      "scope": "browser emulation + real local Auth/API/Storage/PostgreSQL; device and provider limits recorded in report",
-      "final_clean_run": true,
-      "previous_report": "/workspace/scratch/rentview-warning-triage/core-e2e/results.json"
+      "cleanup_errors": 0,
+      "scope": "real browser + local Supabase Auth/Data/Storage; synthetic identities only"
     },
     "native_device_delivery_and_callbacks": {
       "status": "not_run"
@@ -107,15 +93,10 @@
     "frontend_browser_smoke": {
       "status": "passed",
       "checks": 36,
-      "viewports": [
-        "phone390x844",
-        "desktop1440x1000"
-      ],
+      "viewports": 2,
       "page_errors": 0,
       "external_requests": 0,
-      "report": "/workspace/scratch/rentview-journey-coverage/edges-final/results.json",
-      "scope": "synthetic auth validation, malformed/hostile return URLs, reserved query keys and real back/forward handling; no authenticated backend journey in this runner",
-      "previous_report": "/workspace/scratch/rentview-warning-triage/browser-edges/results.json"
+      "report": "/workspace/scratch/rentview-review-followup/browser-urls-container/results/results.json"
     },
     "integration_runner_safety": {
       "status": "passed",
@@ -123,17 +104,16 @@
       "checks": 11
     },
     "database_advisors": {
-      "status": "passed_error_gate_after_identity_optimization_and_privileged_local_repair",
+      "status": "passed_error_gate_warnings_open",
       "errors": 0,
       "warnings": 8,
       "groups": {
         "multiple_permissive_policies": 7,
         "extension_in_public": 1
       },
-      "report": "/workspace/scratch/rentview-warning-triage/advisors-post-repair.stdout",
       "extension": "pg_net",
-      "previous_report": "/workspace/scratch/rentview-migration-replay/validation/advisors.stdout",
-      "findings_waived": false
+      "findings_waived": false,
+      "report": "/workspace/scratch/rentview-review-followup/advisors-final.log"
     },
     "dependency_audit": {
       "initial_vulnerable_nodes": 20,
@@ -171,22 +151,24 @@
       "owner_and_tenant_readback": true,
       "forged_participants_refused": true,
       "cleanup_errors": 0,
-      "report": "/workspace/scratch/rentview-request-insert-probe-fixed.json"
+      "report": "/workspace/scratch/rentview-request-insert-probe-fixed.json",
+      "evidence_scope": "preserved pre-review baseline; see historical_validation; not a new standalone rerun"
     },
     "canonical_migration_replay": {
       "status": "passed",
-      "stages": 15,
-      "report": "/workspace/scratch/rentview-migration-replay/validation/results.json",
-      "real_cli_migrations": 10,
+      "stages": 34,
+      "report": "/workspace/scratch/rentview-review-followup/validation-final/results.json",
+      "exact_current_source_hashes_match": true,
+      "migration_application_method": "transactional SQL replay; no new Supabase CLI migration-history entries",
       "history_repair_used": false,
-      "legacy_upgrade_tested": true,
-      "fixture_cleanup": "passed",
-      "primary_container_unchanged": true
+      "legacy_billing_gate_and_verified_rejected_decisions": "passed",
+      "tombstone_reconciliation_recovery": "passed"
     },
     "focused_independent_source_review": {
       "status": "completed",
       "finding": "No additional concrete high-impact defect found in reviewed URL, account/session, offline isolation and tenant access code",
-      "scope": "source only; no claim of native/device/provider execution"
+      "scope": "source only; no claim of native/device/provider execution",
+      "evidence_scope": "preserved pre-review baseline; see historical_validation; not a new standalone rerun"
     },
     "identity_policy_optimization": {
       "status": "passed",
@@ -199,7 +181,8 @@
       "real_cli_migrations_after_additive_file": 11,
       "history_repair_used": false,
       "report": "/workspace/scratch/rentview-warning-triage/rls-results-retry1.json",
-      "primary_comparison": "/workspace/scratch/rentview-warning-triage/primary-rls-comparison.json"
+      "primary_comparison": "/workspace/scratch/rentview-warning-triage/primary-rls-comparison.json",
+      "evidence_scope": "preserved pre-review baseline; see historical_validation; not a new standalone rerun"
     },
     "pg_net_owner_privilege_repair": {
       "status": "passed_local_only",
@@ -213,7 +196,8 @@
       "worker_sql_access": "preserved; real enqueue rolled back with no committed HTTP request",
       "initial_failure_preserved": "/workspace/scratch/rentview-warning-triage/extension-boundary-failure.json",
       "report": "/workspace/scratch/rentview-warning-triage/pg-net-repair-results.json",
-      "hosted_applied": false
+      "hosted_applied": false,
+      "evidence_scope": "preserved pre-review baseline; see historical_validation; not a new standalone rerun"
     },
     "backend_api_boundary": {
       "status": "passed_after_local_privilege_repair",
@@ -222,55 +206,40 @@
       "backend_rpc_denial": "anon401/42501;authenticated403/42501",
       "cleanup_errors": 0,
       "report": "/workspace/scratch/rentview-warning-triage/backend-boundary-final.json",
-      "previous_report": "/workspace/scratch/rentview-warning-triage/backend-boundary-post-repair.json"
+      "previous_report": "/workspace/scratch/rentview-warning-triage/backend-boundary-post-repair.json",
+      "evidence_scope": "preserved pre-review baseline; see historical_validation; not a new standalone rerun"
     },
     "local_initializer_guard_tests": {
       "status": "passed",
-      "tests": 7,
-      "command": "python -m unittest discover -s tests/db -p test_validate_local.py",
-      "scope": "source-only runner guards; not a new fresh backend run",
-      "log": "/workspace/scratch/rentview-journey-coverage/runner-guards-final.log"
+      "tests": 11,
+      "scope": "source-only runner guards",
+      "log": "/workspace/scratch/rentview-review-followup/guards-container/check.log"
     },
     "focused_delta_source_review": {
       "status": "completed",
       "finding": "No concrete new defect found in identity policy, owner privilege maintenance, Metro pin or resume guard source",
-      "scope": "source only; independent of runtime tests"
+      "scope": "source only; independent of runtime tests",
+      "evidence_scope": "preserved pre-review baseline; see historical_validation; not a new standalone rerun"
     },
     "bounded_local_recovery": {
       "status": "passed",
-      "checks": 9,
-      "report": "/workspace/scratch/rentview-journey-coverage/recovery-final-retry1/results.json",
-      "synthetic_users_cleaned": 4,
-      "local_messages_cleaned": 2,
-      "cleanup_errors": 0,
+      "checkpoints": 9,
+      "report": "/workspace/scratch/rentview-review-followup/browser-recovery-container2/results/results.json",
       "page_errors": 0,
       "external_requests": 0,
-      "scope": "Real local email/PKCE and Auth; validation/interrupted password save, consumed/wrong-browser links, delayed old-account rejection, cross-tab destinations, missing profile and interrupted partial-deletion recovery",
-      "not_run": [
-        "external email delivery",
-        "physical-device callbacks",
-        "successful Edge-runtime account deletion"
-      ]
+      "cleanup_errors": 0,
+      "scope": "synthetic browser + local Auth/Data API/Mailpit only",
+      "synthetic_messages_cleaned": 2,
+      "synthetic_users_cleaned": 4
     },
     "bounded_local_finance": {
       "status": "passed",
-      "checks": 9,
-      "report": "/workspace/scratch/rentview-journey-coverage/finance-final/results.json",
-      "current_year_csv_records": 1007,
-      "csv_data_pages": 5,
-      "currencies_tested": [
-        "USD",
-        "XCD",
-        "EUR"
-      ],
-      "browser_timezones": [
-        "America/Los_Angeles",
-        "America/St_Lucia"
-      ],
-      "cleanup_errors": 0,
+      "checkpoints": 9,
+      "report": "/workspace/scratch/rentview-review-followup/browser-finance-container/results/results.json",
       "page_errors": 0,
       "external_requests": 0,
-      "scope": "UI totals, real CSV periods/filtering/escaping, date edits, rejected edits, failed-draft identity, explicit discard and actual committed lost-response replay"
+      "cleanup_errors": 0,
+      "scope": "real local browser/Auth/Data API/CSV; synthetic identities only"
     },
     "large_finance_precision_probe": {
       "status": "passed",
@@ -279,43 +248,62 @@
       "each_amount": "9999999999.99",
       "exact_displayed_total": "2489999999997.51",
       "currency": "GBP",
-      "unsupported_representation_policy": "Existing technical precision failure is explicit; records remain visible rather than displaying an inaccurate total"
+      "unsupported_representation_policy": "Existing technical precision failure is explicit; records remain visible rather than displaying an inaccurate total",
+      "evidence_scope": "preserved pre-review baseline; see historical_validation; not a new standalone rerun"
     },
     "inflight_finance_probe": {
       "status": "passed",
       "report": "/workspace/scratch/rentview-journey-coverage/finance-inflight-final.json",
       "scope": "Actual committed response held; cancellation/editing blocked, Escape retains active form, subsequent draft remains intact",
-      "cleanup_errors": 0
+      "cleanup_errors": 0,
+      "evidence_scope": "preserved pre-review baseline; see historical_validation; not a new standalone rerun"
     },
     "bounded_keyboard_accessibility": {
       "status": "passed",
-      "checks": 9,
-      "report": "/workspace/scratch/rentview-journey-coverage/accessibility-final/results.json",
-      "cleanup_errors": 0,
+      "checkpoints": 9,
+      "report": "/workspace/scratch/rentview-review-followup/browser-accessibility-container/results/results.json",
       "page_errors": 0,
       "external_requests": 0,
-      "scope": "Real keyboard names, owner/tenant navigation, property-type radio state/keys, modal focus/trapping/Escape/Back, and retained invalid/interrupted drafts",
-      "not_run": [
-        "physical devices",
-        "screen-reader speech output",
-        "full WCAG audit"
-      ]
+      "cleanup_errors": 0,
+      "scope": "local browser keyboard/names/focus/draft checks only"
     },
     "bounded_delta_source_review": {
       "status": "completed",
       "finding": "No concrete new security or data-loss issue found in reviewed finance, keyboard and Auth navigator changes",
-      "scope": "independent source review; actual browser verification reported separately"
+      "scope": "independent source review; actual browser verification reported separately",
+      "evidence_scope": "preserved pre-review baseline; see historical_validation; not a new standalone rerun"
     },
     "local_recovery_mail_cleanup_verification": {
       "status": "passed",
       "matching_task_recipient_messages_remaining": 0,
       "report": "/workspace/scratch/rentview-journey-coverage/mail-leftover-inspection.json",
-      "scope": "local Mailpit envelope metadata only; no message bodies or unrelated deletion"
+      "scope": "local Mailpit envelope metadata only; no message bodies or unrelated deletion",
+      "evidence_scope": "preserved pre-review baseline; see historical_validation; not a new standalone rerun"
+    },
+    "fixture_cleanup_contract": {
+      "status": "passed",
+      "tests": 9,
+      "log": "/workspace/scratch/rentview-review-followup/cleanup-guards-container/check.log"
+    },
+    "fresh_pg_net_owner_boundary": {
+      "status": "passed_local_only",
+      "owner_maintenance_log": "/workspace/scratch/rentview-review-followup/fresh-net-maintenance.log",
+      "strict_boundary_log": "/workspace/scratch/rentview-review-followup/fresh-net-boundary.log",
+      "hosted_applied": false
+    },
+    "review_browser_regressions": {
+      "status": "passed",
+      "checkpoints": 7,
+      "report": "/workspace/scratch/rentview-review-followup/browser-review-container4/results/results.json",
+      "page_errors": 0,
+      "external_requests": 0,
+      "cleanup_errors": 0,
+      "scope": "synthetic local browser/Auth/API/Storage; first-create rejection injected, retry real"
     }
   },
   "pending_sql": {
     "path": "supabase/migrations/20261028190215_trust_and_operations.sql",
-    "sha256": "dc6aa6bba27c1a9c1e7cb5b3f835a5f0fa977b921287897560c60f411007f78a",
+    "sha256": "83dc0fc4b0562ac39db8c59ff1d66a2cea127b5fdae88b67498fa7b89c3b853f",
     "applied": true,
     "versioned_migration_generated": true,
     "requires": [
@@ -324,19 +312,20 @@
       "Review retention, financial correction and trusted provider-binding policies",
       "Complete native/device/provider release checks"
     ],
-    "applied_target": "approved local primary incremental fixture and separate full CLI replay project",
+    "applied_target": "approved disposable fresh 34-stage transactional SQL replay; existing primary schema verified incrementally",
     "applied_to_hosted": false,
     "filename_generator": "Supabase CLI2.122.0 migration new",
     "body_matches_locally_validated_source": true,
-    "validated_source_sha256": "51029614bd236521a1adb4536d01078a4495ef887ab656969cb0c260413113eb",
-    "original_draft_archive": "/workspace/scratch/rentview-db-drafts/trust_and_operations-51029614bd236521a1adb4536d01078a4495ef887ab656969cb0c260413113eb.sql"
+    "validated_source_sha256": "83dc0fc4b0562ac39db8c59ff1d66a2cea127b5fdae88b67498fa7b89c3b853f",
+    "original_draft_archive": "/workspace/scratch/rentview-db-drafts/trust_and_operations-51029614bd236521a1adb4536d01078a4495ef887ab656969cb0c260413113eb.sql",
+    "validation_report": "/workspace/scratch/rentview-review-followup/validation-final/results.json"
   },
   "blocked_action": null,
   "intentional_gates": {
     "paid_subscription_checkout": "Both provider checkout buttons disabled under owner More -> Plan & billing until authenticated trusted-binding lifecycle exists",
     "ordinary_account_signup": "enabled at /login; Google and tenant signup/recovery preserved",
     "email_change": "read-only pending validated confirmation flow",
-    "billing_reconciliation": "Unmatched events service-visible/retryable; no customer-facing reconciliation UI"
+    "billing_reconciliation": "Owner-scoped pending flag and service-only audited current-snapshot reconciliation implemented/tested locally; actual legacy provenance, automated provider reconciliation and trusted initial checkout remain gated"
   },
   "remaining_product_decisions": [
     "pricing axis; original three-property Free limit retained",
@@ -350,7 +339,7 @@
     "expanded desktop navigation/table shell",
     "user research and product analytics instrumentation"
   ],
-  "assurance": "The bounded local recovery, expense/export and keyboard pass is complete, with the core and URL/browser suites repeated against matching source. Real provider/device delivery, full account-deletion runtime and broader policy/release gates remain unverified or unresolved. This is not a claim that every possible exploit is excluded.",
+  "assurance": "Final bounded local PR-review corrections passed source-matched unit/type/build, 34-stage fresh SQL, focused billing/races and six browser suites. Physical devices, real providers, successful full Edge-runtime deletion, hosted configuration/migrations/owner privileges, advisories and product policies remain unresolved. No exhaustive exploit exclusion or blanket release clearance is claimed.",
   "local_environment": {
     "target": "localDocker disposable project rentview-local-test",
     "ports": "verified127.0.0.1 only: API54321 DB54322 SMTPtest54324",
@@ -358,7 +347,7 @@
     "healthcheck_issue": "BusyBoxwget ignores loopbackNO_PROXY and proxies localhealth403; exact same Auth/Storage loopback probes with per-request proxy off pass. Real API tests determine readiness.",
     "credentials": "ephemeral local-only keys stored0600 scratch; no hosted or provider credentials changed"
   },
-  "verified_at_utc": "2026-10-28T20:56:59.975325+00:00",
+  "verified_at_utc": "2026-10-30T13:16:48+00:00",
   "report": "VALIDATION.md",
   "additive_sql": {
     "path": "supabase/migrations/20261028193614_optimize_identity_policies.sql",
@@ -372,7 +361,10 @@
     "authorized hosted extension-owner ACL maintenance and API exposure verification; only disposable local targets were repaired",
     "seven policy-performance warnings plus nonrelocatable pg_net installation-namespace warning remain unsuppressed",
     "physical devices, screen-reader speech/full accessibility audit, external OAuth/email/push/payment delivery and successful Edge-runtime account deletion",
-    "trusted initial paid-checkout binding/reconciliation and owner decisions on pricing/grace, retention/cascades and posted financial corrections"
+    "trusted initial paid-checkout binding/reconciliation and owner decisions on pricing/grace, retention/cascades and posted financial corrections",
+    "actual legacy paid-account/provider/account provenance and production public build settings; Vercel inspection returned scope403",
+    "authorized hosted Storage-owner quota index maintenance; no ownership/role/grant workaround",
+    "exclusive deletion-worker operator recovery and successful full Edge-runtime deletion remain unverified"
   ],
   "security_gate_report": "SECURITY_RELEASE_GATES.md",
   "ci_triggered_during_local_validation": false,
@@ -383,5 +375,363 @@
     "git_environment_file": "untracked and ignored; local bytes preserved",
     "workspace_scratch_evidence": "private and not committed",
     "live_git_and_ci_state": "see GitHub pull request; this file records validation provenance"
-  }
+  },
+  "historical_validation": {
+    "2026-10-28_published_review_baseline": {
+      "source_ref": "522270386c5af39f61c20dc244242f419868683c",
+      "checks": {
+        "unit_and_handler_fixtures": {
+          "status": "passed",
+          "command": "npm test",
+          "tests": 108,
+          "pass": 108,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 0,
+          "todo": 0,
+          "log": "/workspace/scratch/rentview-journey-coverage/unit-candidate1.log",
+          "previous_log": "/workspace/scratch/rentview-warning-triage/unit-tests.log"
+        },
+        "application_types": {
+          "status": "passed",
+          "command": "npm run typecheck",
+          "log": "/workspace/scratch/rentview-journey-coverage/typecheck-final.log"
+        },
+        "test_types": {
+          "status": "passed",
+          "command": "npm run typecheck:tests",
+          "log": "/workspace/scratch/rentview-journey-coverage/typecheck-tests-final.log"
+        },
+        "web_export": {
+          "status": "passed",
+          "configuration": "approved disposable loopback54321 backend and actual local public key; paid URLs empty",
+          "output": "/workspace/scratch/rentview-journey-coverage/candidate2-build",
+          "previous_output": "/workspace/scratch/rentview-warning-triage/web-build",
+          "log": "/workspace/scratch/rentview-journey-coverage/candidate2-export.log",
+          "app_origin": "http://localhost:8081",
+          "source_manifest": "/workspace/scratch/rentview-journey-coverage/candidate2-source-hashes.json",
+          "source_files_matched_after_testing": 82
+        },
+        "whitespace": {
+          "status": "passed",
+          "command": "git diff --check"
+        },
+        "sdk_compatibility": {
+          "status": "passed",
+          "mismatches": 0,
+          "expo_version": "56.0.12",
+          "router_version": "56.2.11",
+          "version_guidance": "Installed Expo56.0.12 bundledNativeModules metadata; Router56.2.11 registry peer metadata verified",
+          "offline_metadata_caveat": true,
+          "dependency_installation": "completed with lockfile; single React/Screens/Reanimated/Worklets copies verified"
+        },
+        "lint": {
+          "status": "not_run",
+          "reason": "ESLint dependency/configuration unavailable"
+        },
+        "sql_regressions": {
+          "status": "passed",
+          "baseline_report": "/workspace/scratch/rentview-local-db-retry1/results.json",
+          "numeric_report": "/workspace/scratch/rentview-finite-numerics/results.json",
+          "projection_report": "/workspace/scratch/rentview-tenant-projection/results.json",
+          "real_concurrent_transactions": 3,
+          "special_numeric_rejections": 48,
+          "returning_report": "/workspace/scratch/rentview-request-returning/results.json"
+        },
+        "browser_to_database_e2e": {
+          "status": "passed",
+          "checkpoints": 13,
+          "report": "/workspace/scratch/rentview-journey-coverage/core-final-retry1/results.json",
+          "synthetic_users_cleaned": 5,
+          "cleanup_errors": 0,
+          "page_errors": 0,
+          "external_requests": 0,
+          "scope": "browser emulation + real local Auth/API/Storage/PostgreSQL; device and provider limits recorded in report",
+          "final_clean_run": true,
+          "previous_report": "/workspace/scratch/rentview-warning-triage/core-e2e/results.json"
+        },
+        "native_device_delivery_and_callbacks": {
+          "status": "not_run"
+        },
+        "payment_provider_live_or_sandbox_delivery": {
+          "status": "not_run"
+        },
+        "frontend_browser_smoke": {
+          "status": "passed",
+          "checks": 36,
+          "viewports": [
+            "phone390x844",
+            "desktop1440x1000"
+          ],
+          "page_errors": 0,
+          "external_requests": 0,
+          "report": "/workspace/scratch/rentview-journey-coverage/edges-final/results.json",
+          "scope": "synthetic auth validation, malformed/hostile return URLs, reserved query keys and real back/forward handling; no authenticated backend journey in this runner",
+          "previous_report": "/workspace/scratch/rentview-warning-triage/browser-edges/results.json"
+        },
+        "integration_runner_safety": {
+          "status": "passed",
+          "scope": "offline target/credential/concurrency-assertion guards; no backend requests",
+          "checks": 11
+        },
+        "database_advisors": {
+          "status": "passed_error_gate_after_identity_optimization_and_privileged_local_repair",
+          "errors": 0,
+          "warnings": 8,
+          "groups": {
+            "multiple_permissive_policies": 7,
+            "extension_in_public": 1
+          },
+          "report": "/workspace/scratch/rentview-warning-triage/advisors-post-repair.stdout",
+          "extension": "pg_net",
+          "previous_report": "/workspace/scratch/rentview-migration-replay/validation/advisors.stdout",
+          "findings_waived": false
+        },
+        "dependency_audit": {
+          "initial_vulnerable_nodes": 20,
+          "current_vulnerable_nodes": 11,
+          "critical": 0,
+          "high": 3,
+          "moderate": 3,
+          "low": 5,
+          "concrete_remaining_advisory_packages": [
+            "decode-uri-component",
+            "deepmerge",
+            "zod"
+          ],
+          "compatible_transitive_updates": 8,
+          "sdk_major_changed": false,
+          "report": "/workspace/scratch/rentview-warning-triage/npm-audit.json",
+          "remaining_concrete_advisories": 3,
+          "metro_family": "0.84.5",
+          "metro_patch_changed_nodes": 15,
+          "removed_installed_nodes": 19,
+          "image_size_removed": true,
+          "image_size_advisories_closed": [
+            "GHSA-5p2g-fcmc-qvqq",
+            "GHSA-w3rx-r6r6-pgpr"
+          ],
+          "scoped_parent_override_edges": 7,
+          "inventory": "SECURITY_RELEASE_GATES.md",
+          "previous_report": "/workspace/scratch/rentview-dependency-audit-final.json",
+          "findings_waived": false
+        },
+        "request_insert_response_modes": {
+          "status": "passed",
+          "modes": 3,
+          "correct_returned_ids": true,
+          "owner_and_tenant_readback": true,
+          "forged_participants_refused": true,
+          "cleanup_errors": 0,
+          "report": "/workspace/scratch/rentview-request-insert-probe-fixed.json"
+        },
+        "canonical_migration_replay": {
+          "status": "passed",
+          "stages": 15,
+          "report": "/workspace/scratch/rentview-migration-replay/validation/results.json",
+          "real_cli_migrations": 10,
+          "history_repair_used": false,
+          "legacy_upgrade_tested": true,
+          "fixture_cleanup": "passed",
+          "primary_container_unchanged": true
+        },
+        "focused_independent_source_review": {
+          "status": "completed",
+          "finding": "No additional concrete high-impact defect found in reviewed URL, account/session, offline isolation and tenant access code",
+          "scope": "source only; no claim of native/device/provider execution"
+        },
+        "identity_policy_optimization": {
+          "status": "passed",
+          "reviewed_policy_changes": 68,
+          "predicate_equivalence_cases": 2016,
+          "other_policies_unchanged": 51,
+          "prepared_plan_actor_switching": "passed",
+          "actual_identity_initplan_loops": 1,
+          "stages": 10,
+          "real_cli_migrations_after_additive_file": 11,
+          "history_repair_used": false,
+          "report": "/workspace/scratch/rentview-warning-triage/rls-results-retry1.json",
+          "primary_comparison": "/workspace/scratch/rentview-warning-triage/primary-rls-comparison.json"
+        },
+        "pg_net_owner_privilege_repair": {
+          "status": "passed_local_only",
+          "script": "supabase/privileged/lock_down_pg_net.sql",
+          "automatic_migration": false,
+          "owner": "supabase_admin",
+          "local_targets": 2,
+          "wrong_owner_guard": "passed_before_any_mutation",
+          "metadata_delta": "net schema/function ACLs only",
+          "browser_sql_access": "denied",
+          "worker_sql_access": "preserved; real enqueue rolled back with no committed HTTP request",
+          "initial_failure_preserved": "/workspace/scratch/rentview-warning-triage/extension-boundary-failure.json",
+          "report": "/workspace/scratch/rentview-warning-triage/pg-net-repair-results.json",
+          "hosted_applied": false
+        },
+        "backend_api_boundary": {
+          "status": "passed_after_local_privilege_repair",
+          "checks": 11,
+          "net_schema_selection": "406/PGRST106 for anon and authenticated",
+          "backend_rpc_denial": "anon401/42501;authenticated403/42501",
+          "cleanup_errors": 0,
+          "report": "/workspace/scratch/rentview-warning-triage/backend-boundary-final.json",
+          "previous_report": "/workspace/scratch/rentview-warning-triage/backend-boundary-post-repair.json"
+        },
+        "local_initializer_guard_tests": {
+          "status": "passed",
+          "tests": 7,
+          "command": "python -m unittest discover -s tests/db -p test_validate_local.py",
+          "scope": "source-only runner guards; not a new fresh backend run",
+          "log": "/workspace/scratch/rentview-journey-coverage/runner-guards-final.log"
+        },
+        "focused_delta_source_review": {
+          "status": "completed",
+          "finding": "No concrete new defect found in identity policy, owner privilege maintenance, Metro pin or resume guard source",
+          "scope": "source only; independent of runtime tests"
+        },
+        "bounded_local_recovery": {
+          "status": "passed",
+          "checks": 9,
+          "report": "/workspace/scratch/rentview-journey-coverage/recovery-final-retry1/results.json",
+          "synthetic_users_cleaned": 4,
+          "local_messages_cleaned": 2,
+          "cleanup_errors": 0,
+          "page_errors": 0,
+          "external_requests": 0,
+          "scope": "Real local email/PKCE and Auth; validation/interrupted password save, consumed/wrong-browser links, delayed old-account rejection, cross-tab destinations, missing profile and interrupted partial-deletion recovery",
+          "not_run": [
+            "external email delivery",
+            "physical-device callbacks",
+            "successful Edge-runtime account deletion"
+          ]
+        },
+        "bounded_local_finance": {
+          "status": "passed",
+          "checks": 9,
+          "report": "/workspace/scratch/rentview-journey-coverage/finance-final/results.json",
+          "current_year_csv_records": 1007,
+          "csv_data_pages": 5,
+          "currencies_tested": [
+            "USD",
+            "XCD",
+            "EUR"
+          ],
+          "browser_timezones": [
+            "America/Los_Angeles",
+            "America/St_Lucia"
+          ],
+          "cleanup_errors": 0,
+          "page_errors": 0,
+          "external_requests": 0,
+          "scope": "UI totals, real CSV periods/filtering/escaping, date edits, rejected edits, failed-draft identity, explicit discard and actual committed lost-response replay"
+        },
+        "large_finance_precision_probe": {
+          "status": "passed",
+          "report": "/workspace/scratch/rentview-journey-coverage/finance-precision-final.json",
+          "valid_rows": 249,
+          "each_amount": "9999999999.99",
+          "exact_displayed_total": "2489999999997.51",
+          "currency": "GBP",
+          "unsupported_representation_policy": "Existing technical precision failure is explicit; records remain visible rather than displaying an inaccurate total"
+        },
+        "inflight_finance_probe": {
+          "status": "passed",
+          "report": "/workspace/scratch/rentview-journey-coverage/finance-inflight-final.json",
+          "scope": "Actual committed response held; cancellation/editing blocked, Escape retains active form, subsequent draft remains intact",
+          "cleanup_errors": 0
+        },
+        "bounded_keyboard_accessibility": {
+          "status": "passed",
+          "checks": 9,
+          "report": "/workspace/scratch/rentview-journey-coverage/accessibility-final/results.json",
+          "cleanup_errors": 0,
+          "page_errors": 0,
+          "external_requests": 0,
+          "scope": "Real keyboard names, owner/tenant navigation, property-type radio state/keys, modal focus/trapping/Escape/Back, and retained invalid/interrupted drafts",
+          "not_run": [
+            "physical devices",
+            "screen-reader speech output",
+            "full WCAG audit"
+          ]
+        },
+        "bounded_delta_source_review": {
+          "status": "completed",
+          "finding": "No concrete new security or data-loss issue found in reviewed finance, keyboard and Auth navigator changes",
+          "scope": "independent source review; actual browser verification reported separately"
+        },
+        "local_recovery_mail_cleanup_verification": {
+          "status": "passed",
+          "matching_task_recipient_messages_remaining": 0,
+          "report": "/workspace/scratch/rentview-journey-coverage/mail-leftover-inspection.json",
+          "scope": "local Mailpit envelope metadata only; no message bodies or unrelated deletion"
+        }
+      },
+      "pending_sql": {
+        "path": "supabase/migrations/20261028190215_trust_and_operations.sql",
+        "sha256": "dc6aa6bba27c1a9c1e7cb5b3f835a5f0fa977b921287897560c60f411007f78a",
+        "applied": true,
+        "versioned_migration_generated": true,
+        "requires": [
+          "Review the canonical migration before an authorized hosted rollout",
+          "Preflight and reconcile actual legacy customer data before validating constraints",
+          "Review retention, financial correction and trusted provider-binding policies",
+          "Complete native/device/provider release checks"
+        ],
+        "applied_target": "approved local primary incremental fixture and separate full CLI replay project",
+        "applied_to_hosted": false,
+        "filename_generator": "Supabase CLI2.122.0 migration new",
+        "body_matches_locally_validated_source": true,
+        "validated_source_sha256": "51029614bd236521a1adb4536d01078a4495ef887ab656969cb0c260413113eb",
+        "original_draft_archive": "/workspace/scratch/rentview-db-drafts/trust_and_operations-51029614bd236521a1adb4536d01078a4495ef887ab656969cb0c260413113eb.sql"
+      },
+      "verified_at_utc": "2026-10-28T20:56:59.975325+00:00",
+      "assurance": "The bounded local recovery, expense/export and keyboard pass is complete, with the core and URL/browser suites repeated against matching source. Real provider/device delivery, full account-deletion runtime and broader policy/release gates remain unverified or unresolved. This is not a claim that every possible exploit is excluded."
+    }
+  },
+  "review_followup": {
+    "date": "2026-10-30",
+    "review_baseline_ref": "522270386c5af39f61c20dc244242f419868683c",
+    "source_ref": "verified working tree on existing PR branch; publication commit recorded by owner agent later",
+    "release_cleared": false,
+    "hosted_changes": false,
+    "report": "REVIEW_RESPONSE.md",
+    "evidence_root": "/workspace/scratch/rentview-review-followup",
+    "scratch_evidence_committed": false,
+    "fresh_migrations": [
+      {
+        "path": "supabase/migrations/20261028190215_trust_and_operations.sql",
+        "sha256": "83dc0fc4b0562ac39db8c59ff1d66a2cea127b5fdae88b67498fa7b89c3b853f"
+      },
+      {
+        "path": "supabase/migrations/20261028193614_optimize_identity_policies.sql",
+        "sha256": "a154e2aa7967023890cacc45e96e5dee81f6659a58a06a770121a60c7e765482"
+      },
+      {
+        "path": "supabase/migrations/20261030110348_repair_review_operations.sql",
+        "sha256": "dd97cdfb62f9e2929cc5f1f21940f04adea68f88b7d8741df2b7c90e1b78ffaa"
+      },
+      {
+        "path": "supabase/migrations/20261030110358_reconcile_billing_safely.sql",
+        "sha256": "a65baeb8bc9dbfa3bd98287d69e188214d8c91749ab2ced5e6cd4c3099889ef8"
+      },
+      {
+        "path": "supabase/migrations/20261030110404_notification_terminal_delivery.sql",
+        "sha256": "f19224ceea1a0615091ebda7e05e17276c940f891897963fd4a0577cbf9847b6"
+      },
+      {
+        "path": "supabase/migrations/20261030111719_identity_deletion_worker_claim.sql",
+        "sha256": "c3a1f2d3d81bdff1585dd4161668cea42c934b6f002d4248b0b6860e15363b94"
+      }
+    ],
+    "exact_final_migration_hashes_match": true,
+    "application_source_files_matching_build": 85,
+    "maintenance_prerequisites": [
+      "supabase/privileged/prepare_legacy_billing_reconciliation.sql",
+      "supabase/privileged/index_storage_owner_quota.sql",
+      "supabase/privileged/lock_down_pg_net.sql"
+    ],
+    "preserved_failures": "initial Storage-owner index 42501 attempt, intermediate replay, browser launch/setup and cleanup failures retained separately; final clean reports determine pass counts",
+    "new_cli_history_records_claimed": false,
+    "source_manifest": "/workspace/scratch/rentview-review-followup/final-source-manifest.json"
+  },
+  "source_base_ref": "c8cbe8f9af78d9c28ca23a7804707399709a5c7e"
 }

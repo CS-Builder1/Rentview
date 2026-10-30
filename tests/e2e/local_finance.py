@@ -357,14 +357,9 @@ def main(argv=None):
             browser.close()
         if playwright:
             playwright.stop()
-        errors = 0
-        for uid in reversed(users):
-            try:
-                status, _ = api.request("DELETE", "/auth/v1/admin/users/" + uid, admin=True)
-                assert status == 200
-            except Exception:
-                errors += 1
-        result["cleanup"] = {"synthetic_users": len(users), "errors": errors}
+        cleanup = [api.cleanup_synthetic_user(uid) for uid in reversed(users)]
+        errors = sum(item["status"] != "deleted" for item in cleanup)
+        result["cleanup"] = {"synthetic_users": len(users), "errors": errors, "details": cleanup}
         if errors:
             result["status"] = "failed"
         save()

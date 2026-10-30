@@ -21,7 +21,7 @@ from threading import Barrier
 from urllib.error import HTTPError
 from urllib.parse import parse_qs, quote, urlencode, urljoin, urlparse
 from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 LOOPBACK = {"localhost", "127.0.0.1", "::1"}
 PNG = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jvH0AAAAASUVORK5CYII=")
@@ -64,6 +64,7 @@ class LocalAPI:
     def __init__(self, target, secret_values):
         self.base, self.anon, self.service = target["url"], target["anon"], target["service"]
         self.secret_values = secret_values
+        self.synthetic_users = {}
         # Loopback requests do not traverse ambient proxies or credential injectors.
         self.http = build_opener(ProxyHandler({}), LocalRedirects())
 
@@ -124,7 +125,118 @@ class LocalAPI:
 
     def admin_user(self, email, password, label):
         user = self.ok("POST", "/auth/v1/admin/users", admin=True, body={"email": email, "password": password, "email_confirm": True, "user_metadata": {"full_name": label}})
+        self.register_synthetic_user(user["id"], email)
         return user["id"]
+
+    def register_synthetic_user(self, uid, email):
+        """Register only this runner's newly created, exact test identity."""
+        if str(UUID(uid)) != uid or not email.startswith("rentview-") or not email.endswith("@example.test"):
+            raise ValueError("Only exact RentView synthetic identities may be registered for cleanup.")
+        self.synthetic_users[uid] = email
+
+    def cleanup_synthetic_user(self, uid):
+        """Use the deletion claim contract; never overtake an uncertain worker.
+
+        Callers close their browsers first. The helper accepts only identities
+        registered from this run's creation response, validates their exact email,
+        removes at most2,000 owned objects across all buckets, and deletes Auth
+        only after all acknowledged Storage and metadata work has completed.
+        """
+        result = {"user_id": uid, "status": "failed", "removed_objects": 0, "errors": []}
+        claimed = pending = False
+        claim_args = {"p_owner_id": uid, "p_claim_token": str(uuid4())}
+        action = "validate synthetic identity"
+
+        def safe(value):
+            value = str(value)
+            for secret in sorted(self.secret_values, key=len, reverse=True):
+                if secret:
+                    value = value.replace(secret, "[fixture-secret]")
+            return re.sub(r"eyJ[A-Za-z0-9_.-]{30,}", "[token]", value)[:400]
+
+        def call(method, path, body=None):
+            status, data = self.request(method, path, admin=True, body=body)
+            if not 200 <= status < 300:
+                code = data.get("code", "") if isinstance(data, dict) else ""
+                message = data.get("message", data.get("msg", "")) if isinstance(data, dict) else ""
+                raise RuntimeError(f"HTTP {status}; code {safe(code)}; {safe(message)}")
+            return data
+
+        def rpc(name, args):
+            return call("POST", "/rest/v1/rpc/" + name, args)
+
+        def begin():
+            nonlocal pending
+            # An RPC acknowledgement can be lost after its persistent mutation.
+            pending = True
+            if rpc("begin_identity_deletion_step", claim_args) is not True:
+                raise RuntimeError("The deletion claim did not begin the destructive step.")
+
+        try:
+            if uid not in self.synthetic_users:
+                raise ValueError("Cleanup refused an identity not registered by this runner.")
+            identity = call("GET", "/auth/v1/admin/users/" + uid)
+            if not isinstance(identity, dict) or identity.get("id") != uid or identity.get("email") != self.synthetic_users[uid]:
+                raise ValueError("Cleanup identity does not match the exact registered synthetic account.")
+            action = "prepare synthetic deletion"
+            rpc("prepare_identity_deletion", {"p_owner_id": uid})
+            action = "claim synthetic deletion"
+            claim = rpc("claim_identity_deletion_worker", claim_args)
+            if claim != "claimed":
+                result["status"] = "blocked"
+                raise RuntimeError("Existing deletion worker requires review; no takeover attempted.")
+            claimed = True
+            while True:
+                action = "discover synthetic storage"
+                rows = rpc("owned_storage_paths", {**claim_args, "p_limit": 100})
+                if not isinstance(rows, list) or len(rows) > 100:
+                    raise RuntimeError("Unexpected bounded storage list.")
+                if not rows:
+                    break
+                if result["removed_objects"] + len(rows) > 2000:
+                    raise RuntimeError("Synthetic storage cleanup reached its2,000-object bound.")
+                buckets = {}
+                for row in rows:
+                    if not isinstance(row, dict) or not isinstance(row.get("bucket_id"), str) or not row["bucket_id"] or not isinstance(row.get("name"), str) or not row["name"]:
+                        raise RuntimeError("Unexpected owned storage path.")
+                    buckets.setdefault(row["bucket_id"], []).append(row["name"])
+                for bucket, names in buckets.items():
+                    action = "begin synthetic storage removal"
+                    begin()
+                    action = "remove synthetic storage"
+                    call("DELETE", "/storage/v1/object/" + quote(bucket, safe=""), {"prefixes": names})
+                    action = "finish synthetic storage removal"
+                    if rpc("finish_identity_deletion_step", claim_args) is not True:
+                        raise RuntimeError("Storage completion could not be acknowledged.")
+                    pending = False
+                    if bucket == "attachments":
+                        action = "forget removed synthetic upload metadata"
+                        rpc("forget_deleted_uploads", {**claim_args, "p_paths": names})
+                    result["removed_objects"] += len(names)
+            action = "recheck synthetic deletion"
+            rpc("prepare_identity_deletion", {"p_owner_id": uid})
+            action = "begin synthetic identity removal"
+            begin()
+            action = "delete synthetic identity"
+            call("DELETE", "/auth/v1/admin/users/" + uid)
+            # Auth deletion cascades the matching claim; it must not be finished
+            # or recreated after the identity has gone.
+            pending = claimed = False
+            self.synthetic_users.pop(uid)
+            result["status"] = "deleted"
+        except Exception as failure:
+            result["errors"].append({"action": action, "type": type(failure).__name__, "message": safe(failure)})
+            if pending:
+                result["status"] = "needs_review"
+        finally:
+            if claimed:
+                cleanup_action = "mark_identity_deletion_uncertain" if pending else "release_identity_deletion_worker"
+                try:
+                    if rpc(cleanup_action, claim_args) is not True:
+                        raise RuntimeError("Deletion claim transition was not acknowledged.")
+                except Exception as failure:
+                    result["errors"].append({"action": cleanup_action, "type": type(failure).__name__, "message": safe(failure)})
+        return result
 
     def login(self, email, password):
         data = self.ok("POST", "/auth/v1/token?grant_type=password", body={"email": email, "password": password})
@@ -405,6 +517,7 @@ def main(argv=None):
         # address through the local admin API, then continue real UI sign-in.
         users = wait_for_data(lambda: next((user for user in api.ok("GET", "/auth/v1/admin/users?page=1&per_page=1000", admin=True)["users"] if user["email"] == tenant_email), None))
         fixture_users.append(users["id"])
+        api.register_synthetic_user(users["id"], tenant_email)
         if not users.get("email_confirmed_at"):
             api.ok("PUT", "/auth/v1/admin/users/" + users["id"], admin=True, body={"email_confirm": True})
             expect(tenant_page.get_by_role("button", name="Sign in", exact=True)).to_be_visible()
@@ -697,27 +810,9 @@ def main(argv=None):
             except Exception:
                 pass
         if not args.keep_fixtures:
-            cleanup_errors = 0
-            # Query only this run's principals so a successful upload followed by
-            # a failed metadata write cannot leave an untracked orphan behind.
-            owned_paths = {("attachments", path) for path in fixture_paths}
-            for user_id in fixture_users:
-                try:
-                    rows = api.ok("POST", "/rest/v1/rpc/owned_storage_paths", admin=True, body={"p_owner_id": user_id, "p_limit": 1000})
-                    owned_paths.update((row["bucket_id"], row["name"]) for row in rows)
-                except Exception:
-                    cleanup_errors += 1
-            for bucket, path in owned_paths:
-                try:
-                    api.ok("DELETE", "/storage/v1/object/" + quote(bucket, safe=""), admin=True, body={"prefixes": [path]})
-                except Exception:
-                    cleanup_errors += 1
-            for user_id in reversed(fixture_users):
-                try:
-                    api.ok("DELETE", "/auth/v1/admin/users/" + user_id, admin=True)
-                except Exception:
-                    cleanup_errors += 1
-            result["cleanup"] = {"own_synthetic_users": len(fixture_users), "errors": cleanup_errors}
+            cleanup = [api.cleanup_synthetic_user(uid) for uid in reversed(fixture_users)]
+            cleanup_errors = sum(item["status"] != "deleted" for item in cleanup)
+            result["cleanup"] = {"own_synthetic_users": len(fixture_users), "errors": cleanup_errors, "details": cleanup}
             if cleanup_errors:
                 result["status"] = "failed"
                 result.setdefault("failure", {"step": "fixture_cleanup", "error": "Synthetic fixture cleanup was incomplete; see cleanup error count."})

@@ -1,5 +1,84 @@
 # Local implementation validation
 
+## 2026-10-30 PR review follow-up
+
+The bounded local follow-up passed against the final application source and the
+revised migrations, including the deletion-tombstone billing recovery fix.
+The PR remains a draft with external release gates. No hosted state, credentials,
+provider activation, deployment or merge was changed.
+
+| Check | Final local result |
+| --- | --- |
+| Unit/handler regressions; application/test TypeScript | 146 passed; both type checks passed |
+| Runner and cleanup contract guards | 11 database source guards and nine fixture-cleanup guards passed |
+| Expo 56 compatibility; guarded web export | Zero mismatches using installed/offline metadata; production export passed with local public settings and empty paid URLs |
+| Source/build identity | All 85 app/component/library files match the tested build |
+| Fresh migration replay | 34 stages passed, including exact final migration/input hashes, unresolved legacy billing refusal before mutation, verified/rejected synthetic billing decisions, Storage-owner prerequisite, operations, billing, notification and deletion-worker regressions |
+| Primary local database | Eleven SQL suites passed; after the final reconciliation-function change, three focused billing checks and three real financial transaction races passed again |
+| Fresh extension-owner boundary | Local owner-issued pg_net maintenance and strict browser-denial/worker-allow SQL boundary passed |
+| Database advisors | Zero errors; eight unsuppressed warnings: seven permissive-policy warnings and one pg_net installation-namespace warning |
+| Real browser core journey | 13 checkpoints passed |
+| Review regressions | Seven checkpoints passed: owner/tenant inbox separation, missing-photo isolation, actual polling-link reuse and explicit retry, and one durable ID through failed/repeated/edited/retried work-order, asset and lease saves |
+| Finance; keyboard/accessibility | Nine checkpoints per suite passed |
+| Local recovery | Nine checkpoints passed, including two real Mailpit PKCE messages; four synthetic identities and both messages cleaned |
+| Phone/desktop URL edges | 36 checks passed across two viewports |
+
+All final browser reports record zero runtime errors, external requests and
+synthetic cleanup errors. Browser phone emulation does not establish physical
+phone behavior. The finance, recovery and accessibility checks retain their
+bounded scope; successful full Edge-runtime account deletion, external providers
+and full screen-reader/WCAG conformance remain unverified. Fixture teardown uses
+real local Auth/Storage/RPC primitives; it does not execute the Deno deletion handler.
+
+The fresh replay applies SQL transactionally; **it does not populate Supabase CLI
+migration history**. The older genuine CLI-record evidence below is historical,
+and no new CLI record or history repair is claimed. The original trust migration
+changed for the legacy billing gate; the final 34-stage report verifies its new
+bytes rather than relying on the previous migration checksum.
+
+The initial 32-stage replay failed with `42501` when the migration role attempted
+the platform-owned Storage index. That report, intermediate browser launch/setup
+and cleanup failures, and the first replay before the billing-tombstone correction
+remain preserved. The final reports above supersede their outcomes, without
+relabeling failed attempts as passes or treating setup failures as application
+assertion failures. Actual-owner Storage index maintenance is separate privileged
+SQL; it changes no role/ownership/grants and is required before the operations
+migration, which refuses a missing/mismatched index with `55000`.
+
+Private workspace evidence is under
+`/workspace/scratch/rentview-review-followup/`: `validation-final/results.json`,
+`billing-rpc-results.json`, `primary-apply-results.json`, `advisors-final.log`,
+`fresh-net-maintenance.log`, `fresh-net-boundary.log`, `unit-container/check.log`,
+`types-container3/check.log`, `test-types-container3/check.log`,
+`guards-container/check.log`, `cleanup-guards-container/check.log`,
+`sdk-container/check.log`, `build-container4/check.log`,
+`final-source-manifest.json`, and the final `results/results.json` in
+`browser-core-container3`, `browser-review-container4`, `browser-finance-container`,
+`browser-accessibility-container`, `browser-recovery-container2` and
+`browser-urls-container`. These scratch paths are private provenance, **not
+committed GitHub artifacts**. The checked-in runners and summaries support review.
+
+Current release SQL is the revised trust migration, the identity migration, and
+all four `20261030` review migrations. Separate owner/operator prerequisites are
+`supabase/privileged/prepare_legacy_billing_reconciliation.sql`,
+`supabase/privileged/index_storage_owner_quota.sql` and
+`supabase/privileged/lock_down_pg_net.sql`.
+
+Still open: real legacy paid-account provenance, production public build settings
+(Vercel inspection returned scope 403), authorized hosted migration and platform
+owner/exposure verification, three upstream dependency advisories, successful
+full Edge-runtime deletion and its operator recovery contract, physical devices,
+external email/OAuth/push/payment delivery, and commercial/retention/financial
+correction decisions. Paid checkout remains disabled. No CI pass or blanket
+release clearance is claimed. See [REVIEW_RESPONSE.md](./REVIEW_RESPONSE.md),
+[BILLING_RECONCILIATION.md](./BILLING_RECONCILIATION.md) and
+[SECURITY_RELEASE_GATES.md](./SECURITY_RELEASE_GATES.md).
+
+## Preserved 2026-10-28 baseline evidence
+
+The remainder records the earlier candidate and its historical attempts. Its
+counts and checksums are not substitutes for the final follow-up record above.
+
 This report records disposable-local validation of the implementation prepared
 for draft source review. No hosted database, security configuration, credentials,
 provider activation or deployment was changed. Publication and automatic-check

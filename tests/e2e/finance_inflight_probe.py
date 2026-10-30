@@ -138,13 +138,9 @@ def main():
                 route.abort()
             except Exception:
                 pass
-        errors = 0
-        if uid:
-            try:
-                status, _ = api.request("DELETE", "/auth/v1/admin/users/" + uid, admin=True)
-                assert status == 200
-            except Exception:
-                errors += 1
+        cleanup = api.cleanup_synthetic_user(uid) if uid else None
+        errors = int(cleanup is not None and cleanup["status"] != "deleted")
+        result["cleanup"] = cleanup
         result["cleanup_errors"] = errors
         if errors:
             result["status"] = "failed"

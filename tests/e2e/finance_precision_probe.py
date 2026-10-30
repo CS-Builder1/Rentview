@@ -81,13 +81,9 @@ def main():
         result["status"] = "failed"
         result["failure"] = {"type": type(failure).__name__, "message": "Precision browser check failed; see bounded numeric observations"}
     finally:
-        cleanup_errors = 0
-        if uid:
-            try:
-                status, _ = api.request("DELETE", "/auth/v1/admin/users/" + uid, admin=True)
-                assert status == 200
-            except Exception:
-                cleanup_errors += 1
+        cleanup = api.cleanup_synthetic_user(uid) if uid else None
+        cleanup_errors = int(cleanup is not None and cleanup["status"] != "deleted")
+        result["cleanup"] = cleanup
         result["cleanup_errors"] = cleanup_errors
         if cleanup_errors:
             result["status"] = "failed"

@@ -1,5 +1,39 @@
 # Security findings and release gates
 
+## 2026-10-30 review follow-up
+
+The bounded local correction pass is complete. [REVIEW_RESPONSE.md](./REVIEW_RESPONSE.md)
+maps the claims to fixes/tests; [VALIDATION.md](./VALIDATION.md) records final
+source hashes, preserved failures and private evidence paths. Final checks pass:
+146 unit/handler tests, both types, 11 source guards, nine cleanup guards, zero
+SDK mismatches using installed/offline metadata, guarded export with 85 matching
+app files, 34 fresh SQL stages, 11 primary SQL suites plus final focused billing
+and three real race retests, and browser suites of 13 core, seven review, nine
+finance, nine recovery, nine keyboard/accessibility and 36 URL/viewport checks.
+Browser runtime/outbound/cleanup errors are zero. Fresh local pg_net owner
+maintenance and strict boundary passed; advisors still report zero errors and
+eight unsuppressed warnings. No populated performance benchmark is claimed.
+
+These results preserve the open gates: actual legacy paid-account provenance
+and [operator reconciliation](./BILLING_RECONCILIATION.md); production variables
+(Vercel scope 403); authorized hosted migrations, Storage/extension-owner and API
+exposure checks; three dependency advisories; successful full Edge-runtime
+deletion and [exclusive-worker recovery](./supabase/privileged/IDENTITY_DELETION_RECOVERY.md);
+physical devices, external OAuth/email/push/payment delivery, full accessibility
+and the existing commercial/retention/financial-correction decisions. Checkout
+remains disabled. No advisory is waived and no merge/deploy/CI pass is claimed.
+
+The Storage quota index requires explicit [actual-owner maintenance](./supabase/privileged/index_storage_owner_quota.sql)
+without role/ownership/grant changes; the operations migration refuses a missing
+or mismatched index with `55000` before app changes. Its initial migration-role
+`42501` failure remains preserved. The revised original trust migration and all
+four review migrations now match the final fresh replay. That replay is
+transactional SQL and does not create CLI history; the older CLI-record evidence
+below belongs to the historical candidate. Hosted owner execution is separately
+gated, even where the disposable local scripts passed.
+
+## Preserved earlier review evidence
+
 Local review dated 2026-10-28, prepared for draft source review. Publishing the
 draft does not close release gates or authorize merge, hosted changes, deployment
 or provider activation. Findings remain open unless a passing result below

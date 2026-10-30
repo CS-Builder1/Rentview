@@ -97,12 +97,9 @@ def main():
             message = message.replace(value, "[fixture-secret]")
         result["error"] = message
     finally:
-        cleanup_errors = 0
-        for uid in reversed(users):
-            try:
-                api.ok("DELETE", "/auth/v1/admin/users/" + uid, admin=True)
-            except Exception:
-                cleanup_errors += 1
+        cleanup = [api.cleanup_synthetic_user(uid) for uid in reversed(users)]
+        cleanup_errors = sum(item["status"] != "deleted" for item in cleanup)
+        result["cleanup"] = cleanup
         result["cleanup_errors"] = cleanup_errors
         if cleanup_errors:
             result["status"] = "failed"

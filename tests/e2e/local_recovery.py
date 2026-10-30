@@ -30,6 +30,7 @@ from local_e2e import LOOPBACK, LocalAPI, LocalRedirects, local_url, private_cre
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--base-url', required=True)
+    parser.add_argument('--browser', default='/usr/bin/chromium')
     parser.add_argument('--mail-url', required=True)
     parser.add_argument('--credentials-file', type=Path, required=True)
     parser.add_argument('--allow-disposable-local', action='store_true')
@@ -266,7 +267,7 @@ def main(argv=None):
         owner, other, pending, missing = [principal(label) for label in ('owner','other','pending','missing')]
         playwright=sync_playwright().start()
         pw=playwright
-        browser=pw.chromium.launch(executable_path='/usr/bin/chromium',headless=True,args=['--no-sandbox','--disable-background-networking'])
+        browser=pw.chromium.launch(executable_path=args.browser,headless=True,args=['--no-sandbox','--disable-background-networking'])
         context=wire_context();page=new_page(context)
         if args.scenario_group!='accounts':
             current_step='same-browser real PKCE recovery and local email'
@@ -487,21 +488,16 @@ def main(argv=None):
         if playwright:
             try:playwright.stop()
             except Exception:pass
-        cleanup_errors=0
+        cleanup = [api.cleanup_synthetic_user(uid) for uid in reversed(users)]
+        cleanup_errors = sum(item['status'] != 'deleted' for item in cleanup)
         cleanup_notes=[]
-        for uid in reversed(users):
-            try:
-                status,_=api.request('DELETE','/auth/v1/admin/users/'+uid,admin=True)
-                assert status==200
-            except Exception:
-                cleanup_errors+=1;cleanup_notes.append('synthetic user cleanup failed')
         if mail_ids:
             try:
                 status,_=mail_request('DELETE','/api/v1/messages',{'IDs':sorted(mail_ids)})
                 assert status==200, 'Unexpected test-mail cleanup HTTP status: '+str(status)
             except Exception as failure:
                 cleanup_errors+=1;cleanup_notes.append(str(failure)[:100])
-        result['cleanup']={'synthetic_users':len(users),'synthetic_messages':len(mail_ids),'errors':cleanup_errors,'notes':cleanup_notes}
+        result['cleanup']={'synthetic_users':len(users),'synthetic_messages':len(mail_ids),'errors':cleanup_errors,'notes':cleanup_notes,'details':cleanup}
         if cleanup_errors:result['status']='failed'
         save()
         print(json.dumps({'status':result['status'],'checks':len(result['checks']),'failure':result.get('failure'),'result_file':str(result_file)}))

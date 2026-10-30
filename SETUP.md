@@ -1,5 +1,41 @@
 # Validation and release setup
 
+## 2026-10-30 review follow-up
+
+Bounded local verification is complete: 146 unit/handler tests, both TypeScript
+checks, 11 database source guards, nine cleanup guards, zero offline-metadata SDK
+mismatches, guarded export and an exact 85-file application/build match passed.
+The final 34-stage transactional fresh replay matches all final migration/input
+hashes, including billing-tombstone recovery. Eleven primary SQL suites passed;
+the final function then passed three focused billing checks and three real races.
+Fresh pg_net owner maintenance and the strict boundary passed. Advisors remain
+zero errors/eight unsuppressed warnings. Final browser checks passed 13 core,
+seven review, nine finance, nine recovery, nine accessibility and 36 URL/viewport
+cases, with no runtime/outbound/cleanup errors. These are local/browser results.
+See [VALIDATION.md](./VALIDATION.md) and [REVIEW_RESPONSE.md](./REVIEW_RESPONSE.md).
+
+Apply the revised trust migration and every additive migration in order only
+after the actual legacy provenance gate in [BILLING_RECONCILIATION.md](./BILLING_RECONCILIATION.md)
+is satisfied. The original trust file changed; its older checksum/replay is
+historical. The new fresh replay uses transactional SQL and creates no CLI
+migration-history entries. Do not infer new CLI records or repair history.
+
+The operations migration requires the exact index installed by the authorized
+actual Storage owner using [index_storage_owner_quota.sql](./supabase/privileged/index_storage_owner_quota.sql).
+It fails `55000` before app changes if absent/mismatched. This separate maintenance
+changes no role/ownership/grants. The earlier 32-stage `42501` failure is retained.
+Hosted Storage/pg_net-owner operations require separate authority; do not broaden
+an app role's privileges. All historical evidence below remains preserved.
+
+Production build variables remain unverified after Vercel's scope 403; the build
+requires injected public configuration. Keep the preserved local `.env` ignored.
+Hosted rollout/exposure, three upstream advisories, successful full Edge-runtime
+deletion and its [recovery contract](./supabase/privileged/IDENTITY_DELETION_RECOVERY.md),
+physical devices, external provider delivery and product policies remain gates.
+Paid checkout remains disabled. No CI pass, merge or deployment is claimed.
+
+## Historical setup and validation evidence
+
 The implementation validation gates below precede release configuration. Provider credentials and product policy decisions require your accounts or input. The new source must not be deployed against the previous schema.
 
 **Nothing here is urgent unless the "Blocks" line says so.**

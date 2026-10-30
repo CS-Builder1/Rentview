@@ -96,14 +96,9 @@ def main(argv=None):
         # URLs, credentials or secret-returning RPC results cannot reach output.
         result["failure"] = {"check": current_check, "exception_type": type(failure).__name__}
     finally:
-        cleanup_errors = 0
-        for uid in reversed(users):
-            try:
-                status, _ = api.request("DELETE", "/auth/v1/admin/users/" + uid, admin=True)
-                assert status == 200, "Unexpected synthetic cleanup status."
-            except Exception:
-                cleanup_errors += 1
-        result["cleanup"] = {"synthetic_users": len(users), "errors": cleanup_errors}
+        cleanup = [api.cleanup_synthetic_user(uid) for uid in reversed(users)]
+        cleanup_errors = sum(item["status"] != "deleted" for item in cleanup)
+        result["cleanup"] = {"synthetic_users": len(users), "errors": cleanup_errors, "details": cleanup}
         if cleanup_errors:
             result["status"] = "failed"
             result.setdefault("failure", {"check": "synthetic_cleanup", "exception_type": "CleanupFailure"})

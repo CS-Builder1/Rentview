@@ -315,11 +315,9 @@ def main():
         if playwright:
             try: playwright.stop()
             except Exception: pass
-        cleanup_errors = 0
-        for uid in reversed(users):
-            try: api.ok('DELETE', '/auth/v1/admin/users/' + uid, admin=True)
-            except Exception: cleanup_errors += 1
-        result['cleanup'] = {'synthetic_users': len(users), 'errors': cleanup_errors}
+        cleanup = [api.cleanup_synthetic_user(uid) for uid in reversed(users)]
+        cleanup_errors = sum(item['status'] != 'deleted' for item in cleanup)
+        result['cleanup'] = {'synthetic_users': len(users), 'errors': cleanup_errors, 'details': cleanup}
         if cleanup_errors: result['status'] = 'failed'
         report = args.output / 'results.json'
         report.write_text(json.dumps(result, indent=2) + '\n')

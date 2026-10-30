@@ -161,20 +161,22 @@ commission is avoided. Lemon Squeezy is the merchant of record (it handles VAT a
 receipts); PayPal is offered alongside it because parts of the world reach for PayPal
 first.
 
-**How an account becomes Pro.** The checkout link carries the account id
-(`?checkout[custom][user_id]=…` for Lemon Squeezy), the provider's webhook verifies
-itself, and the function mirrors subscription state into `subscriptions`. The app never
-decides entitlement from a payment — only from that row.
+**How an account becomes Pro.** A verified webhook updates access only for an
+independently registered, service-owned provider subscription binding. Customer
+checkout metadata, `custom_id` and payer email do not prove account ownership.
+Both paid checkout controls remain disabled until authenticated server-side
+subscription creation and provider reconciliation are implemented and validated.
 
 - `lemonsqueezy-webhook` — HMAC-SHA256 over the raw body against `X-Signature`,
   compared in constant time.
-- `paypal-webhook` — PayPal's own verify-webhook-signature API vouches for each
-  delivery. PayPal has no documented way to carry our account id through a hosted
-  subscribe link, so it matches on the payer's email; unmatched events are still
-  recorded in `billing_events` to be reconciled by hand.
+- `paypal-webhook` — PayPal's verify-webhook-signature API vouches for each
+  delivery; only the existing service-owned binding determines its account.
 
-Both are idempotent: every verified delivery is written to `billing_events` first, and
-a repeat of the same state is a no-op.
+The event ledger and entitlement update commit atomically. Unbound events remain
+unmatched; conflicting states at the same provider timestamp stay pending review
+and hold account deletion. Authentic events for other products are acknowledged
+and ignored. See [BILLING_RECONCILIATION.md](./BILLING_RECONCILIATION.md) for the
+operator-only legacy rollout gate and audited current-snapshot reconciliation.
 
 **Entitlement** (`lib/plan.ts`) is computed, not stored as a boolean. A subscription
 grants Pro while `active`, `trialing` or `past_due`, and a *cancelled* one keeps it
