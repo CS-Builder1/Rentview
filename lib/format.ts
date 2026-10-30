@@ -19,9 +19,12 @@ export function formatCurrency(
 
 export function formatDate(value: string | null | undefined): string {
   if (!value) return "—";
-  const d = new Date(value);
+  // A calendar date has no timezone; format it as UTC to preserve its day.
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value);
+  const d = new Date(dateOnly ? `${value}T12:00:00Z` : value);
   if (Number.isNaN(d.getTime())) return "—";
-  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(d);
+  if (dateOnly && d.toISOString().slice(0, 10) !== value) return "—";
+  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", ...(dateOnly ? { timeZone: "UTC" } : {}) }).format(d);
 }
 
 export function titleCase(value: string): string {

@@ -81,19 +81,44 @@ supabase/
                          send-push, lemonsqueezy-webhook, paypal-webhook)
 ```
 
+## Local implementation milestone (unreleased)
+
+The current worktree contains access-control, offline, billing, tenant-flow and owner-workflow changes. The matching SQL is versioned in `supabase/migrations/20261028190215_trust_and_operations.sql` and `20261028193614_optimize_identity_policies.sql`, tested against disposable local Supabase/PostgreSQL. Neither has been applied to the hosted project. The separate owner-only `supabase/privileged/lock_down_pg_net.sql` also passed locally; it is not an automatic migration. Do not deploy these frontend/Edge changes against the old schema. See [VALIDATION.md](./VALIDATION.md) for passing checks and coverage limits, and [SECURITY_RELEASE_GATES.md](./SECURITY_RELEASE_GATES.md) for open advisories and release decisions.
+
+The combined application changes pass 108 regression tests, both type checks,
+13 local core E2E checkpoints and 36 browser edge checks. Separate bounded suites
+add nine checks each for recovery/account interruptions, finance/CSV/timezones and
+keyboard/accessibility, plus exact-cent and in-flight-save probes. These fixes
+preserve expense drafts and operation IDs, prevent delayed saves from erasing new
+drafts, keep cross-tab auth navigation stable and expose readable keyboard
+controls. Physical-device behavior, successful Edge-runtime deletion, real
+provider delivery and a full accessibility audit remain release gates.
+
+Local checks use the installed toolchain without starting CI (the dependency-free test harness requires Node 24+):
+
+```bash
+npm test
+npm run typecheck
+npm run typecheck:tests
+```
+
+`npm run test:db` refuses remote URLs and requires an explicitly disposable local Supabase-compatible database. Real local RLS, Storage, browser-to-database, failure and concurrency checks now supplement the unit/handler fixtures. See [SETUP.md](./SETUP.md) for validation and release gates. No hosted settings, credentials, migrations or providers have been changed.
+
 ## Getting started
 
 ```bash
 npm install
-cp .env.example .env      # already populated with the linked project's URL + publishable key
+cp .env.example .env      # supply the approved local publishable/anon key
 npm run web               # or: npm run ios / npm run android
 npm run typecheck
 ```
 
 ### Database
 
-The schema lives in `supabase/migrations/`. It is already applied to the linked
-Supabase project. To re-apply elsewhere, use the Supabase CLI:
+The schema lives in `supabase/migrations/`. The trust/operations and identity-optimization migrations are
+local only; earlier baseline migrations do not establish that hosted schema is
+current. Complete the release gates in [SETUP.md](./SETUP.md) before an authorized
+hosted upgrade. The following commands are release operations, not test setup:
 
 ```bash
 supabase link --project-ref <ref>
@@ -136,20 +161,22 @@ commission is avoided. Lemon Squeezy is the merchant of record (it handles VAT a
 receipts); PayPal is offered alongside it because parts of the world reach for PayPal
 first.
 
-**How an account becomes Pro.** The checkout link carries the account id
-(`?checkout[custom][user_id]=…` for Lemon Squeezy), the provider's webhook verifies
-itself, and the function mirrors subscription state into `subscriptions`. The app never
-decides entitlement from a payment — only from that row.
+**How an account becomes Pro.** A verified webhook updates access only for an
+independently registered, service-owned provider subscription binding. Customer
+checkout metadata, `custom_id` and payer email do not prove account ownership.
+Both paid checkout controls remain disabled until authenticated server-side
+subscription creation and provider reconciliation are implemented and validated.
 
 - `lemonsqueezy-webhook` — HMAC-SHA256 over the raw body against `X-Signature`,
   compared in constant time.
-- `paypal-webhook` — PayPal's own verify-webhook-signature API vouches for each
-  delivery. PayPal has no documented way to carry our account id through a hosted
-  subscribe link, so it matches on the payer's email; unmatched events are still
-  recorded in `billing_events` to be reconciled by hand.
+- `paypal-webhook` — PayPal's verify-webhook-signature API vouches for each
+  delivery; only the existing service-owned binding determines its account.
 
-Both are idempotent: every verified delivery is written to `billing_events` first, and
-a repeat of the same state is a no-op.
+The event ledger and entitlement update commit atomically. Unbound events remain
+unmatched; conflicting states at the same provider timestamp stay pending review
+and hold account deletion. Authentic events for other products are acknowledged
+and ignored. See [BILLING_RECONCILIATION.md](./BILLING_RECONCILIATION.md) for the
+operator-only legacy rollout gate and audited current-snapshot reconciliation.
 
 **Entitlement** (`lib/plan.ts`) is computed, not stored as a boolean. A subscription
 grants Pro while `active`, `trialing` or `past_due`, and a *cancelled* one keeps it
@@ -210,30 +237,31 @@ function drops those tokens automatically.
 
 ### Security notes
 
-Two advisor findings are accepted rather than fixed, and both deserve a sentence:
+`billing_events` and worker ledgers have no client-facing policies or privileges;
+trusted backend code performs their writes. That intentional access model does
+not waive unrelated advisor findings.
 
-**`billing_events` has RLS enabled with no policies.** That is the point — no policy
-means no user-facing access at all. Only the webhook functions, which run with the
-service role, read or write it.
+The new tenant projection uses a `security_invoker` view over a private,
+actor-scoped helper exposing only the approved lease columns. Tenants do not
+receive direct base-table access to leases or invitations. The privileged claim,
+membership and device-registration helpers retain explicit caller checks and
+function grants; their security does not follow from a linter exception.
 
-**`pg_net` is installed in the `public` schema and its `net.http_*` functions are
-executable by PUBLIC.** Both are how Supabase installs it, and neither can be undone
-from the `postgres` role — the grants belong to `supabase_admin`, so a REVOKE from the
-SQL editor or a migration silently does nothing (see `0009_lock_down_pg_net.sql`). What
-keeps it unreachable is that the `net` schema is not among the API's exposed schemas,
-so PostgREST will not route to it. **Do not add `net` to Exposed schemas** under
-Settings → API; that would turn a signed-in session into an HTTP client running inside
-your database.
+The initial local `pg_net` layout granted browser roles SQL access to its HTTP
+helpers. A migration-role REVOKE did not remove grants issued by the extension
+owner. The standalone owner-only maintenance script now passes on both disposable
+databases, denying effective browser access while preserving trusted workers.
+It requires the actual extension owner before changing any grants. Hosted
+application and verification require separate authorization and supported owner
+access; do not assume a migration's successful REVOKE established that boundary.
 
-`0004_tenant_portal.sql` intentionally uses `SECURITY DEFINER` for the tenant read
-surface (`tenant_lease_details`) and for `claim_tenant_invite` / `is_tenant_of_lease` /
-`tenant_lease_matches`; `0005_push_tokens.sql` does the same for
-`register_push_token`, which must be able to reassign a device token that currently
-belongs to another account (and only ever writes `auth.uid()` as the new owner). Tenants cannot read `leases` or `tenant_invites` directly, so
-these objects *are* the boundary — each one filters on `auth.uid()` in its own
-`WHERE` clause. Supabase's database linter flags them by design; that is expected, not
-a finding. Enable **leaked password protection** in Auth → Policies for the linter's
-remaining warning.
+Keep `net` outside exposed API schemas. Eleven local API checks passed again
+after repair, verifying schema and backend-RPC denials independently of the SQL
+privilege tests. The nonrelocatable pg_net extension retains its public installation-namespace warning; no relocation
+or catalog edit was used to suppress it. Seven intentional owner/tenant policy
+performance warnings and three upstream advisory packages also remain open. See
+[SECURITY_RELEASE_GATES.md](./SECURITY_RELEASE_GATES.md) for exact findings,
+evidence and release prerequisites.
 
 ## Status
 
@@ -249,14 +277,17 @@ request, follow status, see the rent the owner has recorded, and rate the fix. O
 triage requests in an inbox, convert one into a work order in a tap (costs, vendors and
 parts stay private), and broadcast announcements to a property or the whole portfolio.
 
-**Push notifications — built, pending EAS setup.** Requests, status changes, messages
-and announcements all notify the right party and deep-link into the screen. Fired by
-database triggers, filtered by per-user mute switches. What is left is the one-time EAS
-project, credentials and hook secret in [SETUP.md](./SETUP.md).
+**Push notifications — implemented locally; device/provider delivery unverified.**
+Database triggers and durable workers select recipients and honor notification
+preferences. Physical-device tokens, permissions, credentials and delivery still
+require the checks in [SETUP.md](./SETUP.md).
 
-**Billing — built, pending provider setup.** Both webhooks are deployed and the app
-reads entitlement from `subscriptions`. What is left is creating the products and
-webhooks at Lemon Squeezy and PayPal, and deciding what Free includes.
+**Billing — checkout gated.** Local webhook and ledger hardening passes its fixtures.
+Trusted initial provider binding, reconciliation and provider delivery must pass
+before enabling paid checkout. Ordinary signup remains available. The local
+source has not been deployed.
 
-**Next:** an end-to-end pass with two real accounts, then whatever the first real
-portfolio asks for.
+**Next:** resolve the explicit upstream, hosted, device/provider and product gates
+in [SECURITY_RELEASE_GATES.md](./SECURITY_RELEASE_GATES.md). The synthetic local
+owner/tenant core journey and bounded recovery, finance and keyboard suites pass;
+remaining coverage limits stay explicit in [VALIDATION.md](./VALIDATION.md).

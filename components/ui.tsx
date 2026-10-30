@@ -1,4 +1,4 @@
-import { ReactNode } from "react";
+import { ReactNode, useId } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -44,6 +44,9 @@ export function Button({
 
   return (
     <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={title}
+      accessibilityState={{ disabled: isDisabled, busy: loading }}
       onPress={onPress}
       disabled={isDisabled}
       className={`${base} ${styles} ${isDisabled ? "opacity-50" : ""}`}
@@ -61,10 +64,14 @@ export function Field({
   label,
   ...props
 }: TextInputProps & { label: string }) {
+  const fieldId = useId();
   return (
     <View className="mb-3">
-      <Text className="mb-1 text-sm font-medium text-slate-600">{label}</Text>
+      <Text nativeID={`${fieldId}-label`} className="mb-1 text-sm font-medium text-slate-600">{label}</Text>
       <TextInput
+        nativeID={fieldId}
+        accessibilityLabel={label}
+        accessibilityLabelledBy={`${fieldId}-label`}
         className="rounded-xl border border-slate-300 bg-white px-3 py-3 text-slate-900"
         placeholderTextColor="#94a3b8"
         {...props}
@@ -87,7 +94,7 @@ export function Card({
   );
   if (onPress) {
     return (
-      <Pressable onPress={onPress} className="mb-3">
+      <Pressable accessibilityRole="button" onPress={onPress} className="mb-3">
         {inner}
       </Pressable>
     );
@@ -135,7 +142,7 @@ export function Badge({ label }: { label: string }) {
 
 export function Loading() {
   return (
-    <View className="flex-1 items-center justify-center bg-slate-50">
+    <View accessibilityRole="progressbar" accessibilityLabel="Loading" className="flex-1 items-center justify-center bg-slate-50">
       <ActivityIndicator size="large" color="#0f766e" />
     </View>
   );

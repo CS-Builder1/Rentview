@@ -1,17 +1,6 @@
 import { Platform } from "react-native";
 
-type Cell = string | number | null | undefined;
-
-function escapeCell(value: Cell): string {
-  const s = value === null || value === undefined ? "" : String(value);
-  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-}
-
-export function toCsv(headers: string[], rows: Cell[][]): string {
-  return [headers, ...rows]
-    .map((row) => row.map(escapeCell).join(","))
-    .join("\r\n");
-}
+export { toCsv, decimalCell } from "./csvCore";
 
 /** Save/share text content cross-platform (web download; native share sheet). */
 export async function exportText(

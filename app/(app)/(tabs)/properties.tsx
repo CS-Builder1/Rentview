@@ -1,8 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import {
-  Alert,
   Modal,
   Platform,
   Pressable,
@@ -21,12 +20,17 @@ import {
   Screen,
 } from "../../../components/ui";
 import { useAuth } from "../../../lib/auth";
-import { cachedSelect } from "../../../lib/cache";
+import { cachedSelectResult } from "../../../lib/cache";
 import type { Tables } from "../../../lib/database.types";
 import { Constants } from "../../../lib/database.types";
 import { titleCase } from "../../../lib/format";
 import { usePlan } from "../../../lib/plan";
 import { supabase } from "../../../lib/supabase";
+import { createOnce } from "../../../lib/createOnce";
+import { newRecordId } from "../../../lib/id";
+import { notify } from "../../../lib/feedback";
+import { currencyCode } from "../../../lib/validation";
+import { operationError, readAllPages } from "../../../lib/operationsQuery";
 
 type Property = Tables<"properties"> & { units: { count: number }[] };
 
@@ -34,11 +38,16 @@ const PROPERTY_TYPES = Constants.public.Enums.property_type;
 
 export default function Properties() {
   const router = useRouter();
+  const generation = useRef(0);
+  const draftId = useRef<string | null>(null);
+  const typeControls = useRef<Array<{ focus: () => void } | null>>([]);
   const { session } = useAuth();
   const { propertyLimit } = usePlan();
   const [properties, setProperties] = useState<Property[] | null>(null);
   const [adding, setAdding] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
 
   // form
   const [name, setName] = useState("");
@@ -47,21 +56,34 @@ export default function Properties() {
   const [currency, setCurrency] = useState("USD");
 
   const load = useCallback(async () => {
-    const data = await cachedSelect<Property[]>(
-      "properties",
-      supabase
-        .from("properties")
-        .select("*, units(count)")
-        .order("created_at", { ascending: true }),
-    );
-    setProperties(data ?? []);
+    const ticket = ++generation.current;
+    const result = await cachedSelectResult<Property[]>("properties",
+      readAllPages<Property>((from, to) => supabase.from("properties")
+        .select("*, units!units_property_id_owner_fk(count)", { count: "exact" })
+        .order("created_at", { ascending: true }).order("id").range(from, to)));
+    if (ticket !== generation.current) return;
+    setLoadError(result.error);
+    setProperties(result.data ?? []);
   }, []);
 
   useFocusEffect(
     useCallback(() => {
-      load();
+      void load();
+      return () => { generation.current++; setAdding(false); };
     }, [load]),
   );
+
+  function selectTypeWithKey(index: number, event: { key: string; preventDefault: () => void }) {
+    let next = index;
+    if (event.key === "ArrowRight" || event.key === "ArrowDown") next = (index + 1) % PROPERTY_TYPES.length;
+    else if (event.key === "ArrowLeft" || event.key === "ArrowUp") next = (index + PROPERTY_TYPES.length - 1) % PROPERTY_TYPES.length;
+    else if (event.key === "Home") next = 0;
+    else if (event.key === "End") next = PROPERTY_TYPES.length - 1;
+    else if (event.key !== " " && event.key !== "Spacebar") return;
+    event.preventDefault();
+    setType(PROPERTY_TYPES[next]);
+    typeControls.current[next]?.focus();
+  }
 
   /**
    * The Free tier caps how many properties an account can hold. Everything
@@ -74,15 +96,14 @@ export default function Properties() {
         `Free covers ${propertyLimit} propert${propertyLimit === 1 ? "y" : "ies"}. ` +
         "Upgrade to Pro under More → Plan & billing to add more. Everything you " +
         "have already stays as it is.";
-      Platform.OS === "web"
-        ? window.alert(`Property limit reached\n\n${message}`)
-        : Alert.alert("Property limit reached", message);
+      notify("Property limit reached", message);
       return;
     }
     setAdding(true);
   }
 
   function resetForm() {
+    draftId.current = null;
     setName("");
     setType("residential");
     setCity("");
@@ -90,21 +111,19 @@ export default function Properties() {
   }
 
   async function save() {
-    if (!name.trim() || !session) return;
+    if (!name.trim() || !session) { notify("Missing name", "Enter a property name."); return; }
     setSaving(true);
-    const { error } = await supabase.from("properties").insert({
-      owner_id: session.user.id,
-      name: name.trim(),
-      property_type: type,
-      city: city.trim() || null,
-      currency: currency.trim() || "USD",
-    });
-    setSaving(false);
-    if (!error) {
-      setAdding(false);
-      resetForm();
-      load();
-    }
+    try {
+      draftId.current ??= newRecordId();
+      const payload = { id: draftId.current, owner_id: session.user.id,
+        name: name.trim(), property_type: type, city: city.trim() || null, currency: currencyCode(currency) };
+      const data = await createOnce(payload,
+        () => supabase.from("properties").insert(payload).select("id").single(),
+        () => supabase.from("properties").select("*").eq("id", payload.id).single());
+      setAdding(false); resetForm();
+      router.push(`/property/${data.id}`);
+    } catch (error) { notify("Could not save property", operationError(error)); }
+    finally { setSaving(false); }
   }
 
   if (!properties) return <Loading />;
@@ -114,7 +133,7 @@ export default function Properties() {
       <View className="flex-row items-center justify-between px-5 pb-2 pt-2">
         <Text className="text-2xl font-bold text-slate-900">Properties</Text>
         <Pressable
-          onPress={startAdd}
+          accessibilityRole="button" accessibilityLabel="Add property" onPress={startAdd}
           className="flex-row items-center rounded-full bg-brand px-3 py-2"
         >
           <Ionicons name="add" color="#fff" size={18} />
@@ -123,13 +142,15 @@ export default function Properties() {
       </View>
 
       <ScrollView contentContainerClassName="px-5 pb-10">
-        {properties.length === 0 ? (
+        <Field label="Search properties" value={search} onChangeText={setSearch} placeholder="Name or city" />
+        {loadError ? <View className="mb-3"><Text accessibilityRole="alert" className="mb-2 text-red-700">{loadError}</Text><Button title="Retry" variant="secondary" onPress={() => void load()} /></View> : null}
+        {properties.length === 0 && !loadError ? (
           <EmptyState
             title="No properties yet"
             subtitle="Add your first property — a single home, a store, or a complex with many units."
           />
         ) : (
-          properties.map((p) => (
+          properties.filter(p => `${p.name} ${p.city ?? ""}`.toLowerCase().includes(search.toLowerCase())).map((p) => (
             <Card key={p.id} onPress={() => router.push(`/property/${p.id}`)}>
               <View className="flex-row items-center justify-between">
                 <Text className="flex-1 text-lg font-semibold text-slate-900">
@@ -147,7 +168,7 @@ export default function Properties() {
         )}
       </ScrollView>
 
-      <Modal visible={adding} animationType="slide" transparent>
+      {adding ? <Modal visible onRequestClose={() => !saving && setAdding(false)} animationType="slide" transparent>
         <View className="flex-1 justify-end bg-black/40">
           <View className="rounded-t-3xl bg-slate-50 p-5">
             <Text className="mb-4 text-xl font-bold text-slate-900">
@@ -162,10 +183,19 @@ export default function Properties() {
             />
 
             <Text className="mb-1 text-sm font-medium text-slate-600">Type</Text>
-            <View className="mb-3 flex-row flex-wrap">
-              {PROPERTY_TYPES.map((t) => (
+            <View accessibilityRole="radiogroup" accessibilityLabel="Property type" className="mb-3 flex-row flex-wrap">
+              {PROPERTY_TYPES.map((t, index) => (
                 <Pressable
                   key={t}
+                  ref={(control) => { typeControls.current[index] = control; }}
+                  accessibilityRole="radio"
+                  accessibilityLabel={titleCase(t)}
+                  accessibilityState={{ checked: type === t }}
+                  aria-checked={type === t}
+                  {...(Platform.OS === "web" ? {
+                    tabIndex: type === t ? 0 as const : -1 as const,
+                    onKeyDown: (event: { key: string; preventDefault: () => void }) => selectTypeWithKey(index, event),
+                  } : {})}
                   onPress={() => setType(t)}
                   className={`mb-2 mr-2 rounded-full border px-3 py-2 ${
                     type === t
@@ -203,6 +233,7 @@ export default function Properties() {
               <View className="flex-1">
                 <Button
                   title="Cancel"
+                  disabled={saving}
                   variant="secondary"
                   onPress={() => {
                     setAdding(false);
@@ -216,7 +247,7 @@ export default function Properties() {
             </View>
           </View>
         </View>
-      </Modal>
+      </Modal> : null}
     </Screen>
   );
 }

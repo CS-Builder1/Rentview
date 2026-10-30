@@ -4,6 +4,7 @@ import { Pressable, ScrollView, Text, View } from "react-native";
 
 import { NotificationPrefs } from "../../../components/NotificationPrefs";
 import { Button, Card, Screen } from "../../../components/ui";
+import { notify } from "../../../lib/feedback";
 import { useAuth } from "../../../lib/auth";
 
 export default function TenantMore() {
@@ -39,10 +40,11 @@ export default function TenantMore() {
           </Text>
         </Card>
 
+        <Button title="Account & security" variant="secondary" onPress={() => router.push("/account" as never)} />
         <NotificationPrefs variant="tenant" />
 
         <View className="mt-4">
-          <Button title="Sign out" variant="secondary" onPress={signOut} />
+          <Button title="Sign out" variant="secondary" onPress={() => void signOut().catch(error => notify("Could not sign out", error instanceof Error ? error.message : "Please retry."))} />
         </View>
       </ScrollView>
     </Screen>

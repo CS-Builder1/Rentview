@@ -7,7 +7,6 @@
     "icon": "./assets/icon.png",
     "scheme": "rentview",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
@@ -37,7 +36,9 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "RentView uses the camera to scan asset QR tags."
+          "cameraPermission": "RentView uses the camera to scan asset QR tags.",
+          "microphonePermission": false,
+          "recordAudioAndroid": false
         }
       ],
       [
@@ -45,6 +46,14 @@
         {
           "color": "#0f766e",
           "defaultChannel": "default"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "RentView uses selected photos to document repairs and property assets.",
+          "cameraPermission": "RentView uses the camera to scan asset QR tags.",
+          "microphonePermission": false
         }
       ]
     ],

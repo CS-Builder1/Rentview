@@ -1,42 +1,27 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-// Last-known-good read cache so lists/details stay browsable offline.
-// On a successful query we persist the result; on failure we fall back to it.
+import { createReadCache } from "./cacheStore";
 
-const PREFIX = "rentview.cache.v1.";
-const k = (key: string) => PREFIX + key;
+export type { CachedResult, CacheNotice } from "./cacheStore";
+export const readCache = createReadCache(AsyncStorage);
+export const setCacheAccount = readCache.setAccount;
 
-/**
- * Run a Supabase select. On success, cache the rows and return them.
- * On any failure (typically offline), return the last cached value, or null.
- */
-export async function cachedSelect<T>(
-  key: string,
-  builder: PromiseLike<{ data: unknown; error: unknown }>,
-): Promise<T | null> {
-  try {
-    const { data, error } = await builder;
-    if (error) throw error;
-    await AsyncStorage.setItem(k(key), JSON.stringify(data ?? null));
-    return (data ?? null) as T | null;
-  } catch {
-    const raw = await AsyncStorage.getItem(k(key));
-    return raw != null ? (JSON.parse(raw) as T) : null;
-  }
+/** Prefer this result when a screen needs to distinguish empty, stale and failed. */
+export const cachedSelectResult = readCache.query;
+
+/** Existing screens remain compatible; a shared banner also exposes failed/stale reads. */
+export async function cachedSelect<T>(key: string, builder: PromiseLike<{ data: unknown; error: unknown }>): Promise<T | null> {
+  return (await readCache.query<T>(key, builder)).data;
 }
 
-export async function cacheSet(key: string, value: unknown): Promise<void> {
-  await AsyncStorage.setItem(k(key), JSON.stringify(value));
-}
+export const cacheSet = readCache.set;
+export const cacheGet = readCache.get;
 
-export async function cacheGet<T>(key: string): Promise<T | null> {
-  const raw = await AsyncStorage.getItem(k(key));
-  return raw != null ? (JSON.parse(raw) as T) : null;
-}
-
-/** Clear all cached reads (e.g. on sign-out, to avoid cross-account leakage). */
-export async function clearCache(): Promise<void> {
+/** Clear only reads, never captured work. Pending operations remain in their original account. */
+export async function clearCache(accountId?: string): Promise<void> {
+  const owner = accountId ?? readCache.getAccount();
   const keys = await AsyncStorage.getAllKeys();
-  const ours = keys.filter((key) => key.startsWith(PREFIX));
+  const ours = keys.filter((key) => key.startsWith("rentview.cache.v1.") ||
+    (owner ? key.startsWith(`rentview.cache.v2.${owner}.`) : false));
   if (ours.length) await AsyncStorage.multiRemove(ours);
 }
