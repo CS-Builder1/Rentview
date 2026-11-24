@@ -29,7 +29,10 @@ export type DispatchJob = {
 export type DispatchViews = {
   dispatch_jobs: { Row: DispatchJob; Relationships: [] };
 };
+export type ContractorInvitationStatus = "available" | "pending" | "connected";
+
 export type DispatchFunctions = {
+  contractor_invitation_status: { Args: { p_vendor: string }; Returns: ContractorInvitationStatus | null };
   my_dispatch_jobs: { Args: Record<never, never>; Returns: DispatchJob[] };
   create_contractor_invite: { Args: { p_vendor: string }; Returns: string };
   claim_contractor_invite: { Args: { p_code: string }; Returns: string };

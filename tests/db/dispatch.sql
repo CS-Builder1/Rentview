@@ -36,20 +36,31 @@ insert into public.maintenance_requests(id,owner_id,property_id,unit_id,lease_id
  'dd000000-0000-4000-8000-000000000002','Leaking sink','Water under sink');
 insert into public.property_managers(property_id,user_id,email) values (
  'dd100000-0000-4000-8000-000000000001','dd000000-0000-4000-8000-000000000006','dispatch-6@example.test');
+insert into public.vendors(id,owner_id,property_id,name) values('dd400000-0000-4000-8000-000000000003',
+ 'dd000000-0000-4000-8000-000000000001','dd100000-0000-4000-8000-000000000001','Property vendor');
 select pg_temp.dispatch_actor(1);
 set local role authenticated;
+select pg_temp.check_dispatch(public.contractor_invitation_status('dd400000-0000-4000-8000-000000000001')='available','owner sees unlinked vendor');
+
 select set_config('fixture.code',public.create_contractor_invite('dd400000-0000-4000-8000-000000000001'),true);
+select pg_temp.check_dispatch(public.contractor_invitation_status('dd400000-0000-4000-8000-000000000001')='pending','issued invitation is pending');
 select pg_temp.dispatch_actor(6);
+select pg_temp.check_dispatch(public.contractor_invitation_status('dd400000-0000-4000-8000-000000000003')='available','assigned manager sees property vendor');
+select pg_temp.check_dispatch(public.contractor_invitation_status('dd400000-0000-4000-8000-000000000001') is null,'manager cannot see owner-private vendor status');
 select set_config('fixture.job',public.convert_request_to_work_order('dd500000-0000-4000-8000-000000000001')::text,true);
 select pg_temp.check_dispatch(pg_temp.job()=public.convert_request_to_work_order('dd500000-0000-4000-8000-000000000001'),'manager retry reuses job');
 select pg_temp.dispatch_actor(1);
 update public.work_orders set description='Private landlord note' where id=pg_temp.job();
 select public.assign_dispatch(pg_temp.job(),'dd400000-0000-4000-8000-000000000001','Use rear entrance');
 select pg_temp.dispatch_actor(4);
+select pg_temp.check_dispatch(public.contractor_invitation_status('dd400000-0000-4000-8000-000000000003') is null,'unrelated account cannot see property vendor status');
 select pg_temp.must_fail($q$select public.claim_contractor_invite(current_setting('fixture.code'))$q$);
 select pg_temp.check_dispatch(not exists(select from public.dispatch_jobs where work_order_id=pg_temp.job()),'outside user cannot see repair');
 select pg_temp.dispatch_actor(3);
 select public.claim_contractor_invite(current_setting('fixture.code'));
+select pg_temp.dispatch_actor(1);
+select pg_temp.check_dispatch(public.contractor_invitation_status('dd400000-0000-4000-8000-000000000001')='connected','owner sees current confirmed link');
+select pg_temp.dispatch_actor(3);
 select pg_temp.must_fail($q$select public.claim_contractor_invite(current_setting('fixture.code'))$q$);
 select pg_temp.check_dispatch((select role='contractor' from public.profiles where id=auth.uid()),'claimed routing role');
 select pg_temp.check_dispatch((select count(*)=1 from public.my_dispatch_jobs()),'authorized contractor queue');
