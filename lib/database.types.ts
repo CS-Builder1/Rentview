@@ -1213,6 +1213,15 @@ export type Database = {
         }
         Relationships: []
       }
+      rent_allocations: {
+        Row: { id: string; charge_id: string; receipt_id: string; amount: number; created_at: string }
+        Insert: { id: string; charge_id: string; receipt_id: string; amount: number; created_at?: string }
+        Update: { id?: string; charge_id?: string; receipt_id?: string; amount?: number; created_at?: string }
+        Relationships: [
+          { foreignKeyName: "rent_allocations_charge_id_fkey"; columns: ["charge_id"]; isOneToOne: false; referencedRelation: "rent_payments"; referencedColumns: ["id"] },
+          { foreignKeyName: "rent_allocations_receipt_id_fkey"; columns: ["receipt_id"]; isOneToOne: false; referencedRelation: "rent_payments"; referencedColumns: ["id"] }
+        ]
+      }
       rent_payments: {
         Row: {
           created_by: string | null
@@ -1874,6 +1883,14 @@ export type Database = {
       }
     }
     Views: DispatchViews & {
+      rent_record_balances: {
+        Row: Database["public"]["Tables"]["rent_payments"]["Row"] & { applied_amount: number }
+        Relationships: []
+      }
+      rent_receipts_report: {
+        Row: { id: string; paid_on: string; amount: number; currency: string; property_id: string; property_name: string; unit_label: string }
+        Relationships: []
+      }
       tenant_lease_details: {
         Row: {
           address_line1: string | null
@@ -1928,6 +1945,13 @@ export type Database = {
       cancel_portfolio_transfer: { Args: Record<PropertyKey, never>; Returns: undefined }
       revoke_lease_portal: { Args: { p_lease: string; p_archive?: boolean }; Returns: undefined }
 
+      apply_rent_receipt: {
+        Args: {
+          p_operation_id: string; p_charge_id: string; p_receipt_id: string; p_amount: number
+          p_paid_on?: string; p_method?: Database["public"]["Enums"]["payment_method"]; p_note?: string; p_time_zone?: string
+        }
+        Returns: string
+      }
       billing_reconciliation_pending: { Args: Record<PropertyKey, never>; Returns: boolean }
       current_account_is_active: { Args: Record<PropertyKey, never>; Returns: boolean }
       create_tenant_invite: {

@@ -21,7 +21,7 @@ async function fetchSnapshot(ownerId: string): Promise<{ data: Snapshot | null; 
     const today = localToday();
     const yearStart = `${today.slice(0, 4)}-01-01`;
     const soon = localToday(new Date(Date.now() + 60 * 86400000));
-    const [properties, units, jobs, expenses, urgent, overdue, maintenance, inventory, warranties, requests] = await Promise.all([
+    const [properties, units, jobs, expenses, urgent, overdue, maintenance, inventory, warranties, requests, endingLeases] = await Promise.all([
       supabase.from("properties").select("id", { count: "exact", head: true }),
       supabase.from("units").select("id", { count: "exact", head: true }),
       supabase.from("work_orders").select("id", { count: "exact", head: true }).in("status", ["open", "in_progress", "on_hold"]),
@@ -32,6 +32,7 @@ async function fetchSnapshot(ownerId: string): Promise<{ data: Snapshot | null; 
       readAllPages<{ quantity: number; low_stock_threshold: number | null }>((from, to) => supabase.from("inventory_items").select("quantity,low_stock_threshold", { count: "exact" }).not("low_stock_threshold", "is", null).order("id").range(from, to)),
       supabase.from("assets").select("id", { count: "exact", head: true }).gte("warranty_expiry", today).lte("warranty_expiry", soon),
       supabase.from("maintenance_requests").select("id, properties!maintenance_requests_property_id_owner_fk!inner(id)", { count: "exact", head: true }).eq("status", "submitted"),
+      supabase.from("leases").select("id", { count: "exact", head: true }).eq("status","active").gte("end_date",today).lte("end_date",soon),
     ]);
     if (expenses.error) throw expenses.error;
     if (inventory.error) throw inventory.error;
@@ -42,6 +43,7 @@ async function fetchSnapshot(ownerId: string): Promise<{ data: Snapshot | null; 
     add("overdue", requiredCount(overdue), "overdue jobs", "time-outline", "/work-orders?filter=overdue");
     add("maintenance", requiredCount(maintenance), "maintenance tasks due", "calendar", "/maintenance?filter=due");
     add("stock", (inventory.data ?? []).filter(row => Number(row.quantity) <= Number(row.low_stock_threshold)).length, "items low on stock", "file-tray", "/inventory?filter=low");
+    add("lease-ends", requiredCount(endingLeases), "leases ending within 60 days", "calendar-outline", "/leases?filter=ending");
     add("warranties", requiredCount(warranties), "warranties expiring within 60 days", "shield-checkmark", "/assets?filter=warranty");
     return { data: { properties: requiredCount(properties), units: requiredCount(units), jobs: requiredCount(jobs), spending: totalsByCurrency(expenses.data ?? []), attention }, error: null };
   } catch (error) { return { data: null, error }; }

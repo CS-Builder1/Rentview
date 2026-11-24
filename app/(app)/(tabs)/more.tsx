@@ -26,6 +26,7 @@ const MANAGE_LINKS = [
   { href: "/vendors", label: "Vendors", icon: "people-outline" },
   { href: "/maintenance", label: "Preventive maintenance", icon: "calendar-outline" },
   { href: "/documents", label: "Documents", icon: "document-text-outline" },
+  { href: "/leases", label: "Rent and leases", icon: "home-outline" },
   { href: "/expenses", label: "Expenses & analytics", icon: "cash-outline" },
   { href: "/export", label: "Accountant packet (CSV)", icon: "download-outline" },
 ] as const;
@@ -59,7 +60,7 @@ export default function More() {
           "Email reminders are currently unavailable. Your due work remains visible under Maintenance.",
         );
       } else if (res.dueUsers === 0) {
-        notify("Nothing due", "No warranties or maintenance are due right now.");
+        notify("Nothing due", "No maintenance, warranties or lease renewals are due right now.");
       } else if (res.sent > 0) {
         notify("Reminder sent", `Emailed your reminders to ${session?.user.email}.`);
       } else {
@@ -118,7 +119,7 @@ export default function More() {
         </Text>
         <Card>
           <Text className="text-slate-600">
-            Get warranties expiring soon and maintenance due, by email.
+            Get upcoming lease ends, expiring warranties and due maintenance by email.
           </Text>
           <View className="mt-3">
             <Button

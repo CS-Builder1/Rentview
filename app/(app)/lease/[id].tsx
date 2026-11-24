@@ -24,6 +24,8 @@ import {
   Loading,
   Screen,
 } from "../../../components/ui";
+import { RentAllocationForm } from "../../../components/RentAllocationForm";
+import { rentRemaining, rentSummaryResult } from "../../../lib/tenantRent";
 import { useAuth } from "../../../lib/auth";
 import { cachedSelectResult } from "../../../lib/cache";
 import { confirmAction } from "../../../lib/confirm";
@@ -36,7 +38,7 @@ import { newRecordId } from "../../../lib/id";
 import { inviteUrl } from "../../../lib/appUrl";
 import { notify } from "../../../lib/feedback";
 import { calendarDate, currencyCode, nonNegativeMoney } from "../../../lib/validation";
-import { localToday } from "../../../lib/maintenance";
+import { localTimeZone, localToday } from "../../../lib/maintenance";
 import { operationError, readAllPages } from "../../../lib/operationsQuery";
 
 type Lease = Tables<"leases"> & {
@@ -69,7 +71,8 @@ export default function LeaseDetail() {
 
   const [lease, setLease] = useState<Lease | null>(null);
   const [invites, setInvites] = useState<Tables<"tenant_invites">[]>([]);
-  const [payments, setPayments] = useState<Tables<"rent_payments">[]>([]);
+  const [payments, setPayments] = useState<Tables<"rent_record_balances">[]>([]);
+  const [charge, setCharge] = useState<Tables<"rent_record_balances"> | null>(null);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -99,8 +102,8 @@ export default function LeaseDetail() {
       cachedSelectResult<Tables<"tenant_invites">[]>(`invites:${id}`,
         readAllPages<Tables<"tenant_invites">>((from, to) => supabase.from("tenant_invites")
           .select("*", { count: "exact" }).eq("lease_id", id).order("created_at", { ascending: false }).order("id").range(from, to))),
-      cachedSelectResult<Tables<"rent_payments">[]>(`payments:${id}`,
-        readAllPages<Tables<"rent_payments">>((from, to) => supabase.from("rent_payments")
+      cachedSelectResult<Tables<"rent_record_balances">[]>(`rent-balances:${id}`,
+        readAllPages<Tables<"rent_record_balances">>((from, to) => supabase.from("rent_record_balances")
           .select("*", { count: "exact" }).eq("lease_id", id).order("due_date", { ascending: false, nullsFirst: false }).order("id").range(from, to))),
     ]);
     if (ticket !== generation.current) return;
@@ -216,12 +219,15 @@ export default function LeaseDetail() {
     finally { setSaving(false); }
   }
 
-  async function markPaid(payment: Tables<"rent_payments">) {
+  async function markPaid(payment: Tables<"rent_record_balances">) {
     if (payment.paid_on || busy) return;
     setBusy(true);
     try {
-      const { error } = await supabase.from("rent_payments").update({ paid_on: localToday() })
-        .eq("id", payment.id).is("paid_on", null).select("id").single();
+      const { error } = await supabase.rpc("apply_rent_receipt", {
+        p_operation_id: newRecordId(), p_charge_id: payment.id, p_receipt_id: newRecordId(),
+        p_amount: rentRemaining(payment), p_paid_on: localToday(), p_method: payment.method ?? "bank_transfer",
+        p_time_zone: localTimeZone(),
+      });
       if (error) throw error;
       await load();
     } catch (error) { notify("Could not mark payment paid", operationError(error)); }
@@ -231,7 +237,7 @@ export default function LeaseDetail() {
   function removePayment(paymentId: string) {
     confirmAction(
       "Delete payment",
-      "This removes the record from the tenant's history too.",
+      "This removes the record from the tenant's history and releases any money applied to it.",
       async () => {
         if (busy) return;
         setBusy(true);
@@ -248,6 +254,7 @@ export default function LeaseDetail() {
   if (loading) return <Loading />;
   if (!lease) return <Screen><View className="p-5"><Text accessibilityRole="alert" className="mb-3 text-red-700">{loadError ?? "This lease is unavailable or you no longer have access."}</Text><Button title="Retry" onPress={() => void load()} /><Button title="Back to properties" variant="secondary" onPress={() => router.replace("/properties")} /></View></Screen>;
 
+  const summary = rentSummaryResult(payments);
   const activeInvite = invites.find(
     (i) => !i.claimed_at && new Date(i.expires_at) > new Date(),
   );
@@ -394,6 +401,12 @@ export default function LeaseDetail() {
           </Pressable>
         </View>
 
+        {summary.error && <Text accessibilityRole="alert" className="text-red-700">{summary.error}</Text>}
+        {summary.groups.map(group => <Card key={group.currency}>
+          <Text className="font-semibold text-slate-800">Outstanding · {group.currency}</Text>
+          <Text className="mt-1 text-slate-700">Overdue {formatCurrency(group.overdue, group.currency)} · Due today {formatCurrency(group.due, group.currency)}</Text>
+          <Text className="mt-1 text-slate-600">Upcoming {formatCurrency(group.upcoming, group.currency)} · Undated {formatCurrency(group.unscheduled, group.currency)}</Text>
+        </Card>)}
         {payments.length === 0 ? (
           <Text className="mb-2 text-slate-400">
             Nothing recorded yet. RentView tracks what you log — it does not
@@ -414,19 +427,27 @@ export default function LeaseDetail() {
                 {p.paid_on
                   ? `Paid ${formatDate(p.paid_on)}`
                   : p.due_date
-                    ? `Due ${formatDate(p.due_date)} · unpaid`
-                    : "Unpaid"}
+                    ? `Charge due ${formatDate(p.due_date)}`
+                    : "Charge · no due date"}
                 {p.method ? ` · ${titleCase(p.method)}` : ""}
               </Text>
+              {!p.paid_on && <Text className="mt-1 font-medium text-slate-800">
+                {rentRemaining(p) === 0 ? "Paid in full" : formatCurrency(rentRemaining(p), p.currency) + " remaining"}
+              </Text>}
+              {p.applied_amount > 0 && <Text className="text-slate-500">Applied {formatCurrency(p.applied_amount, p.currency)}</Text>}
               {p.note ? (
                 <Text className="mt-1 text-xs text-slate-400">{p.note}</Text>
               ) : null}
-              <View className="mt-3 flex-row gap-2"><Button title="Edit record" variant="secondary" disabled={busy} onPress={() => openPayment(p)} />{!p.paid_on ? <Button title="Mark paid today" disabled={busy} onPress={() => void markPaid(p)} /> : null}</View>
+              <View className="mt-3 flex-row flex-wrap gap-2"><Button title="Edit record" variant="secondary" disabled={busy} onPress={() => openPayment(p)} />{!p.paid_on && rentRemaining(p) > 0 && <>
+                <Button title="Apply receipt" variant="secondary" disabled={busy} onPress={() => setCharge(p)} />
+                <Button title="Mark paid today" disabled={busy} onPress={() => void markPaid(p)} />
+              </>}</View>
             </Card>
           ))
         )}
       </ScrollView>
 
+      {charge && <RentAllocationForm charge={charge} records={payments} onCancel={() => setCharge(null)} onSaved={() => { setCharge(null); void load(); }} />}
       <Modal visible={adding} onRequestClose={() => !saving && setAdding(false)} animationType="slide" transparent>
         <View className="flex-1 justify-end bg-black/40">
           <ScrollView
