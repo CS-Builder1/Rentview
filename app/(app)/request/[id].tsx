@@ -206,6 +206,7 @@ export default function OwnerRequestDetail() {
           </Card>
         ) : null}
 
+        {!request.work_order_id ? <>
         <Text className="mb-2 mt-4 text-sm font-semibold uppercase text-slate-400">
           Status
         </Text>
@@ -234,6 +235,8 @@ export default function OwnerRequestDetail() {
           ))}
         </View>
 
+        </> : <Text className="my-3 text-slate-600">Update this repair from its linked work order.</Text>}
+
         {request.work_order_id ? (
           <Button
             title="Open work order"
@@ -248,8 +251,7 @@ export default function OwnerRequestDetail() {
           />
         )}
         <Text className="mt-2 text-xs text-slate-400">
-          Costs, vendors and parts stay on the work order — the tenant only
-          sees the status and this conversation.
+          Tenants can follow repair status, visit times and completion details. Costs and parts stay on the work order.
         </Text>
 
         <RequestConversation requestId={request.id} locked={locked} />

@@ -109,6 +109,8 @@ export default function More() {
           </Card>
         </Pressable>
 
+        <Button title="Redeem contractor invitation" variant="secondary" onPress={() => router.push("/contractor-invite")} />
+
         <NotificationPrefs variant="owner" />
 
         <Text className="mb-2 mt-4 text-sm font-semibold uppercase text-slate-400">

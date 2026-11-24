@@ -11,7 +11,12 @@ import { unregisterPushToken } from "./push";
 import { completeDeviceSignOut } from "./sessionActions";
 import { supabase } from "./supabase";
 
-export type Role = "owner" | "tenant";
+export type Role = "owner" | "tenant" | "contractor";
+
+export function homeForRole(role: Role | null) {
+  if (role === "contractor") return "/contractor" as const;
+  return role === "tenant" ? "/tenant" as const : "/(app)" as const;
+}
 
 type AuthContextValue = {
   session: Session | null;
@@ -85,7 +90,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     );
     if (!mounted.current || activeUser.current !== userId || request !== profileRequest.current) return null;
     const next = result.data?.role;
-    if (next !== "owner" && next !== "tenant") {
+    if (next !== "owner" && next !== "tenant" && next !== "contractor") {
       setRole(null);
       setRoleUserId(null);
       setProfileError(result.error ?? "Your account profile is unavailable. Retry to continue.");

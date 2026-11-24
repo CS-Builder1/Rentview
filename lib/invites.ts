@@ -14,13 +14,13 @@ export function safeReturnPath(value: unknown, fallback = "/"): string {
     if (url.origin !== "https://rentview.invalid") return defaultPath;
     const decoded = decodeURIComponent(url.pathname);
     if (decoded !== url.pathname || decoded.includes("\\") || decoded.startsWith("//")) return defaultPath;
-    if (url.pathname === "/claim") {
+    if (url.pathname === "/claim" || url.pathname === "/contractor-invite") {
       const code = url.searchParams.get("code");
-      if (!code) return "/claim";
+      if (!code) return url.pathname;
       const valid = normalizeInviteCode(code);
-      return valid ? `/claim?code=${encodeURIComponent(valid)}` : "/claim";
+      return valid ? `${url.pathname}?code=${encodeURIComponent(valid)}` : url.pathname;
     }
-    if (/^\/(?:tenant(?:\/(?:requests|rent|more|notices|new-request|request\/[a-f0-9-]+))?|account|asset\/[a-f0-9-]+|property\/[a-f0-9-]+|unit\/[a-f0-9-]+|work-order\/[a-f0-9-]+|request\/[a-f0-9-]+)?$/.test(url.pathname)) {
+    if (/^\/(?:tenant(?:\/(?:requests|rent|more|notices|new-request|request\/[a-f0-9-]+))?|contractor(?:\/job\/[a-f0-9-]+)?|account|asset\/[a-f0-9-]+|property\/[a-f0-9-]+|unit\/[a-f0-9-]+|work-order\/[a-f0-9-]+|request\/[a-f0-9-]+)?$/.test(url.pathname)) {
       return url.pathname;
     }
   } catch { /* Invalid URL or encoding. */ }

@@ -19,6 +19,7 @@ import {
   View,
 } from "react-native";
 
+import { DispatchPanel } from "../../../components/DispatchPanel";
 import { DocumentsSection } from "../../../components/DocumentsSection";
 import {
   Badge,
@@ -163,16 +164,6 @@ export default function WorkOrderDetail() {
       if (error || !data) throw error || new Error("This work order is no longer available.");
       await load();
     } catch (e) { notify("Could not update", operationError(e)); }
-    finally { setBusy(false); }
-  }
-  async function assignVendor(vendorId: string | null) {
-    if (!wo || busy) return;
-    setBusy(true);
-    try {
-      const { data, error } = await supabase.from("work_orders").update({ vendor_id: vendorId }).eq("id", wo.id).select("id").single();
-      if (error || !data) throw error || new Error("This work order is no longer available.");
-      await load();
-    } catch (e) { notify("Could not assign vendor", operationError(e)); }
     finally { setBusy(false); }
   }
   async function addPart() {
@@ -379,49 +370,9 @@ export default function WorkOrderDetail() {
         </View>
 
         {posted ? <Text className="mt-2 text-slate-500">Completed jobs retain their posted costs. Record any correction as a separate expense.</Text> : null}
-        {/* Vendor */}
-        <Text className="mb-2 mt-4 text-sm font-semibold uppercase text-slate-400">
-          Assigned vendor
-        </Text>
-        <View className="flex-row flex-wrap">
-          <Pressable
-            disabled={busy}
-            onPress={() => assignVendor(null)}
-            className={`mb-2 mr-2 rounded-full border px-3 py-2 ${
-              !wo.vendor_id ? "border-brand bg-brand" : "border-slate-300 bg-white"
-            }`}
-          >
-            <Text
-              className={!wo.vendor_id ? "font-medium text-white" : "text-slate-700"}
-            >
-              Unassigned
-            </Text>
-          </Pressable>
-          {vendors.map((v) => (
-            <Pressable
-              key={v.id}
-              disabled={busy}
-              onPress={() => assignVendor(v.id)}
-              className={`mb-2 mr-2 rounded-full border px-3 py-2 ${
-                wo.vendor_id === v.id
-                  ? "border-brand bg-brand"
-                  : "border-slate-300 bg-white"
-              }`}
-            >
-              <Text
-                className={
-                  wo.vendor_id === v.id
-                    ? "font-medium text-white"
-                    : "text-slate-700"
-                }
-              >
-                {v.name}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
+        <DispatchPanel workOrderId={wo.id} audience="owner" vendors={vendors} ownerId={wo.owner_id} propertyId={wo.property_id} onChange={() => void load()} />
 
-        {vendor ? <Card><Text className="font-semibold text-slate-800">Contact {vendor.name}</Text><Text className="my-2 text-slate-500">Assignment does not notify the vendor. Share this job or contact them to arrange a visit.</Text><View className="flex-row gap-2">{vendor.phone ? <Button title="Call" variant="secondary" onPress={() => { void Linking.openURL(`tel:${vendor.phone!.replace(/[^+0-9]/g, "")}`).catch(() => notify("Could not call", "Use the phone number in Vendors.")); }} /> : null}{vendor.email ? <Button title="Email" variant="secondary" onPress={() => { void Linking.openURL(`mailto:${encodeURIComponent(vendor.email!)}`).catch(() => notify("Could not email", "Use the email address in Vendors.")); }} /> : null}<Button title="Share job details" variant="secondary" onPress={() => void shareJob()} /></View></Card> : <Button title="Share job details" variant="secondary" onPress={() => void shareJob()} />}
+        {vendor ? <Card><Text className="font-semibold text-slate-800">Contact {vendor.name}</Text><Text className="my-2 text-slate-500">Call or email the vendor for help with the job.</Text><View className="flex-row gap-2">{vendor.phone ? <Button title="Call" variant="secondary" onPress={() => { void Linking.openURL(`tel:${vendor.phone!.replace(/[^+0-9]/g, "")}`).catch(() => notify("Could not call", "Use the phone number in Vendors.")); }} /> : null}{vendor.email ? <Button title="Email" variant="secondary" onPress={() => { void Linking.openURL(`mailto:${encodeURIComponent(vendor.email!)}`).catch(() => notify("Could not email", "Use the email address in Vendors.")); }} /> : null}<Button title="Share job details" variant="secondary" onPress={() => void shareJob()} /></View></Card> : <Button title="Share job details" variant="secondary" onPress={() => void shareJob()} />}
         {/* Parts */}
         <View className="mb-2 mt-4 flex-row items-center justify-between">
           <Text className="text-sm font-semibold uppercase text-slate-400">

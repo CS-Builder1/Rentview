@@ -23,6 +23,8 @@ export default function RootLayout() {
               <Stack.Screen name="(app)" />
               <Stack.Screen name="tenant" />
               <Stack.Screen name="claim" />
+              <Stack.Screen name="contractor" />
+              <Stack.Screen name="contractor-invite" />
             </Stack>
           </OfflineProvider>
         </AuthProvider>
