@@ -74,6 +74,17 @@ select public.act_on_dispatch(pg_temp.job(),pg_temp.revision(),'confirm');
 select public.act_on_dispatch(pg_temp.job(),pg_temp.revision(),'start');
 select set_config('fixture.photo',pg_temp.job()::text||'/'||auth.uid()::text||'/washer.jpg',true);
 insert into storage.objects(bucket_id,name,owner_id) values('dispatch-photos',current_setting('fixture.photo'),auth.uid()::text);
+select set_config('fixture.draft',pg_temp.job()::text||'/'||auth.uid()::text||'/unused.jpg',true);
+insert into storage.objects(bucket_id,name,owner_id) values('dispatch-photos',current_setting('fixture.draft'),auth.uid()::text);
+select set_config('fixture.abandoned',pg_temp.job()::text||'/'||auth.uid()::text||'/abandoned.jpg',true);
+insert into storage.objects(bucket_id,name,owner_id) values('dispatch-photos',current_setting('fixture.abandoned'),auth.uid()::text);
+set local storage.allow_delete_query='true';
+-- Only the uploader can remove a draft, including after the job ends.
+select pg_temp.dispatch_actor(1);
+delete from storage.objects where bucket_id='dispatch-photos' and name=current_setting('fixture.draft');
+select pg_temp.dispatch_actor(3);
+select pg_temp.check_dispatch(exists(select from storage.objects where bucket_id='dispatch-photos' and name=current_setting('fixture.draft')),
+  'management cannot read or delete unpublished draft');
 select pg_temp.must_fail($q$select public.act_on_dispatch(pg_temp.job(),pg_temp.revision(),'complete',p_notes=>'Bad path',
   p_photos=>array['another-job/another-user/outside.jpg'])$q$);
 select pg_temp.dispatch_actor(2);
@@ -86,6 +97,13 @@ select pg_temp.check_dispatch((select status='resolved' from public.maintenance_
   where id='dd500000-0000-4000-8000-000000000001'),'physical completion resolves tenant report');
 select pg_temp.check_dispatch(exists(select from storage.objects where bucket_id='dispatch-photos' and name=current_setting('fixture.photo')),
   'resident can read submitted completion proof');
+select pg_temp.check_dispatch((select owner_id='dd000000-0000-4000-8000-000000000001' and owner='dd000000-0000-4000-8000-000000000001'
+  from storage.objects where bucket_id='dispatch-photos' and name=current_setting('fixture.photo')), 'published proof belongs to portfolio');
+select pg_temp.dispatch_actor(3);
+delete from storage.objects where bucket_id='dispatch-photos' and name=current_setting('fixture.photo');
+select pg_temp.dispatch_actor(2);
+select pg_temp.check_dispatch(exists(select from storage.objects where bucket_id='dispatch-photos' and name=current_setting('fixture.photo')),
+  'contractor cannot erase submitted proof');
 select public.rate_request_resolution('dd500000-0000-4000-8000-000000000001',4,'Prompt');
 select public.reopen_tenant_request('dd500000-0000-4000-8000-000000000001','Leak returned');
 select pg_temp.check_dispatch((select assignment_status='accepted' and field_completed_at is null from public.dispatch_jobs where work_order_id=pg_temp.job()),'unposted field repair retained and reopened');
@@ -112,5 +130,44 @@ select pg_temp.check_dispatch(exists(select from public.inbox_events
   where recipient_id='dd000000-0000-4000-8000-000000000003' and href like '/contractor/job/%'),'durable worker assignment alerts');
 select pg_temp.check_dispatch(exists(select from public.inbox_events
   where recipient_id='dd000000-0000-4000-8000-000000000002' and title='Visit proposed'),'resident visit alert');
+-- The historical binding survives both the operational record and uploader.
+set local role authenticated;
+select pg_temp.dispatch_actor(1);
+select public.offer_portfolio_transfer('dd000000-0000-4000-8000-000000000006');
+select pg_temp.dispatch_actor(6);
+select public.accept_portfolio_transfer('dd000000-0000-4000-8000-000000000001');
+select pg_temp.check_dispatch((select owner_id=auth.uid()::text and owner=auth.uid() from storage.objects
+  where bucket_id='dispatch-photos' and name=current_setting('fixture.photo')), 'published proof transferred to successor');
+select pg_temp.dispatch_actor(1);
+select pg_temp.check_dispatch(not exists(select from storage.objects where bucket_id='dispatch-photos' and name=current_setting('fixture.photo')),
+  'outgoing owner loses proof access');
+select pg_temp.dispatch_actor(3);
+select pg_temp.check_dispatch((select owner_id=auth.uid()::text from storage.objects where bucket_id='dispatch-photos' and name=current_setting('fixture.draft')),
+  'handover leaves unpublished draft with uploader');
+delete from storage.objects where bucket_id='dispatch-photos' and name=current_setting('fixture.draft');
+select pg_temp.check_dispatch(not exists(select from storage.objects where bucket_id='dispatch-photos' and name=current_setting('fixture.draft')),
+  'uploader removes unpublished draft after job closed');
+reset role;
+select public.prepare_identity_deletion('dd000000-0000-4000-8000-000000000003');
+select public.claim_identity_deletion_worker('dd000000-0000-4000-8000-000000000003','dd900000-0000-4000-8000-000000000003');
+select pg_temp.check_dispatch(not exists(select from public.owned_storage_paths('dd000000-0000-4000-8000-000000000003',
+  'dd900000-0000-4000-8000-000000000003',100) where bucket_id='dispatch-photos' and name=current_setting('fixture.photo')),
+  'deletion worker excludes property-owned evidence');
+select pg_temp.check_dispatch(exists(select from public.owned_storage_paths('dd000000-0000-4000-8000-000000000003',
+  'dd900000-0000-4000-8000-000000000003',100) where bucket_id='dispatch-photos' and name=current_setting('fixture.abandoned')),
+  'deletion worker includes the departing user’s abandoned draft');
+delete from storage.objects o using public.owned_storage_paths('dd000000-0000-4000-8000-000000000003',
+  'dd900000-0000-4000-8000-000000000003',100) disposable where o.bucket_id=disposable.bucket_id and o.name=disposable.name;
+delete from auth.users where id='dd000000-0000-4000-8000-000000000003';
+-- Model removal of the live dispatch row without modifying a posted financial record.
+delete from public.work_order_dispatch where work_order_id=split_part(current_setting('fixture.photo'),'/',1)::uuid;
+set local role authenticated;
+select pg_temp.dispatch_actor(6);
+select pg_temp.check_dispatch(exists(select from storage.objects where bucket_id='dispatch-photos' and name=current_setting('fixture.photo')),
+  'successor sees historical proof after contractor deletion and operational record removal');
+select pg_temp.dispatch_actor(4);
+select pg_temp.check_dispatch(not exists(select from storage.objects where bucket_id='dispatch-photos' and name=current_setting('fixture.photo')),
+  'unrelated user cannot read historical proof');
+reset role;
 set constraints all immediate;
 rollback;

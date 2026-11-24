@@ -137,6 +137,18 @@ function DispatchDetails({ audience, userId, workOrderId, requestId, vendors, ow
     });
   }
 
+  async function removeDraft(photo: ProofPhoto) {
+    await perform(async () => {
+      const path = uploadedPhotos.current.get(photo.id);
+      if (path) {
+        const { error } = await photoBucket.remove([path]);
+        if (error) throw error;
+        uploadedPhotos.current.delete(photo.id);
+      }
+      setPhotos(items => items.filter(item => item.id !== photo.id));
+    });
+  }
+
   async function openPhoto(path: string) {
     await perform(async () => {
       const { data, error } = await photoBucket.createSignedUrl(path, 180);
@@ -210,7 +222,7 @@ function DispatchDetails({ audience, userId, workOrderId, requestId, vendors, ow
       {job.work_status !== "in_progress" ? <Button title="Start repair" variant="secondary" disabled={busy} onPress={() => void act("start")} /> : null}
       <Field label="Completion notes" multiline maxLength={2000} value={notes} onChangeText={setNotes} placeholder="What was repaired and what should the resident know?" />
       {photos.map((photo, i) => <Button key={photo.id} title={`Remove photo ${i + 1}`} variant="secondary" disabled={busy}
-        onPress={() => setPhotos(all => all.filter(item => item.id !== photo.id))} />)}
+        onPress={() => void removeDraft(photo)} />)}
       {photos.length < 8 ? <Button title="Add completion photo" onPress={() => void addPhoto()} variant="secondary" disabled={busy} /> : null}
       <Button title="Submit completed repair" onPress={() => void act("complete")} loading={busy} />
     </View> : null}
