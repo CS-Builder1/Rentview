@@ -306,6 +306,80 @@ def main():
         follow_event(staff_page,manager,"Repair reply","/request/"+request_id)
         expect(staff_page.get_by_text("Still not fixed: "+reason,exact=True).filter(visible=True)).to_be_visible()
         checked("Renter reopens the rated repair; staff and worker see the follow-up and original evidence stays in history")
+        step = "manager reopens proof from location history"
+        goto(staff_page, "/unit/" + unit["id"])
+        click(staff_page, "Condition & repair history")
+        click(staff_page, "Dispatch")
+        expect(staff_page.get_by_text(notes, exact=False).filter(visible=True)).to_be_visible()
+        with staff_page.context.expect_page() as opened:
+            click(staff_page, "Open attachment 1")
+        historical_photo = opened.value
+        historical_photo.wait_for_function("() => document.images.length === 1 && document.images[0].naturalWidth > 0")
+        assert urlparse(historical_photo.url).path.endswith("/dispatch-photos/" + path)
+        historical_photo.close()
+        checked("Manager opens the original contractor photo from unit history after the renter reopens the repair")
+        step = "second visit, resident confirmation and final cost"
+        return_visit = revised + timedelta(days=1)
+        propose(worker_two, "Propose visit window", return_visit, return_visit + timedelta(hours=1))
+        poll(lambda: job()["visit_status"] == "proposed", pump=worker_two.wait_for_timeout)
+        goto(resident_page, resident_url)
+        click(resident_page, "Confirm visit window")
+        poll(lambda: job()["visit_status"] == "confirmed", pump=resident_page.wait_for_timeout)
+        goto(worker_two, contractor_url)
+        if job()["work_status"] != "in_progress":
+            click(worker_two, "Start repair")
+            poll(lambda: job()["work_status"] == "in_progress", pump=worker_two.wait_for_timeout)
+        second_notes = "Replaced the cracked trap body and pressure-tested the assembly."
+        worker_two.get_by_label("Completion notes", exact=True).fill(second_notes)
+        with worker_two.expect_file_chooser() as chooser:
+            click(worker_two, "Add completion photo")
+        chooser.value.set_files({"name":"return-visit-proof.png","mimeType":"image/png","buffer":PNG})
+        expect(worker_two.get_by_role("button", name="Remove photo 1", exact=True)).to_be_visible()
+        click(worker_two, "Submit completed repair")
+        poll(lambda: request()["status"] == "resolved", pump=worker_two.wait_for_timeout)
+        [second_path] = job()["completion_photos"]
+        assert second_path != path
+        goto(resident_page, resident_url)
+        expect(resident_page.get_by_text(second_notes, exact=True).filter(visible=True)).to_be_visible()
+        click(resident_page, "Close this request")
+        poll(lambda: request()["status"] == "closed", pump=resident_page.wait_for_timeout)
+        goto(staff_page, "/work-order/" + job_id)
+        staff_page.get_by_text("Completed", exact=True).filter(visible=True).click()
+        staff_page.get_by_label("What was done?", exact=True).fill("Trap assembly replacement, two visits")
+        staff_page.get_by_label("Labor cost (USD)", exact=True).fill("85")
+        click(staff_page, "Complete and record cost")
+        [expense] = poll(lambda: api.select("expenses", manager["token"], work_order_id=job_id), pump=staff_page.wait_for_timeout)
+        assert expense["amount"] == 85 and expense["currency"] == "USD" and request()["status"] == "closed"
+        checked("Resident confirms the return visit, closes the second repair, and management posts one USD 85 cost")
+
+        step = "both visits, their proof and the cost survive turnover"
+        goto(staff_page, "/unit/" + unit["id"])
+        staff_page.get_by_text("Field Resident", exact=True).filter(visible=True).click()
+        click(staff_page.get_by_role("dialog"), "Archive lease")
+        poll(lambda: api.select("leases", manager["token"], id=lease["id"])[0]["archived_at"], pump=staff_page.wait_for_timeout)
+        click(staff_page, "Condition & repair history")
+        click(staff_page, "Dispatch")
+        for note in (notes, second_notes):
+            expect(staff_page.get_by_text(note, exact=False).filter(visible=True)).to_be_visible()
+        attachments = staff_page.get_by_role("button", name="Open attachment 1", exact=True).filter(visible=True)
+        expect(attachments).to_have_count(2)
+        opened_paths = set()
+        for attachment in attachments.all():
+            with staff_page.context.expect_page() as opened:
+                attachment.click()
+            proof = opened.value
+            proof.wait_for_function("() => document.images.length === 1 && document.images[0].naturalWidth > 0")
+            opened_paths.add(urlparse(proof.url).path.rsplit("/dispatch-photos/",1)[-1])
+            proof.close()
+        assert opened_paths == {path, second_path}
+        click(staff_page, "Expense")
+        expect(staff_page.get_by_text("$85.00", exact=True).filter(visible=True)).to_be_visible()
+        owner_history = api.select("property_event_history",owner["token"],unit_id=unit["id"],job_id=job_id)
+        visits = [e for e in owner_history if e["kind"] == "dispatch" and e["evidence"]]
+        assert len(visits) == 2 and all(e["event_date"] and vendors[1]["name"] in e["details"] for e in visits)
+        assert {e["evidence"][0] for e in visits} == {path, second_path}
+        assert len([e for e in owner_history if e["kind"] == "expense" and e["amount"] == 85 and e["currency"] == "USD"]) == 1
+        checked("After lease archive the manager opens both distinct photos and the cost, and the owner retains both dated contractor visits")
         assert not result["browser_errors"] and not result["blocked_hosts"]
         result["status"]="passed"
     except Exception as error:

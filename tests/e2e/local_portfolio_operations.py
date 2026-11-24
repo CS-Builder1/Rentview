@@ -1,20 +1,99 @@
 """Exercise owner portfolio screens in Chromium against a disposable, loopback Supabase.
 
 The API creates one synthetic owner and property and independently verifies persisted
-records. All vendor, inventory, asset, schedule and announcement changes use the UI.
+records. The browser also uses the real document and photo pickers, opens their
+private previews, and resolves a pasted asset tag URL through the scanner.
 """
 import argparse
 import json
 import os
+import re
 import secrets
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 from uuid import uuid4
 
 from playwright.sync_api import expect, sync_playwright
 
-from local_e2e import LOOPBACK, LocalAPI, local_url, private_credentials
+from local_e2e import LOOPBACK, PNG, LocalAPI, local_url, private_credentials
+
+
+def documents(page, api, token, tag, prop):
+    name = f"Pump handover record {tag}"
+    contents = f"Boiler maintenance instructions for fixture {tag}."
+    page.get_by_text("Add", exact=True).click()
+    form = page.get_by_role("dialog")
+    with page.expect_file_chooser() as pending:
+        form.get_by_text("Choose a file", exact=True).click()
+    pending.value.set_files({"name": "handover.txt", "mimeType": "text/plain", "buffer": contents.encode()})
+    expect(form.get_by_text("handover.txt", exact=True)).to_be_visible()
+    form.get_by_label("Name", exact=True).fill(name)
+    form.get_by_text("Manual", exact=True).click()
+    form.get_by_text(prop["name"], exact=True).click()
+    form.get_by_role("button", name="Save", exact=True).click()
+    expect(form).to_have_count(0)
+    page.reload()
+    card = page.get_by_role("button", name=re.compile(re.escape(name)))
+    expect(card).to_be_visible()
+    [doc] = api.select("documents", token, name=name)
+    assert (doc["property_id"], doc["doc_type"], doc["mime_type"]) == (prop["id"], "manual", "text/plain")
+    obj = "/storage/v1/object/authenticated/attachments/" + quote(doc["storage_path"], safe="/")
+    assert api.ok("GET", obj, token=token) == contents.encode()
+    with page.context.expect_page() as opened:
+        card.get_by_text(name, exact=True).click()
+    preview = opened.value
+    expect(preview.get_by_text(contents, exact=True)).to_be_visible()
+    assert urlparse(preview.url).path.endswith("/attachments/" + doc["storage_path"])
+    preview.close()
+    # The trash icon is the only nested action on the document card.
+    with page.expect_response(lambda r: r.request.method == "DELETE" and urlparse(r.url).path == "/rest/v1/documents") as removed:
+        card.locator('[tabindex="0"]').click()
+    assert removed.value.ok
+    expect(card).to_have_count(0)
+    assert api.select("documents", token, id=doc["id"]) == []
+    status, data = api.request("GET", obj, token=token)
+    assert status in (400, 404) and isinstance(data, dict), "Deleted document bytes are still available"
+
+
+def move_in_photo(page, api, token, tag, prop):
+    uid = prop["owner_id"]
+    unit = api.insert("units", {"owner_id": uid, "property_id": prop["id"], "label": f"Inspection flat {tag}"}, token)
+    lease = api.insert("leases", {"owner_id": uid, "unit_id": unit["id"], "tenant_name": "Fixture arrival", "status": "active"}, token)
+    page.goto("/properties")
+    page.get_by_text(prop["name"], exact=True).click()
+    page.get_by_text(unit["label"], exact=True).click()
+    page.get_by_role("button", name="Condition & repair history", exact=True).click()
+    page.get_by_role("button", name="Record entry", exact=True).click()
+    form = page.get_by_role("dialog")
+    form.get_by_role("button", name="Inspection", exact=True).click()
+    title = f"Arrival inspection {tag}"
+    form.get_by_label("Title", exact=True).fill(title)
+    form.get_by_role("button", name=re.compile("^Fixture arrival ·")).click()
+    form.get_by_role("button", name="Move In", exact=True).click()
+    form.get_by_label("Room or area", exact=True).fill("Kitchen")
+    form.get_by_role("button", name="Worn", exact=True).click()
+    form.get_by_label("Finding", exact=True).fill("Scuff on cupboard door")
+    with page.expect_file_chooser() as pending:
+        form.get_by_role("button", name="Attach room photo", exact=True).click()
+    pending.value.set_files({"name": "cupboard.png", "mimeType": "image/png", "buffer": PNG})
+    expect(form.get_by_role("button", name="Add room photo (1 attached)", exact=True)).to_be_visible()
+    form.get_by_role("button", name="Save entry", exact=True).click()
+    expect(form).to_have_count(0)
+    page.reload()
+    expect(page.get_by_text(title, exact=True)).to_be_visible()
+    [event] = api.select("property_event_history", token, title=title)
+    [room] = event["rooms"]
+    [path] = room["evidence"]
+    assert (event["lease_id"],event["phase"],room["room"], room["condition"]) == (lease["id"], "move_in", "Kitchen", "worn")
+    data = api.ok("GET", "/storage/v1/object/authenticated/attachments/" + quote(path, safe="/"), token=token)
+    assert data.startswith((b"\x89PNG", b"\xff\xd8\xff", b"RIFF"))
+    with page.context.expect_page() as opened:
+        page.get_by_role("button", name="Open attachment 1", exact=True).click()
+    photo = opened.value
+    photo.wait_for_function("() => document.images.length === 1 && document.images[0].naturalWidth > 0")
+    assert urlparse(photo.url).path.endswith("/attachments/" + path)
+    photo.close()
 
 
 def vendors(page, api, token, tag):
@@ -82,6 +161,16 @@ def asset_and_maintenance(page, api, token, tag, prop):
     [asset] = api.select("assets", token, name=name)
     assert asset["property_id"] == prop["id"] and asset["serial_number"] == tag, "Asset edit did not persist the serial number"
     expect(page.get_by_text(tag, exact=True)).to_be_visible()
+
+    # On web the label encodes this canonical URL. Exercise manual scanner entry without a camera.
+    tag_url = page.url
+    expect(page.get_by_role("button",name="Print QR label",exact=True)).to_be_enabled()
+    page.goto("/more")
+    page.get_by_text("Scan asset tag",exact=True).click()
+    page.get_by_placeholder("asset id or https://…/asset/…",exact=True).fill(tag_url)
+    page.get_by_role("button",name="Open asset",exact=True).click()
+    page.wait_for_url(lambda url: urlparse(url).path == "/asset/" + asset["id"])
+    expect(page.get_by_text(tag,exact=True)).to_be_visible()
 
     page.get_by_role("button", name="Schedule service").click()
     page.get_by_label("Title", exact=True).fill(title)
@@ -191,9 +280,10 @@ def main():
             page.get_by_role("button", name="Sign in", exact=True).click()
             expect(page.get_by_role("button", name="Open Work", exact=True)).to_be_visible(timeout=30000)
             for step, link, work, extra in [
+                ("Document picker, stored manual, signed preview and deletion", "Documents", documents, (prop,)),
                 ("Vendor creation, search, edit and deletion", "Vendors", vendors, ()),
                 ("Stock creation, threshold, restocking and deletion", "Inventory & parts", inventory, ()),
-                ("Asset registration, maintenance history, pause, resume and retirement", "Assets", asset_and_maintenance, (prop,)),
+                ("Asset registration, manual QR tag lookup, maintenance history, pause, resume and retirement", "Assets", asset_and_maintenance, (prop,)),
                 ("Property announcement publication and reload", "Announcements", announcement, (prop,)),
             ]:
                 page.goto("/more")
@@ -204,6 +294,9 @@ def main():
                     report["visible_screen"] = page.locator("body").inner_text()[:4000]
                     raise
                 report["checks"].append(step)
+            step = "Move-in room inspection photo survives reload and opens from unit history"
+            move_in_photo(page, api, token, tag, prop)
+            report["checks"].append(step)
             browser.close()
         step = "browser errors and external requests"
         assert not report["browser_errors"] and not report["external_requests"]
