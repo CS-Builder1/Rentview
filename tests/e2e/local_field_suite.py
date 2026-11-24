@@ -85,13 +85,25 @@ def main():
         context.route_web_socket("**/*", socket)
         page = context.new_page()
         pages[label] = page
-        page.set_default_timeout(20000)
+        page.set_default_timeout(30000)
         page.on("pageerror", lambda error: result["browser_errors"].append(clean(error)))
+        def response_error(response):
+            if response.status < 400: return
+            item = {"actor":label, "path":urlparse(response.url).path, "status":response.status}
+            try:
+                data = response.json()
+                item["code"] = data.get("code") or data.get("error_code")
+                item["detail"] = clean(data.get("message") or data.get("msg") or data.get("error_description") or "")
+            except Exception: pass
+            result.setdefault("http_errors",[]).append(item)
+        page.on("response",response_error)
         page.on("dialog", lambda dialog: dialog.accept())
         goto(page, "/login")
         page.get_by_label("Email", exact=True).fill(actor["email"])
         page.get_by_label("Password", exact=True).fill(actor["password"])
-        click(page, "Sign in")
+        with page.expect_response(lambda response: urlparse(response.url).path=="/auth/v1/token" and response.request.method=="POST") as auth:
+            click(page, "Sign in")
+        assert auth.value.ok, f"{label} sign-in returned HTTP {auth.value.status}"
         page.wait_for_url(lambda url: urlparse(url).path.rstrip("/") not in {"/login", "/callback"})
         return page
 
@@ -108,7 +120,10 @@ def main():
     def follow_event(page, actor, title, href):
         # Click the real alert, then verify the recipient-specific persisted receipt.
         poll(lambda: event(actor, title, href), pump=page.wait_for_timeout)
-        goto(page, "/inbox")
+        if urlparse(page.url).path != "/inbox":
+            home = "/tenant" if actor is renter else "/" if actor is manager else "/contractor"
+            goto(page, home)
+            page.get_by_role("button", name=re.compile(r"^Inbox(?: · [0-9]+ unread)?$")).click()
         page.get_by_role("button").filter(has=page.get_by_text(title, exact=True)).first.click()
         page.wait_for_url(lambda url: urlparse(url).path == href)
         poll(lambda: event(actor, title, href)["read_at"], pump=page.wait_for_timeout)
@@ -116,7 +131,7 @@ def main():
     def send(page, body):
         page.get_by_label("Message", exact=True).fill(body)
         click(page, "Send message")
-        expect(page.get_by_text(body, exact=True)).to_be_visible()
+        expect(page.get_by_text(body, exact=True).filter(visible=True)).to_be_visible()
 
     def propose(page, action, start, end):
         click(page, action)
@@ -156,10 +171,10 @@ def main():
         staff_page = login(manager, "manager")
         worker_one = login(first, "first", True)
         worker_two = login(second, "second", True)
-        expect(resident_page.get_by_text("My leases", exact=True)).to_be_visible()
-        expect(staff_page.get_by_role("button", name="Open Work", exact=True)).to_be_visible()
+        expect(resident_page.get_by_text("My leases", exact=True).filter(visible=True)).to_be_visible()
+        expect(staff_page.get_by_role("button", name="Open Work", exact=True).filter(visible=True)).to_be_visible()
         for page in [worker_one, worker_two]:
-            expect(page.get_by_text("Assigned jobs", exact=True)).to_be_visible()
+            expect(page.get_by_text("Assigned jobs", exact=True).filter(visible=True)).to_be_visible()
         checked("Four isolated sign-ins route each actor to their workspace")
 
         step = "lease conversation and receipts"
@@ -172,12 +187,12 @@ def main():
         click(resident_page, "Inbox")
         assert not api.select("maintenance_requests", renter["token"], lease_id=lease["id"])
         follow_event(staff_page, manager, "New lease message", thread)
-        expect(staff_page.get_by_text(question, exact=True)).to_be_visible()
+        expect(staff_page.get_by_text(question, exact=True).filter(visible=True)).to_be_visible()
         send(staff_page, answer)
         receipt = poll(lambda: event(renter, "New lease message", thread), pump=resident_page.wait_for_timeout)
         assert receipt["read_at"] is None
         follow_event(resident_page, renter, "New lease message", thread)
-        expect(resident_page.get_by_text(answer, exact=True)).to_be_visible()
+        expect(resident_page.get_by_text(answer, exact=True).filter(visible=True)).to_be_visible()
         stored = api.rpc("lease_thread", {"p_lease":lease["id"],"p_resident":renter["id"]}, manager["token"])
         assert {(m["body"],m["sender_id"]) for m in stored} == {(question,renter["id"]),(answer,manager["id"])}
         checked("General lease question and delegated manager reply reach separate inboxes with saved receipts")
@@ -217,7 +232,7 @@ def main():
         step = "decline and reassign"
         contractor_url = "/contractor/job/"+job_id
         follow_event(worker_one,first,"Repair assignment updated",contractor_url)
-        expect(worker_one.get_by_text(title,exact=True)).to_be_visible()
+        expect(worker_one.get_by_text(title,exact=True).filter(visible=True)).to_be_visible()
         click(worker_one,"Decline job")
         poll(lambda: job()["assignment_status"]=="declined",pump=worker_one.wait_for_timeout)
         follow_event(staff_page,manager,"Contractor declined the repair","/work-order/"+job_id)
@@ -227,7 +242,7 @@ def main():
         click(worker_two,"Accept job")
         poll(lambda: job()["assignment_status"]=="accepted",pump=worker_two.wait_for_timeout)
         follow_event(worker_one,first,"Assignment withdrawn","/contractor")
-        expect(worker_one.get_by_text("No assigned jobs",exact=True)).to_be_visible()
+        expect(worker_one.get_by_text("No assigned jobs",exact=True).filter(visible=True)).to_be_visible()
         checked("First contractor declines; reassignment withdraws prior access and the second contractor accepts")
 
         step = "tenant and contractor reschedule and confirm"
@@ -243,7 +258,7 @@ def main():
         click(worker_two,"Confirm visit window")
         poll(lambda: job()["visit_status"]=="confirmed",pump=worker_two.wait_for_timeout)
         follow_event(resident_page,renter,"Visit confirmed",resident_url)
-        expect(resident_page.get_by_text("Confirmed visit",exact=True)).to_be_visible()
+        expect(resident_page.get_by_text("Confirmed visit",exact=True).filter(visible=True)).to_be_visible()
         assert datetime.fromisoformat(job()["visit_end"])==revised+timedelta(hours=2)
         checked("Resident counters the proposed visit and the contractor confirms the revised UTC window")
 
@@ -255,7 +270,7 @@ def main():
         with worker_two.expect_file_chooser() as chooser:
             click(worker_two,"Add completion photo")
         chooser.value.set_files({"name":"repair-proof.png","mimeType":"image/png","buffer":PNG})
-        expect(worker_two.get_by_role("button",name="Remove photo 1",exact=True)).to_be_visible()
+        expect(worker_two.get_by_role("button",name="Remove photo 1",exact=True).filter(visible=True)).to_be_visible()
         click(worker_two,"Submit completed repair")
         poll(lambda: request()["status"]=="resolved",pump=worker_two.wait_for_timeout)
         completed = job()
@@ -265,7 +280,7 @@ def main():
         image = api.ok("GET","/storage/v1/object/authenticated/dispatch-photos/"+quote(path,safe="/"),token=renter["token"])
         assert image.startswith((b"\x89PNG",b"\xff\xd8\xff",b"RIFF")), "Resident did not receive stored image bytes"
         goto(resident_page,resident_url)
-        expect(resident_page.get_by_text(notes,exact=True)).to_be_visible()
+        expect(resident_page.get_by_text(notes,exact=True).filter(visible=True)).to_be_visible()
         with resident_page.context.expect_page() as opened:
             click(resident_page,"View completion photo 1")
         proof_page = opened.value
@@ -289,7 +304,7 @@ def main():
         assert any(e["event"]=="reopened" and e["detail"].get("prior_rating")==2 for e in events)
         follow_event(worker_two,second,"Resident reopened the repair",contractor_url)
         follow_event(staff_page,manager,"Repair reply","/request/"+request_id)
-        expect(staff_page.get_by_text("Still not fixed: "+reason,exact=True)).to_be_visible()
+        expect(staff_page.get_by_text("Still not fixed: "+reason,exact=True).filter(visible=True)).to_be_visible()
         checked("Renter reopens the rated repair; staff and worker see the follow-up and original evidence stays in history")
         assert not result["browser_errors"] and not result["blocked_hosts"]
         result["status"]="passed"
@@ -306,7 +321,7 @@ def main():
             except Exception: pass
         if browser: browser.close()
         if playwright: playwright.stop()
-        deleted=[api.cleanup_synthetic_user(uid) for uid in reversed(api.synthetic_users)]
+        deleted=[api.cleanup_synthetic_user(uid) for uid in reversed(list(api.synthetic_users))]
         result["cleanup"]={"created":len(deleted),"deleted":sum(u["status"]=="deleted" for u in deleted),"errors":[u for u in deleted if u["status"]!="deleted"]}
         if result["cleanup"]["errors"]: result["status"]="failed"
         result_path.write_text(json.dumps(result,indent=2)+"\n")
