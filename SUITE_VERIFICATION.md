@@ -69,6 +69,10 @@ python3 tests/e2e/local_recovery.py "${rv_args[@]}" --mail-url "$rv_mail" --outp
 
 If an offline Edge runtime cannot reach JSR, the deletion test accepts an optional `--offline-function-copy` pointing to the disposable runtime's copy of `delete-account`. The runner checks that the handler matches the repository source before configuring its local SDK import.
 
+## GitHub preview status
+
+Vercel's automatic preview stopped at the public configuration check. The missing preview variables were `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY` and `EXPO_PUBLIC_APP_URL`. An approved staging database with the combined migrations and the matching preview origin are prerequisites for a hosted walkthrough. The recorded browser results came from the local production web export. [Vercel build](https://vercel.com/cs-builder1s-projects/rentview/8CmFP6gfTbLB4yp5pMf2VYGcYUUK)
+
 ## Checks that still require release access
 
 - Install signed builds on physical iOS and Android devices. Exercise camera QR scanning, permissions, native sharing, callbacks, screen readers and background notifications. The local acceptance test used manual QR entry and signed image previews.
