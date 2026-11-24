@@ -1,6 +1,7 @@
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
-import { ScrollView, Text, View } from "react-native";
+import { AppState, ScrollView, Text, View } from "react-native";
+import { NotificationPrefs } from "../../components/NotificationPrefs";
 import { Badge, Button, Card, EmptyState, Loading, Screen } from "../../components/ui";
 import { useAuth, homeForRole } from "../../lib/auth";
 import { operationError, readAllPages } from "../../lib/operationsQuery";
@@ -14,16 +15,23 @@ export default function ContractorJobs() {
   const [jobs, setJobs] = useState<DispatchJob[] | null>(null);
   const [error, setError] = useState("");
   const [refresh, setRefresh] = useState(0);
+  const [showPrefs, setShowPrefs] = useState(false);
   useFocusEffect(useCallback(() => {
     let active = true;
     setError("");
-    readAllPages<DispatchJob>((from, to) => supabase.rpc("my_dispatch_jobs", {})
-      .order("work_order_id").range(from, to)).then(result => {
-      if (!active) return;
-      if (result.error) setError(operationError(result.error));
+    let sequence = 0;
+    async function load() {
+      const ticket = ++sequence;
+      const result = await readAllPages<DispatchJob>((from, to) => supabase.rpc("my_dispatch_jobs", {})
+        .order("work_order_id").range(from, to));
+      if (!active || ticket !== sequence) return;
+      setError(result.error ? operationError(result.error) : "");
       setJobs(result.data ?? []);
-    });
-    return () => { active = false; };
+    }
+    void load();
+    const timer = setInterval(() => { if (AppState.currentState === "active") void load(); }, 30000);
+    const subscription = AppState.addEventListener("change", state => { if (state === "active") void load(); });
+    return () => { active = false; clearInterval(timer); subscription.remove(); };
   }, [session?.user.id, refresh]));
   if (!jobs) return <Loading />;
   const sorted = jobs.slice().sort((a,b) => Number(b.assignment_status === "pending") - Number(a.assignment_status === "pending") ||
@@ -43,6 +51,8 @@ export default function ContractorJobs() {
       <Badge label={job.assignment_status ?? job.work_status} />
       {job.visit_start ? <Text className="mt-2 text-slate-600">{displayVisit(job.visit_start)} · {job.visit_status}</Text> : null}
     </Card>)}
+    <Button title={showPrefs ? "Hide notification settings" : "Notification settings"} variant="secondary" onPress={() => setShowPrefs(value => !value)} />
+    {showPrefs ? <NotificationPrefs variant="contractor" /> : null}
     <Button title="Join another vendor invitation" variant="secondary" onPress={() => router.push("/contractor-invite")} />
     {role !== "contractor" ? <Button title="Return to my home" variant="secondary" onPress={() => router.replace(homeForRole(role))} /> : null}
   </ScrollView></Screen>;

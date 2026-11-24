@@ -22,7 +22,7 @@ type Props = {
   propertyId?: string;
   onChange?: () => void;
 };
-type ProofPhoto = { id: string; picked: PickedImage; path?: string };
+type ProofPhoto = { id: string; picked: PickedImage };
 
 export function DispatchPanel(props: Props) {
   const { session } = useAuth();
@@ -46,6 +46,7 @@ function DispatchDetails({ audience, userId, workOrderId, requestId, vendors, ow
   const [vendorId, setVendorId] = useState<string | null>(null);
   const [instructions, setInstructions] = useState("");
   const inFlight = useRef(false);
+  const uploadedPhotos = useRef(new Map<string, string>());
   const photoBucket = supabase.storage.from("dispatch-photos");
 
   useFocusEffect(useCallback(() => {
@@ -88,15 +89,19 @@ function DispatchDetails({ audience, userId, workOrderId, requestId, vendors, ow
       if (action === "complete") {
         if (!notes.trim()) throw new Error("Describe the repair before submitting completion.");
         for (const photo of photos) {
-          if (!photo.path) {
-            const path = `${job.work_order_id}/${userId}/${photo.id}.${photo.picked.ext}`;
+          let path = uploadedPhotos.current.get(photo.id);
+          if (!path) {
+            path = `${job.work_order_id}/${userId}/${photo.id}.${photo.picked.ext}`;
             const { bytes, mimeType } = imageBytes(photo.picked);
             const { error: uploadError } = await photoBucket.upload(path, bytes, { contentType: mimeType, upsert: false });
-            if (uploadError) throw uploadError;
-            // Retain successful uploads if a later photo or completion request needs a retry.
-            photo.path = path;
+            if (uploadError) {
+              // A previous upload may have succeeded even if the response was lost.
+              const { data: exists } = await photoBucket.exists(path);
+              if (!exists) throw uploadError;
+            }
+            uploadedPhotos.current.set(photo.id, path);
           }
-          paths.push(photo.path);
+          paths.push(path);
         }
       }
       const { error } = await supabase.rpc("act_on_dispatch", {
@@ -105,8 +110,10 @@ function DispatchDetails({ audience, userId, workOrderId, requestId, vendors, ow
         ...(action === "complete" ? { p_notes: notes.trim(), p_photos: paths } : {}),
       });
       if (error) throw error;
-      setEditingVisit(false);
-      setPhotos([]); setNotes("");
+      if (action === "propose" || action === "confirm") setEditingVisit(false);
+      if (action === "complete" || action === "reopen") {
+        uploadedPhotos.current.clear(); setPhotos([]); setNotes("");
+      }
       onChange?.();
     });
   }
@@ -202,8 +209,9 @@ function DispatchDetails({ audience, userId, workOrderId, requestId, vendors, ow
       <Text className="text-slate-700">Work status: {job.work_status.replace(/_/g, " ")}</Text>
       {job.work_status !== "in_progress" ? <Button title="Start repair" variant="secondary" disabled={busy} onPress={() => void act("start")} /> : null}
       <Field label="Completion notes" multiline maxLength={2000} value={notes} onChangeText={setNotes} placeholder="What was repaired and what should the resident know?" />
-      {photos.length ? <Text className="text-slate-600">{photos.length} completion photo{photos.length === 1 ? "" : "s"} ready</Text> : null}
-      {photos.length < 5 ? <Button title="Add completion photo" onPress={() => void addPhoto()} variant="secondary" disabled={busy} /> : null}
+      {photos.map((photo, i) => <Button key={photo.id} title={`Remove photo ${i + 1}`} variant="secondary" disabled={busy}
+        onPress={() => setPhotos(all => all.filter(item => item.id !== photo.id))} />)}
+      {photos.length < 8 ? <Button title="Add completion photo" onPress={() => void addPhoto()} variant="secondary" disabled={busy} /> : null}
       <Button title="Submit completed repair" onPress={() => void act("complete")} loading={busy} />
     </View> : null}
     {job.field_completed_at ? <Text className="text-slate-700">Repair completed {displayVisit(job.field_completed_at)}</Text> : null}
