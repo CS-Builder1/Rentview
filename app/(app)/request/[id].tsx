@@ -67,7 +67,7 @@ export default function OwnerRequestDetail() {
           "*, properties!maintenance_requests_property_id_owner_fk(name), units!maintenance_requests_unit_property_owner_fk(label), leases!requests_lease_unit_owner_fk(tenant_name, tenant_phone)",
         )
         .eq("id", id)
-        .eq("owner_id", uid)
+        .not("properties", "is", null)
         .single(),
     );
     if (currentIdentity.current !== identity || revision !== loadRevision.current) return;
@@ -88,7 +88,7 @@ export default function OwnerRequestDetail() {
   );
 
   async function setStatus(status: (typeof STATUSES)[number]) {
-    if (!request || !uid || request.owner_id !== uid || busy) return;
+    if (!request || !uid || !request.properties || busy) return;
     setBusy(true);
     const { error } = await supabase
       .from("maintenance_requests")
@@ -98,7 +98,7 @@ export default function OwnerRequestDetail() {
           status === "resolved" ? new Date().toISOString() : request.resolved_at,
       })
       .eq("id", request.id)
-      .eq("owner_id", uid);
+      .eq("owner_id", request.owner_id).select("id").single();
     if (currentIdentity.current !== identity) return;
     setBusy(false);
     if (error) {
@@ -114,7 +114,7 @@ export default function OwnerRequestDetail() {
    * mirrors the work order's status back onto the request as it progresses.
    */
   async function convertToWorkOrder() {
-    if (!request || !uid || request.owner_id !== uid || busy) return;
+    if (!request || !uid || !request.properties || busy) return;
     setBusy(true);
     try {
       const { data: workOrderId, error } = await supabase.rpc("convert_request_to_work_order", { p_request_id: request.id });

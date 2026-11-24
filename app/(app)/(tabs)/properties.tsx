@@ -32,6 +32,8 @@ import { notify } from "../../../lib/feedback";
 import { currencyCode } from "../../../lib/validation";
 import { operationError, readAllPages } from "../../../lib/operationsQuery";
 
+import { ManagerInvitations } from "../../../components/PropertyManagers";
+
 type Property = Tables<"properties"> & { units: { count: number }[] };
 
 const PROPERTY_TYPES = Constants.public.Enums.property_type;
@@ -90,7 +92,7 @@ export default function Properties() {
    * already created stays fully usable — only adding another is blocked.
    */
   function startAdd() {
-    const count = properties?.length ?? 0;
+    const count = properties?.filter(p => p.owner_id === session?.user.id).length ?? 0;
     if (propertyLimit !== null && count >= propertyLimit) {
       const message =
         `Free covers ${propertyLimit} propert${propertyLimit === 1 ? "y" : "ies"}. ` +
@@ -142,6 +144,7 @@ export default function Properties() {
       </View>
 
       <ScrollView contentContainerClassName="px-5 pb-10">
+        {session ? <ManagerInvitations accountId={session.user.id} onChange={() => void load()} /> : null}
         <Field label="Search properties" value={search} onChangeText={setSearch} placeholder="Name or city" />
         {loadError ? <View className="mb-3"><Text accessibilityRole="alert" className="mb-2 text-red-700">{loadError}</Text><Button title="Retry" variant="secondary" onPress={() => void load()} /></View> : null}
         {properties.length === 0 && !loadError ? (

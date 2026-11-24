@@ -189,19 +189,19 @@ export default function UnitDetail() {
     finally { savingRef.current = false; setSaving(false); }
   }
 
-  function removeLease() {
+  function archiveLease() {
     if (!editingLeaseId || savingRef.current) return;
     confirmAction(
-      "Delete lease",
-      "This permanently removes the lease record. This cannot be undone.",
+      "Archive lease",
+      "End portal access and keep the lease, payment history, requests and photos on this unit. Create a separate lease for the next resident.",
       async () => {
         if (savingRef.current) return;
         savingRef.current = true; setSaving(true);
         try {
-          const { error } = await supabase.from("leases").delete().eq("id", editingLeaseId).select("id").single();
+          const { error } = await supabase.rpc("revoke_lease_portal", { p_lease: editingLeaseId, p_archive: true });
           if (error) throw error;
           setAdding(false); resetForm(); await load();
-        } catch (error) { notify("Could not delete lease", operationError(error)); }
+        } catch (error) { notify("Could not archive lease", operationError(error)); }
         finally { savingRef.current = false; setSaving(false); }
       },
     );
@@ -336,12 +336,12 @@ export default function UnitDetail() {
           <Text className="mb-2 text-slate-400">No lease on record.</Text>
         ) : (
           leases.map((l) => (
-            <Card key={l.id} onPress={() => openEditLease(l)}>
+            <Card key={l.id} onPress={() => l.archived_at ? router.push(`/lease/${l.id}`) : openEditLease(l)}>
               <View className="flex-row items-center justify-between">
                 <Text className="flex-1 pr-2 font-semibold text-slate-900">
                   {l.tenant_name}
                 </Text>
-                <Badge label={l.status} />
+                <Badge label={l.archived_at ? "Archived" : l.status} />
               </View>
               {l.tenant_phone ? (
                 <Text className="mt-1 text-slate-500">{l.tenant_phone}</Text>
@@ -363,7 +363,7 @@ export default function UnitDetail() {
                   color="#0f766e"
                 />
                 <Text className="ml-1 text-sm font-medium text-brand">
-                  {l.tenant_user_id ? "Portal & rent" : "Invite to portal"}
+                  {l.archived_at ? "Lease history" : l.tenant_user_id ? "Portal & rent" : "Invite to portal"}
                 </Text>
               </Pressable>
             </Card>
@@ -602,7 +602,7 @@ export default function UnitDetail() {
             </View>
             {editingLeaseId ? (
               <View className="mt-3">
-                <Button title="Delete lease" disabled={saving} variant="danger" onPress={removeLease} />
+                <Button title="Archive lease" disabled={saving} variant="danger" onPress={archiveLease} />
               </View>
             ) : null}
           </ScrollView>

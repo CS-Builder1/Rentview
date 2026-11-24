@@ -169,8 +169,7 @@ export default function LeaseDetail() {
         if (busy) return;
         setBusy(true);
         try {
-          const { error } = await supabase.from("leases").update({ tenant_user_id: null })
-            .eq("id", lease.id).select("id").single();
+          const { error } = await supabase.rpc("revoke_lease_portal", { p_lease: lease.id, p_archive: false });
           if (error) throw error;
           await load();
         } catch (error) { notify("Could not remove portal access", operationError(error)); }
@@ -283,7 +282,7 @@ export default function LeaseDetail() {
                 .filter(Boolean)
                 .join(" · ")}
             </Text>
-            <Badge label={lease.status} />
+            <Badge label={lease.archived_at ? "Archived" : lease.status} />
           </View>
           <View className="mt-3">
             <Row
@@ -313,7 +312,7 @@ export default function LeaseDetail() {
           Tenant portal access
         </Text>
 
-        {linked ? (
+        {lease.archived_at ? <Text className="mb-3">Archived tenancy. Its payment and repair records remain available to property staff.</Text> : linked ? (
           <Card>
             <View className="flex-row items-center">
               <Ionicons name="checkmark-circle" size={20} color="#16a34a" />
@@ -371,8 +370,8 @@ export default function LeaseDetail() {
             </Text>
             <View className="mt-3">
               <Button
-                title={lease.status === "active" ? "Generate tenant invitation" : "Activate the lease to invite"}
-                disabled={lease.status !== "active"}
+                title={!lease.tenant_email ? "Add a resident email on the lease to invite" : lease.status === "active" ? "Generate tenant invitation" : "Activate the lease to invite"}
+                disabled={lease.status !== "active" || !lease.tenant_email}
                 onPress={generateInvite}
                 loading={busy}
               />

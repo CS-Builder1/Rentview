@@ -39,7 +39,7 @@ export default function Requests() {
       readAllPages<RequestRow>((from, to) => supabase
         .from("maintenance_requests")
         .select("*, properties!maintenance_requests_property_id_owner_fk(name), units!maintenance_requests_unit_property_owner_fk(label)", { count: "exact" })
-        .eq("owner_id", uid)
+        .not("properties", "is", null)
         .order("created_at", { ascending: false }).order("id").range(from, to)),
     );
     if (currentAccount.current !== uid || revision !== loadRevision.current) return;

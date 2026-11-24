@@ -155,8 +155,8 @@ select pg_temp.expect_error($q$select public.complete_maintenance_schedule('5000
 
 update public.leases set status='expired' where id='10000000-0000-4000-8000-000000000201';
 select pg_temp.actor('00000000-0000-4000-8000-000000000003');
-select pg_temp.assert_true((select count(*)=1 from public.maintenance_requests where id='30000000-0000-4000-8000-000000000001'),'inactive linked lease retains existing request history');
-select pg_temp.assert_true((select count(*)>=1 from public.request_messages where request_id='30000000-0000-4000-8000-000000000001'),'inactive linked lease retains existing thread history');
+select pg_temp.assert_true((select count(*)=0 from public.maintenance_requests where id='30000000-0000-4000-8000-000000000001'),'ended lease revokes repair access');
+select pg_temp.assert_true((select count(*)=0 from public.request_messages where request_id='30000000-0000-4000-8000-000000000001'),'ended lease revokes thread access');
 select pg_temp.expect_error($q$insert into public.maintenance_requests(owner_id,lease_id,unit_id,property_id,tenant_user_id,title) values('00000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000201','10000000-0000-4000-8000-000000000101','10000000-0000-4000-8000-000000000001',auth.uid(),'New request on inactive lease') returning id$q$,'42501');
 select pg_temp.actor('00000000-0000-4000-8000-000000000001');
 update public.leases set tenant_user_id=null where id='10000000-0000-4000-8000-000000000201';
