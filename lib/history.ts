@@ -103,3 +103,10 @@ export function filterHistory(
     return !needle || searchable.join(" ").toLowerCase().includes(needle);
   });
 }
+
+/** The field crew uploads completion photos to a separate participant-scoped bucket. */
+export function historyEvidenceBucket(
+  kind: string,
+): "attachments" | "dispatch-photos" {
+  return kind === "dispatch" ? "dispatch-photos" : "attachments";
+}

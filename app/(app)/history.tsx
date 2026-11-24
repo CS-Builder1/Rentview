@@ -5,7 +5,7 @@ import { ScrollView, Switch, Text, View } from "react-native";
 import { HistoryChoices } from "../../components/HistoryChoices";
 import { HistoryEntryForm } from "../../components/HistoryEntryForm";
 import { Button, Card, Field, Loading, Screen } from "../../components/ui";
-import { openAttachment } from "../../lib/attachments";
+import { openAttachment, type AttachmentBucket } from "../../lib/attachments";
 import { useAuth } from "../../lib/auth";
 import { exportText, toCsv } from "../../lib/csv";
 import { notify } from "../../lib/feedback";
@@ -13,6 +13,7 @@ import { formatCurrency, formatDate, titleCase } from "../../lib/format";
 import {
   compareRooms,
   filterHistory,
+  historyEvidenceBucket,
   type HistoryEvent,
   type Room,
 } from "../../lib/history";
@@ -20,7 +21,13 @@ import { localToday, validCalendarDate } from "../../lib/maintenance";
 import { operationError, readAllPages } from "../../lib/operationsQuery";
 import { supabase } from "../../lib/supabase";
 
-function Evidence({ paths }: { paths: string[] }) {
+function Evidence({
+  paths,
+  bucket = "attachments",
+}: {
+  paths: string[];
+  bucket?: AttachmentBucket;
+}) {
   return (
     <View className="flex-row flex-wrap gap-2">
       {paths.map((path, i) => (
@@ -29,7 +36,7 @@ function Evidence({ paths }: { paths: string[] }) {
           title={"Open attachment " + (i + 1)}
           variant="secondary"
           onPress={() =>
-            void openAttachment(path).catch((error) =>
+            void openAttachment(path, bucket).catch((error) =>
               notify("Could not open attachment", operationError(error)),
             )
           }
@@ -263,7 +270,9 @@ export default function PropertyHistory() {
           e.currency,
           e.phase,
           e.rooms.length ? JSON.stringify(e.rooms) : "",
-          e.evidence.join("\n"),
+          e.evidence
+            .map((path) => historyEvidenceBucket(e.kind) + "/" + path)
+            .join("\n"),
           e.id,
           e.job_id,
           e.request_id,
@@ -411,7 +420,10 @@ export default function PropertyHistory() {
                     <RoomFinding room={room} />
                   </View>
                 ))}
-                <Evidence paths={e.evidence} />
+                <Evidence
+                  paths={e.evidence}
+                  bucket={historyEvidenceBucket(e.kind)}
+                />
                 <View className="mt-2 flex-row flex-wrap gap-2">
                   {e.job_id ? (
                     <Button

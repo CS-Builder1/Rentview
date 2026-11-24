@@ -37,6 +37,10 @@ create policy history_photo_read on storage.objects for select to authenticated 
   public.current_account_is_active() and bucket_id='attachments' and split_part(storage.objects.name,'/',1)='history'
   and exists(select from public.properties p where p.id::text=split_part(storage.objects.name,'/',2)
     and public.can_manage_property(p.id))
+  and (split_part(storage.objects.name,'/',3)=(select auth.uid())::text or
+    exists(select from public.property_history_entries h where h.property_id::text=split_part(storage.objects.name,'/',2)
+      and (storage.objects.name=any(h.evidence) or exists(select from jsonb_array_elements(h.rooms) r
+        where (r->'evidence') ? storage.objects.name))))
 );
 create policy history_photo_insert on storage.objects for insert to authenticated with check (
   public.current_account_is_active() and bucket_id='attachments' and split_part(storage.objects.name,'/',1)='history'
@@ -175,7 +179,10 @@ create function rentview_private.transfer_history_evidence() returns trigger
 language plpgsql security definer set search_path='' as $$
 begin
   update storage.objects set owner=new.owner_id,owner_id=new.owner_id::text
-    where bucket_id='attachments' and name like ('history/'||new.id||'/%') and owner_id=old.owner_id::text;
+    where bucket_id='attachments' and name like ('history/'||new.id||'/%') and owner_id=old.owner_id::text
+      and exists(select from public.property_history_entries h where h.property_id=new.id
+        and (storage.objects.name=any(h.evidence) or exists(select from jsonb_array_elements(h.rooms) r
+          where (r->'evidence') ? storage.objects.name)));
   return new;
 end $$;
 revoke all on function rentview_private.transfer_history_evidence() from public,anon,authenticated;

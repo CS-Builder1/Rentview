@@ -42,6 +42,10 @@ set local role authenticated;
 select pg_temp.actor('d1000000-0000-4000-8000-000000000003');
 insert into storage.objects(bucket_id,name,owner_id) values
  ('attachments','history/d2000000-0000-4000-8000-000000000001/d1000000-0000-4000-8000-000000000003/cc000000-0000-4000-8000-000000000001.jpg','d1000000-0000-4000-8000-000000000003');
+select pg_temp.actor('d1000000-0000-4000-8000-000000000001');
+select pg_temp.ok(not exists(select from storage.objects where name='history/d2000000-0000-4000-8000-000000000001/d1000000-0000-4000-8000-000000000003/cc000000-0000-4000-8000-000000000001.jpg'),
+  'An unpublished draft should only be visible to its uploader');
+select pg_temp.actor('d1000000-0000-4000-8000-000000000003');
 select pg_temp.ok(exists(select from public.property_event_history where property_id='d2000000-0000-4000-8000-000000000001'
   and unit_id='d3000000-0000-4000-8000-000000000001' and asset_id='d4000000-0000-4000-8000-000000000001'
   and title='AC repair' and kind='work_order' and event_date='2024-01-13' and amount=450 and currency='USD'),
@@ -63,7 +67,7 @@ select public.resolve_property_history('d7000000-0000-4000-8000-000000000001');
 select pg_temp.ok((select count(*)=1 from public.property_event_history where kind='follow_up'
   and manual_id='d7000000-0000-4000-8000-000000000001'),'Resolution should have one dated event');
 select pg_temp.actor('d1000000-0000-4000-8000-000000000001');
-select pg_temp.ok(exists(select from storage.objects where name='history/d2000000-0000-4000-8000-000000000001/d1000000-0000-4000-8000-000000000003/cc000000-0000-4000-8000-000000000001.jpg'),'Owner should be able to open manager evidence');
+select pg_temp.ok(exists(select from storage.objects where name='history/d2000000-0000-4000-8000-000000000001/d1000000-0000-4000-8000-000000000003/cc000000-0000-4000-8000-000000000001.jpg' and owner_id='d1000000-0000-4000-8000-000000000001'),'Published manager evidence must belong to the portfolio owner');
 select public.revoke_lease_portal('d5000000-0000-4000-8000-000000000001',true);
 select pg_temp.ok(exists(select from public.property_event_history where kind='inspection' and phase='move_out'
   and not unresolved and lease_id='d5000000-0000-4000-8000-000000000001'),'Turnover must preserve the inspection for the owner');
@@ -76,4 +80,18 @@ select pg_temp.actor('d1000000-0000-4000-8000-000000000002');
 select pg_temp.ok(not exists(select from public.property_event_history where property_id='d2000000-0000-4000-8000-000000000001'),
   'Incoming tenant must not receive management history');
 select pg_temp.ok(not exists(select from storage.objects where name='history/d2000000-0000-4000-8000-000000000001/d1000000-0000-4000-8000-000000000003/cc000000-0000-4000-8000-000000000001.jpg'),'Incoming renter must not receive inspection evidence');
+select pg_temp.actor('d1000000-0000-4000-8000-000000000001');
+select public.offer_portfolio_transfer('d1000000-0000-4000-8000-000000000003');
+select pg_temp.actor('d1000000-0000-4000-8000-000000000003');
+select public.accept_portfolio_transfer('d1000000-0000-4000-8000-000000000001');
+select pg_temp.ok(exists(select from public.property_event_history where kind='inspection'
+  and manual_id='d7000000-0000-4000-8000-000000000001' and observer='Inspector Lee'),'Successor should retain the inspection and attribution');
+select pg_temp.ok((select count(*)=2 from public.property_event_history where kind='dispatch' and details like '%Taylor HVAC%'
+  and unit_id='d3000000-0000-4000-8000-000000000001'),'Successor should retain both historical visits');
+select pg_temp.ok(exists(select from storage.objects where name='history/d2000000-0000-4000-8000-000000000001/d1000000-0000-4000-8000-000000000003/cc000000-0000-4000-8000-000000000001.jpg'
+  and owner_id='d1000000-0000-4000-8000-000000000003'),'Saved evidence ownership must follow the property to the successor');
+select pg_temp.actor('d1000000-0000-4000-8000-000000000001');
+select pg_temp.ok(not exists(select from public.property_event_history where kind='inspection'
+  and manual_id='d7000000-0000-4000-8000-000000000001'),'Former owner must lose access to the transferred history');
+select pg_temp.ok(not exists(select from storage.objects where name='history/d2000000-0000-4000-8000-000000000001/d1000000-0000-4000-8000-000000000003/cc000000-0000-4000-8000-000000000001.jpg'),'Former owner must lose access to evidence');
 rollback;

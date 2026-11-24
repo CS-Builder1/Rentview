@@ -10,6 +10,7 @@ import { supabase } from "./supabase";
 import { ALLOWED_ATTACHMENT_MIME_TYPES, MAX_IMAGE_BYTES, assertStoragePath, assertUploadSize, inspectDocument, inspectImage, safeUploadName } from "./uploadPolicy";
 
 const BUCKET = "attachments";
+export type AttachmentBucket = typeof BUCKET | "dispatch-photos";
 export type UploadedImage = { storagePath: string; mimeType: string; sizeBytes: number };
 export type UploadedDocument = UploadedImage & { name: string };
 export type PickedImage = { base64: string; contentType: string; ext: string };
@@ -70,17 +71,17 @@ export async function pickAndUploadDocument(uid: string, subPath: string): Promi
   return { storagePath, mimeType: detected.mimeType, sizeBytes: bytes.byteLength, name: safeUploadName(asset.name) };
 }
 
-export async function openAttachment(storagePath: string): Promise<void> {
-  const url = await signedUrl(storagePath);
+export async function openAttachment(storagePath: string, bucket: AttachmentBucket = BUCKET): Promise<void> {
+  const url = await signedUrl(storagePath, 300, bucket);
   if (!url) throw new Error("The attachment is unavailable. Refresh this screen and try again.");
   await WebBrowser.openBrowserAsync(url);
 }
 
 /** Already-issued links cannot be revoked instantly; keep their validity short. */
-export async function signedUrl(storagePath: string, expiresIn = 300): Promise<string | null> {
+export async function signedUrl(storagePath: string, expiresIn = 300, bucket: AttachmentBucket = BUCKET): Promise<string | null> {
   assertStoragePath(storagePath);
   if (!Number.isSafeInteger(expiresIn) || expiresIn < 1 || expiresIn > 900) throw new Error("Choose a short-lived attachment link.");
-  const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(storagePath, expiresIn);
+  const { data, error } = await supabase.storage.from(bucket).createSignedUrl(storagePath, expiresIn);
   if (error) throw error;
   return data?.signedUrl ?? null;
 }

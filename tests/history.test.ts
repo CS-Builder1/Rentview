@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   compareRooms,
   filterHistory,
+  historyEvidenceBucket,
   inspectionError,
   type HistoryEvent,
   type Room,
@@ -92,4 +93,10 @@ test("room observations require distinct room labels and supported conditions", 
     /condition/i,
   );
   assert.equal(inspectionError([room("Kitchen", "good")]), null);
+});
+
+test("dispatch photos and inspection evidence resolve in their own private storage buckets", () => {
+  assert.equal(historyEvidenceBucket("dispatch"), "dispatch-photos");
+  assert.equal(historyEvidenceBucket("inspection"), "attachments");
+  assert.equal(historyEvidenceBucket("request_photo"), "attachments");
 });
