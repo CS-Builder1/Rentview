@@ -100,7 +100,27 @@ language sql stable security definer set search_path='' as $$
 $$;
 
 alter table public.vendors add column property_id uuid references public.properties on delete cascade;
+alter table public.vendors add constraint vendors_property_owner_fk foreign key(property_id,owner_id) references public.properties(id,owner_id);
 create index vendors_property_idx on public.vendors(property_id);
+
+-- A manager may reuse a legacy shared contact already assigned to this
+-- property. New property contacts stay within their assigned location.
+create function rentview_private.check_vendor_location() returns trigger language plpgsql security definer set search_path='' as $$
+declare contact public.vendors;
+begin
+  if new.vendor_id is null then return new; end if;
+  if tg_op='UPDATE' and (new.vendor_id,new.property_id) is not distinct from (old.vendor_id,old.property_id) then return new; end if;
+  select * into contact from public.vendors where id=new.vendor_id and owner_id=new.owner_id;
+  if not found or (contact.property_id is not null and contact.property_id is distinct from new.property_id) then
+    raise exception 'Choose a vendor assigned to this property' using errcode='23514'; end if;
+  if auth.uid() is not null and auth.uid()<>new.owner_id and contact.property_id is null
+    and not exists(select from public.work_orders w where w.vendor_id=contact.id and w.owner_id=contact.owner_id and w.property_id=new.property_id)
+  then raise exception 'Ask the owner to share this vendor with the property' using errcode='42501'; end if;
+  return new;
+end $$;
+revoke all on function rentview_private.check_vendor_location() from public,anon,authenticated;
+create trigger check_vendor_location before insert or update on public.work_orders for each row execute function rentview_private.check_vendor_location();
+create trigger check_vendor_location before insert or update on public.expenses for each row execute function rentview_private.check_vendor_location();
 create policy staff_read_property on public.properties for select to authenticated using(public.can_manage_property(id));
 create policy staff_edit_property on public.properties for update to authenticated
 using(public.can_manage_property(id)) with check(public.can_manage_property(id));
