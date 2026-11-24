@@ -1,5 +1,7 @@
 # Security findings and release gates
 
+The November 24 verification covers property delegation, contractor evidence after handover, successful local account deletion and the pinned pg_net owner procedure. Hosted, physical-device and provider checks are listed in [Suite verification](SUITE_VERIFICATION.md).
+
 ## 2026-10-30 review follow-up
 
 The bounded local correction pass is complete. [REVIEW_RESPONSE.md](./REVIEW_RESPONSE.md)
