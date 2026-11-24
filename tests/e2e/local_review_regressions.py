@@ -84,7 +84,7 @@ def main(argv=None):
     def linked_lease(landlord, tenant, property_name):
         prop = api.insert("properties", {"owner_id": landlord["id"], "name": property_name, "currency": "USD"}, landlord["token"])
         unit = api.insert("units", {"owner_id": landlord["id"], "property_id": prop["id"], "label": "Review unit"}, landlord["token"])
-        lease = api.insert("leases", {"owner_id": landlord["id"], "unit_id": unit["id"], "tenant_name": "Review linked tenant", "status": "active"}, landlord["token"])
+        lease = api.insert("leases", {"owner_id": landlord["id"], "unit_id": unit["id"], "tenant_name": "Review linked tenant", "tenant_email": tenant["email"], "status": "active"}, landlord["token"])
         invitation = api.rpc("create_tenant_invite", {"p_lease_id": lease["id"], "p_email": tenant["email"]}, landlord["token"])
         if isinstance(invitation, list):
             invitation = invitation[0]
