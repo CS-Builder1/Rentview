@@ -202,7 +202,7 @@ export default function Vendors() {
                 <Button title="Save" onPress={save} loading={saving} />
               </View>
             </View>
-            {editingId ? <ContractorInviteShare key={editingId} vendorId={editingId} email={vendors.find(v => v.id === editingId)?.email} /> : null}
+            {open && editingId && session ? <ContractorInviteShare key={`${session.user.id}:${editingId}`} vendorId={editingId} email={vendors.find(v => v.id === editingId)?.email} /> : null}
             {editingId ? (
               <View className="mt-3">
                 <Button title="Delete vendor" variant="danger" onPress={remove} />
