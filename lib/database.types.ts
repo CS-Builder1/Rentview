@@ -1913,7 +1913,7 @@ export type Database = {
         ]
       }
     }
-    Functions: DispatchFunctions & {
+    Functions: DispatchFunctions & import("./inboxTypes").InboxFunctions & {
       can_manage_property: { Args: { p_property: string }; Returns: boolean }
       can_manage_lease: { Args: { p_lease: string }; Returns: boolean }
       can_post_request: { Args: { p_request: string }; Returns: boolean }

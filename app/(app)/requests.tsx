@@ -9,6 +9,7 @@ import type { Tables } from "../../lib/database.types";
 import { formatDate, titleCase } from "../../lib/format";
 import { supabase } from "../../lib/supabase";
 import { readAllPages } from "../../lib/operationsQuery";
+import { useInboxRefresh } from "../../lib/useInboxRefresh";
 import { useAuth } from "../../lib/auth";
 
 type RequestRow = Tables<"maintenance_requests"> & {
@@ -31,6 +32,14 @@ export default function Requests() {
   const [requests, setRequests] = useState<RequestRow[] | null>(null);
   const [showAll, setShowAll] = useState(params.filter === "all");
 
+  const [unread, setUnread] = useState<Record<string,string>>({});
+  useInboxRefresh(useCallback(async current => {
+    if (!uid) return;
+    const result = await readAllPages<{request_id:string; latest_at:string}>((from,to)=>
+      supabase.rpc("unread_repair_replies").order("request_id").range(from,to));
+    if (current()) setUnread(Object.fromEntries((result.data ?? []).map(row=>[row.request_id,row.latest_at])));
+  },[uid]));
+
   const load = useCallback(async () => {
     if (!uid) return;
     const revision = ++loadRevision.current;
@@ -47,7 +56,7 @@ export default function Requests() {
     setRequests(result.data ?? []);
   }, [uid]);
 
-  useEffect(() => { setRequests(null); setError(null); return () => { loadRevision.current++; }; }, [uid]);
+  useEffect(() => { setRequests(null); setError(null); setUnread({}); return () => { loadRevision.current++; }; }, [uid]);
 
   useFocusEffect(
     useCallback(() => {
@@ -58,14 +67,14 @@ export default function Requests() {
   if (!requests) return <Loading />;
 
   const openCount = requests.filter((r) =>
-    (OPEN_STATUSES as readonly string[]).includes(r.status),
+    unread[r.id] || (OPEN_STATUSES as readonly string[]).includes(r.status),
   ).length;
   const visible = requests.filter((r) =>
-    (showAll || (OPEN_STATUSES as readonly string[]).includes(r.status)) &&
+    (showAll || unread[r.id] || (OPEN_STATUSES as readonly string[]).includes(r.status)) &&
     (params.filter !== "submitted" || r.status === "submitted") &&
     (!params.propertyId || r.property_id === params.propertyId) &&
     `${r.title} ${r.properties?.name ?? ""} ${r.units?.label ?? ""}`.toLowerCase().includes(search.toLowerCase())
-  ).sort((a, b) => Number(b.urgency === "urgent") - Number(a.urgency === "urgent") || a.created_at.localeCompare(b.created_at));
+  ).sort((a, b) => (unread[b.id] ?? "").localeCompare(unread[a.id] ?? "") || Number(b.urgency === "urgent") - Number(a.urgency === "urgent") || a.created_at.localeCompare(b.created_at));
 
   return (
     <Screen>
@@ -89,7 +98,7 @@ export default function Requests() {
       <View className="px-5"><Field label="Search requests" value={search} onChangeText={setSearch} placeholder="Title, property or unit" />{error ? <><Text accessibilityRole="alert" className="mb-2 text-red-700">{error}</Text><Button title="Retry" variant="secondary" onPress={() => void load()} /></> : null}</View>
       <View className="flex-row px-5 pb-3">
         {[
-          { key: false, label: `Open (${openCount})` },
+          { key: false, label: `Needs attention (${openCount})` },
           { key: true, label: `All (${requests.length})` },
         ].map((tab) => (
           <Pressable
@@ -131,6 +140,7 @@ export default function Requests() {
                 </Text>
                 <Badge label={r.status} />
               </View>
+              {unread[r.id] && <Text className="mt-1 font-semibold text-brand">Unread repair reply</Text>}
               <Text className="mt-1 text-slate-500">
                 {[r.properties?.name, r.units?.label].filter(Boolean).join(" · ")}
               </Text>

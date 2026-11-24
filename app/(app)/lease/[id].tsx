@@ -325,6 +325,7 @@ export default function LeaseDetail() {
               you record here.
             </Text>
             <View className="mt-3">
+              {lease.status==="active" && <View className="mb-3"><Button title="Message resident" onPress={()=>router.push(`/conversation/${lease.id}` as never)} /></View>}
               <Button
                 title="Remove portal access"
                 variant="secondary"

@@ -91,3 +91,12 @@ test("clearing an invitation waits for an in-flight remember instead of resurrec
  await Promise.all([remember,clear]);
  assert.equal(await store.pending(), "/");
 });
+
+
+test("inbox and job notifications can return through authentication", () => {
+  const id = "b3e69824-a1c4-429c-a3d0-3aabc677b24e";
+  for (const path of ["/inbox",`/conversation/${id}`,"/contractor",`/contractor/job/${id}`]) {
+    assert.equal(safeReturnPath(path),path);
+  }
+  assert.equal(safeReturnPath("/conversation//external.invalid"),"/");
+});
