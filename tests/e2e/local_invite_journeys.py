@@ -148,7 +148,11 @@ def main():
         click(staff,"Create contractor invitation")
         expect(staff.get_by_role("button",name="Copy contractor invitation",exact=True)).to_be_visible()
         contractor_link, contractor_code = copied(staff,"Copy contractor invitation","/contractor-invite")
-        checked("Delegated manager creates a contractor invitation through More, Vendors and the vendor record; copying yields an app-origin claim link")
+        click(staff, "Cancel")
+        staff.get_by_text(vendor["name"],exact=True).filter(visible=True).click()
+        expect(staff.get_by_text("Awaiting contractor acceptance.",exact=True)).to_be_visible()
+        expect(staff.get_by_role("button",name="Replace contractor invitation",exact=True)).to_be_visible()
+        checked("Manager creates and copies a property-scoped contractor invitation; reopening the vendor before acceptance shows a pending invitation")
         stage = "signed-out contractor authentication and claim"
         join(contractor,contractor_link,contractor_code,"Contractor invitation code","Accept invitation","/contractor","Assigned jobs")
         accounts = api.ok("GET",f"/rest/v1/contractor_accounts?vendor_id=eq.{vendor['id']}&select=user_id",admin=True)
@@ -162,12 +166,10 @@ def main():
         staff.reload(wait_until="domcontentloaded")
         staff.get_by_text(vendor["name"],exact=True).filter(visible=True).click()
         expect(staff.get_by_text("Edit vendor", exact=True).filter(visible=True)).to_be_visible()
-        create_again = staff.get_by_role("button", name="Create contractor invitation", exact=True)
-        report["manager_vendor_after_accept"] = {"shows_create_invitation": create_again.is_visible()}
-        if create_again.is_visible():
-            create_again.click()
-            expect(staff.get_by_text("Contractor already connected",exact=True).filter(visible=True)).to_be_visible()
-            report["manager_vendor_after_accept"]["response"] = "Contractor already connected"
+        expect(staff.get_by_text("Contractor connected",exact=True)).to_be_visible()
+        for action in ["Create contractor invitation", "Replace contractor invitation", "Copy contractor invitation"]:
+            expect(staff.get_by_role("button",name=action,exact=True)).to_have_count(0)
+        checked("Reopening the vendor after acceptance shows the confirmed connection with no invitation issuance or sharing controls")
         stage = "resident invitation creation through property and lease"
         staff.bring_to_front()
         staff.goto(base + "/",wait_until="domcontentloaded")
