@@ -1891,6 +1891,10 @@ export type Database = {
         Row: { id: string; paid_on: string; amount: number; currency: string; property_id: string; property_name: string; unit_label: string }
         Relationships: []
       }
+      property_event_history: {
+        Row: import("./history").HistoryEvent
+        Relationships: []
+      }
       tenant_lease_details: {
         Row: {
           address_line1: string | null
@@ -1952,6 +1956,16 @@ export type Database = {
         }
         Returns: string
       }
+      record_property_history: {
+        Args: {
+          p_id: string; p_property: string; p_unit: string | null; p_asset: string | null;
+          p_lease: string | null; p_kind: string; p_date: string; p_title: string;
+          p_details: string; p_observer: string; p_phase: string | null;
+          p_rooms: Json; p_evidence: string[]; p_follow_up: boolean
+        }
+        Returns: string
+      }
+      resolve_property_history: { Args: { p_id: string }; Returns: undefined }
       billing_reconciliation_pending: { Args: Record<PropertyKey, never>; Returns: boolean }
       current_account_is_active: { Args: Record<PropertyKey, never>; Returns: boolean }
       create_tenant_invite: {

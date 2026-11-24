@@ -34,6 +34,7 @@ export default function AppLayout() {
       <Stack.Screen name="request/[id]" />
       <Stack.Screen name="announcements" />
       <Stack.Screen name="scan" />
+      <Stack.Screen name="history" />
       <Stack.Screen name="export" />
     </Stack>
   );

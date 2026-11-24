@@ -20,6 +20,7 @@ import {
 } from "react-native";
 
 import { DispatchPanel } from "../../../components/DispatchPanel";
+import { HistoryChoices } from "../../../components/HistoryChoices";
 import { DocumentsSection } from "../../../components/DocumentsSection";
 import {
   Badge,
@@ -38,7 +39,7 @@ import type { Tables } from "../../../lib/database.types";
 import { Constants } from "../../../lib/database.types";
 import { formatCurrency, formatDate, titleCase } from "../../../lib/format";
 import { supabase } from "../../../lib/supabase";
-import { operationError } from "../../../lib/operationsQuery";
+import { operationError, readAllPages } from "../../../lib/operationsQuery";
 import { newRecordId } from "../../../lib/id";
 import { localTimeZone, partTotalsByCurrency, positiveNumber, validCalendarDate } from "../../../lib/maintenance";
 
@@ -94,6 +95,8 @@ export default function WorkOrderDetail() {
   const [ePriority, setEPriority] =
     useState<(typeof PRIORITIES)[number]>("medium");
   const [eDue, setEDue] = useState("");
+  const [editAsset, setEditAsset] = useState<string | null>(null);
+  const [assetOptions, setAssetOptions] = useState<{id:string;name:string}[]>([]);
 
   const currency = wo?.properties?.currency ?? "USD";
 
@@ -249,13 +252,22 @@ export default function WorkOrderDetail() {
     }
   }
 
-  function openEdit() {
+  async function openEdit() {
     if (!wo) return;
     setETitle(wo.title);
     setEDesc(wo.description ?? "");
     setEPriority(wo.priority);
     setEDue(wo.due_date ?? "");
+    setEditAsset(wo.asset_id);
+    setAssetOptions([]);
     setEditing(true);
+    const {data,error} = await readAllPages((from,to) => {
+      let query = supabase.from("assets").select("id,name",{count:"exact"}).eq("property_id",wo.property_id);
+      query = wo.unit_id ? query.or("unit_id.eq."+wo.unit_id+",unit_id.is.null") : query.is("unit_id",null);
+      return query.order("name").order("id").range(from,to);
+    });
+    if (error) notify("Could not load assets",operationError(error));
+    else setAssetOptions(data ?? []);
   }
 
   async function saveEdit() {
@@ -264,7 +276,7 @@ export default function WorkOrderDetail() {
     if (eDue.trim() && !validCalendarDate(eDue.trim())) { notify("Invalid date", "Use a valid date in YYYY-MM-DD format."); return; }
     setBusy(true);
     try {
-      const { data, error } = await supabase.from("work_orders").update({ title: eTitle.trim(), description: eDesc.trim() || null, priority: ePriority, due_date: eDue.trim() || null }).eq("id", wo.id).select("id").single();
+      const { data, error } = await supabase.from("work_orders").update({ asset_id: editAsset, title: eTitle.trim(), description: eDesc.trim() || null, priority: ePriority, due_date: eDue.trim() || null }).eq("id", wo.id).select("id").single();
       if (error || !data) throw error || new Error("This work order is no longer available.");
       setEditing(false); await load();
     } catch (e) { notify("Could not save", operationError(e)); }
@@ -478,6 +490,11 @@ export default function WorkOrderDetail() {
             <Text className="mb-4 text-xl font-bold text-slate-900">
               Edit work order
             </Text>
+            {wo.status !== "completed" && wo.status !== "cancelled" || !wo.asset_id ? (
+              <HistoryChoices label="Asset serviced" selected={editAsset ?? ""} disabled={busy}
+                choices={[{value:"",label:"No asset"},...assetOptions.map(a=>({value:a.id,label:a.name}))]}
+                onSelect={value=>setEditAsset(value || null)} />
+            ) : null}
             <Field label="Title" value={eTitle} onChangeText={setETitle} />
             <Field
               label="Description"
