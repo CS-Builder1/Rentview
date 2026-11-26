@@ -16,5 +16,5 @@ export function InboxLink() {
     if (current()) setCount(error ? null : {uid, unread: data ?? 0});
   }, [uid]), 20000);
   const unread = count?.uid === uid ? count?.unread : 0;
-  return <View className="mb-4"><Button title={unread ? `Inbox · ${unread} unread` : "Inbox"} variant="secondary" onPress={() => router.push("/inbox" as Href)} /></View>;
+  return <View className="mb-4"><Button title={unread ? `Inbox · ${unread >= 99 ? "99+" : unread} unread` : "Inbox"} variant="secondary" onPress={() => router.push("/inbox" as Href)} /></View>;
 }
