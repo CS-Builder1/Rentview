@@ -33,6 +33,7 @@ def main():
     hidden = [target["anon"], target["service"]]
     api = LocalAPI(target, hidden)
     contexts = []
+    deleted = []
     pages = {}
     result = {"run": run_id, "status": "running", "checks": [], "blocked_hosts": [], "browser_errors": []}
     browser = playwright = None
@@ -114,8 +115,8 @@ def main():
         page.get_by_role("button", name=name, exact=True).click()
 
     def event(actor, title, href):
-        return next((e for e in api.rpc("inbox_activity", {}, actor["token"])
-                     if e["title"] == title and e["href"] == href), None)
+        page = api.rpc("inbox_activity", {"p_before": None, "p_before_id": None, "p_limit": 100}, actor["token"])
+        return next((e for e in page["events"] if e["title"] == title and e["href"] == href), None)
 
     def follow_event(page, actor, title, href):
         # Click the real alert, then verify the recipient-specific persisted receipt.
@@ -123,15 +124,93 @@ def main():
         if urlparse(page.url).path != "/inbox":
             home = "/tenant" if actor is renter else "/" if actor is manager else "/contractor"
             goto(page, home)
-            page.get_by_role("button", name=re.compile(r"^Inbox(?: · [0-9]+ unread)?$")).click()
+            page.get_by_role("button", name=re.compile(r"^Inbox(?: · [0-9]+\+? unread)?$")).click()
         page.get_by_role("button").filter(has=page.get_by_text(title, exact=True)).first.click()
-        page.wait_for_url(lambda url: urlparse(url).path == href)
+        page.wait_for_url(base + href)
         poll(lambda: event(actor, title, href)["read_at"], pump=page.wait_for_timeout)
 
     def send(page, body):
         page.get_by_label("Message", exact=True).fill(body)
         click(page, "Send message")
         expect(page.get_by_text(body, exact=True).filter(visible=True)).to_be_visible()
+
+    def act_with_lost_reply(page, action, button):
+        route_pattern = target["url"] + "/rest/v1/rpc/act_on_dispatch"
+        committed = []
+
+        def lose_reply(route):
+            if route.request.method != "POST":
+                route.continue_()
+                return
+            payload = route.request.post_data_json
+            assert payload["p_action"] == action
+            response = route.fetch(max_redirects=0, timeout=15000)
+            assert response.ok, f"{action} did not commit before the lost response (HTTP {response.status})"
+            committed.append(payload)
+            route.abort("connectionfailed")
+
+        page.route(route_pattern, lose_reply)
+        try:
+            with page.expect_response(lambda r: r.request.method == "POST" and
+                                      urlparse(r.url).path == "/rest/v1/rpc/dispatch_action_saved") as receipt:
+                click(page, button)
+            assert receipt.value.ok and receipt.value.json() is True
+            assert len(committed) == 1
+            restored = receipt.value.request.post_data_json
+            for key in ("p_work_order", "p_revision", "p_action"):
+                assert restored[key] == committed[0][key]
+            if action == "complete":
+                for key in ("p_notes", "p_photos"):
+                    assert restored[key] == committed[0][key]
+        finally:
+            page.unroute(route_pattern, lose_reply)
+
+    def upload_work_photo_after_lost_ack(page, work_order_id):
+        upload_pattern = target["url"] + "/storage/v1/object/attachments/**"
+        attempts = []
+        path = None
+        metadata_reads = []
+
+        def lose_first_response(route):
+            nonlocal path
+            if route.request.method != "POST":
+                route.continue_()
+                return
+            name = urlparse(route.request.url).path.split("/object/attachments/", 1)[1]
+            attempts.append(name)
+            if path is not None:
+                route.continue_()
+                return
+            response = route.fetch(max_redirects=0, timeout=15000)
+            assert response.ok, f"Work photo upload failed before acknowledgement (HTTP {response.status})"
+            path = name
+            route.abort("connectionfailed")
+
+        def read_metadata(response):
+            if path and response.ok and urlparse(response.url).path == "/storage/v1/object/info/attachments/" + path:
+                metadata_reads.append(response.json())
+
+        page.route(upload_pattern, lose_first_response)
+        page.on("response", read_metadata)
+        try:
+            with page.expect_file_chooser() as picker:
+                page.get_by_text("Photos", exact=True).locator("..").get_by_text("Add", exact=True).click()
+            picker.value.set_files({"name": "service-photo.png", "mimeType": "image/png", "buffer": PNG})
+            poll(lambda: path, pump=page.wait_for_timeout)
+            expect(page.get_by_text("Uploading…", exact=True)).to_have_count(0)
+            goto(page, "/sync")
+            expect(page.get_by_text("No changes waiting to sync.", exact=True)).to_be_visible(timeout=30000)
+            [doc] = poll(lambda: api.select("documents", owner["token"], work_order_id=work_order_id, doc_type="photo"),
+                         pump=page.wait_for_timeout)
+            assert len(attempts) == 2 and set(attempts) == {path} and metadata_reads
+            assert doc["owner_id"] == owner["id"] and doc["storage_path"] == path
+            obj = "/storage/v1/object/authenticated/attachments/" + quote(path, safe="/")
+            image = api.ok("GET", obj, token=owner["token"])
+            assert len(image) == doc["size_bytes"] and image.startswith((b"\x89PNG", b"\xff\xd8\xff", b"RIFF"))
+            return obj, image
+        finally:
+            page.unroute(upload_pattern, lose_first_response)
+            page.remove_listener("response", read_metadata)
 
     def propose(page, action, start, end):
         click(page, action)
@@ -177,10 +256,22 @@ def main():
             expect(page.get_by_text("Assigned jobs", exact=True).filter(visible=True)).to_be_visible()
         checked("Four isolated sign-ins route each actor to their workspace")
 
+        step = "contractor opens their other workspaces"
+        click(worker_two, "My tenant portal")
+        expect(worker_two.get_by_text("No lease linked yet", exact=True).filter(visible=True)).to_be_visible()
+        goto(worker_two, "/contractor")
+        click(worker_two, "Manage my properties")
+        expect(worker_two.get_by_role("button", name="Open Work", exact=True).filter(visible=True)).to_be_visible()
+        goto(worker_two, "/account")
+        click(worker_two, "My assigned jobs")
+        expect(worker_two.get_by_text("Assigned jobs", exact=True).filter(visible=True)).to_be_visible()
+        checked("A contractor opens the tenant portal and their own management workspace, then returns to assigned jobs")
         step = "lease conversation and receipts"
         question = "Can we renew our lease in March? " + run_id
         answer = "Yes. I will send the renewal dates tomorrow."
-        thread = "/conversation/" + lease["id"]
+        [conversation] = api.rpc("inbox_leases", {"p_lease": lease["id"]}, renter["token"])
+        thread_id = conversation["thread_id"]
+        thread = "/conversation/" + lease["id"] + "?thread=" + thread_id
         click(resident_page, "Message property management")
         send(resident_page, question)
         # Leave the conversation so the resident actually misses the reply.
@@ -193,7 +284,7 @@ def main():
         assert receipt["read_at"] is None
         follow_event(resident_page, renter, "New lease message", thread)
         expect(resident_page.get_by_text(answer, exact=True).filter(visible=True)).to_be_visible()
-        stored = api.rpc("lease_thread", {"p_lease":lease["id"],"p_resident":renter["id"]}, manager["token"])
+        stored = api.rpc("lease_thread", {"p_lease": lease["id"], "p_resident": None, "p_thread": thread_id}, manager["token"])
         assert {(m["body"],m["sender_id"]) for m in stored} == {(question,renter["id"]),(answer,manager["id"])}
         checked("General lease question and delegated manager reply reach separate inboxes with saved receipts")
 
@@ -223,17 +314,22 @@ def main():
         def assign(button, vendor):
             click(staff_page,button)
             click(staff_page,vendor["name"])
-            staff_page.get_by_label("Visit instructions shared with the contractor and tenant",exact=True).fill("Ring the unit doorbell.")
+            staff_page.get_by_label("Private instructions for the assigned contractor",exact=True).fill("Ring the unit doorbell.")
             click(staff_page,"Save assignment")
             poll(lambda: job()["vendor_id"]==vendor["id"],pump=staff_page.wait_for_timeout)
         assign("Assign contractor",vendors[0])
         checked("Delegated manager converts the request and assigns the first contractor")
 
+        step = "delegated work photo with a lost Storage response"
+        photo_url, photo_bytes = upload_work_photo_after_lost_ack(staff_page, job_id)
+        checked("The manager's queued photo replays to the same Storage path and creates one portfolio-owned job document")
         step = "decline and reassign"
         contractor_url = "/contractor/job/"+job_id
         follow_event(worker_one,first,"Repair assignment updated",contractor_url)
         expect(worker_one.get_by_text(title,exact=True).filter(visible=True)).to_be_visible()
-        click(worker_one,"Decline job")
+        expect(worker_one.get_by_text("Visit instructions: Ring the unit doorbell.", exact=True)).to_be_visible()
+        act_with_lost_reply(worker_one, "decline", "Decline job")
+        expect(worker_one.get_by_text("Job declined. The property manager can reassign it.", exact=True)).to_be_visible()
         poll(lambda: job()["assignment_status"]=="declined",pump=worker_one.wait_for_timeout)
         follow_event(staff_page,manager,"Contractor declined the repair","/work-order/"+job_id)
         assign("Change assignment or instructions",vendors[1])
@@ -243,7 +339,7 @@ def main():
         poll(lambda: job()["assignment_status"]=="accepted",pump=worker_two.wait_for_timeout)
         follow_event(worker_one,first,"Assignment withdrawn","/contractor")
         expect(worker_one.get_by_text("No assigned jobs",exact=True).filter(visible=True)).to_be_visible()
-        checked("First contractor declines; reassignment withdraws prior access and the second contractor accepts")
+        checked("The contractor recovers a committed decline after a lost reply; reassignment withdraws their access and the second contractor accepts")
 
         step = "tenant and contractor reschedule and confirm"
         day = (datetime.now(timezone.utc)+timedelta(days=3)).replace(hour=9,minute=0,second=0,microsecond=0)
@@ -251,6 +347,7 @@ def main():
         poll(lambda: job()["visit_status"]=="proposed",pump=worker_two.wait_for_timeout)
         resident_url = "/tenant/request/"+request_id
         follow_event(resident_page,renter,"Visit proposed",resident_url)
+        expect(resident_page.get_by_text("Visit instructions: Ring the unit doorbell.", exact=True)).to_have_count(0)
         revised = day+timedelta(days=1)
         propose(resident_page,"Propose a different time",revised,revised+timedelta(hours=2))
         poll(lambda: datetime.fromisoformat(job()["visit_start"])==revised,pump=resident_page.wait_for_timeout)
@@ -271,7 +368,7 @@ def main():
             click(worker_two,"Add completion photo")
         chooser.value.set_files({"name":"repair-proof.png","mimeType":"image/png","buffer":PNG})
         expect(worker_two.get_by_role("button",name="Remove photo 1",exact=True).filter(visible=True)).to_be_visible()
-        click(worker_two,"Submit completed repair")
+        act_with_lost_reply(worker_two, "complete", "Submit completed repair")
         poll(lambda: request()["status"]=="resolved",pump=worker_two.wait_for_timeout)
         completed = job()
         assert completed["assignment_status"]=="completed" and completed["completion_notes"]==notes
@@ -287,7 +384,7 @@ def main():
         proof_page.wait_for_function("() => document.images.length === 1 && document.images[0].naturalWidth > 0")
         assert urlparse(proof_page.url).path.endswith("/dispatch-photos/"+path)
         proof_page.close()
-        checked("Contractor records work, uploads proof, and the resident can see the notes and retrieve the photo")
+        checked("A committed completion survives a lost reply and the resident can retrieve the contractor’s notes and uploaded proof")
 
         step = "resident rates then reopens repair"
         resident_page.get_by_role("radio",name="2 out of 5 stars",exact=True).click()
@@ -380,6 +477,25 @@ def main():
         assert {e["evidence"][0] for e in visits} == {path, second_path}
         assert len([e for e in owner_history if e["kind"] == "expense" and e["amount"] == 85 and e["currency"] == "USD"]) == 1
         checked("After lease archive the manager opens both distinct photos and the cost, and the owner retains both dated contractor visits")
+        step = "archived conversation navigation"
+        goto(staff_page, "/inbox")
+        click(staff_page, "Lease messages")
+        archived_row = staff_page.get_by_role("button").filter(has_text="Archived · read only").filter(has_text=prop["name"])
+        expect(archived_row).to_be_visible()
+        archived_row.click()
+        staff_page.wait_for_url(base + thread)
+        expect(staff_page.get_by_text(question, exact=True).filter(visible=True)).to_be_visible()
+        expect(staff_page.get_by_text(answer, exact=True).filter(visible=True)).to_be_visible()
+        expect(staff_page.get_by_text("This conversation is archived and read only.", exact=True)).to_be_visible()
+        expect(staff_page.get_by_label("Message", exact=True)).to_have_count(0)
+        assert not api.rpc("lease_thread", {"p_lease": lease["id"], "p_resident": None, "p_thread": thread_id}, renter["token"])
+        checked("The manager reopens the archived conversation in read-only mode and the former resident loses access")
+        step = "manager deletion preserves the portfolio photo"
+        deleted.append(api.cleanup_synthetic_user(manager["id"]))
+        assert deleted[-1]["status"] == "deleted"
+        assert api.ok("GET", photo_url, token=owner["token"]) == photo_bytes
+        assert len(api.select("documents", owner["token"], work_order_id=job_id, doc_type="photo")) == 1
+        checked("The owner retains the original manager-uploaded document and bytes after the manager’s account is deleted")
         assert not result["browser_errors"] and not result["blocked_hosts"]
         result["status"]="passed"
     except Exception as error:
@@ -395,7 +511,7 @@ def main():
             except Exception: pass
         if browser: browser.close()
         if playwright: playwright.stop()
-        deleted=[api.cleanup_synthetic_user(uid) for uid in reversed(list(api.synthetic_users))]
+        deleted.extend(api.cleanup_synthetic_user(uid) for uid in reversed(list(api.synthetic_users)))
         result["cleanup"]={"created":len(deleted),"deleted":sum(u["status"]=="deleted" for u in deleted),"errors":[u for u in deleted if u["status"]!="deleted"]}
         if result["cleanup"]["errors"]: result["status"]="failed"
         result_path.write_text(json.dumps(result,indent=2)+"\n")
