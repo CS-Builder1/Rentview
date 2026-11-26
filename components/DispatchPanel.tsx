@@ -35,6 +35,7 @@ function DispatchDetails({ audience, userId, workOrderId, requestId, vendors, ow
   const [job, setJob] = useState<DispatchJob | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState("");
+  const [declined, setDeclined] = useState(false);
   const [busy, setBusy] = useState(false);
   const [refresh, setRefresh] = useState(0);
   const [start, setStart] = useState("");
@@ -59,7 +60,10 @@ function DispatchDetails({ audience, userId, workOrderId, requestId, vendors, ow
         const filter = requestId ? source.eq("request_id", requestId) : source.eq("work_order_id", workOrderId ?? "");
         const { data, error } = await filter.maybeSingle();
         if (error) throw error;
-        if (active && attempt === sequence) setJob(data);
+        if (active && attempt === sequence) {
+          setJob(data);
+          if (data) setDeclined(false);
+        }
       } catch (err) {
         if (active && attempt === sequence) { setJob(null); setError(operationError(err)); }
       } finally {
@@ -109,7 +113,15 @@ function DispatchDetails({ audience, userId, workOrderId, requestId, vendors, ow
         ...(action === "reopen" ? { p_notes: notes.trim() } : {}),
         ...(action === "complete" ? { p_notes: notes.trim(), p_photos: paths } : {}),
       });
-      if (error) throw error;
+      if (error) {
+        if (!["accept", "decline", "complete"].includes(action)) throw error;
+        const saved = await supabase.rpc("dispatch_action_saved", {
+          p_work_order: job.work_order_id, p_revision: job.revision, p_action: action,
+          p_notes: action === "complete" ? notes.trim() : null, p_photos: paths,
+        });
+        if (saved.data !== true) throw error;
+      }
+      if (action === "decline") setDeclined(true);
       if (action === "propose" || action === "confirm") setEditingVisit(false);
       if (action === "complete" || action === "reopen") {
         uploadedPhotos.current.clear(); setPhotos([]); setNotes("");
@@ -157,6 +169,7 @@ function DispatchDetails({ audience, userId, workOrderId, requestId, vendors, ow
     });
   }
 
+  if (declined) return <Card><Text accessibilityLiveRegion="polite">Job declined. The property manager can reassign it.</Text></Card>;
   if (!job) {
     if (!loaded) return <Text className="my-2 text-slate-500">Loading visit details…</Text>;
     if (audience === "tenant" && !error) return null;
@@ -185,7 +198,7 @@ function DispatchDetails({ audience, userId, workOrderId, requestId, vendors, ow
       assigning ? <View className="gap-2">
         <Button title={vendorId ? "Unassign" : "Unassigned (selected)"} variant="secondary" disabled={busy} onPress={() => setVendorId(null)} />
         {available.map(v => <Button key={v.id} title={v.name + (vendorId === v.id ? " (selected)" : "")} variant="secondary" disabled={busy} onPress={() => setVendorId(v.id)} />)}
-        {vendorId ? <Field label="Visit instructions shared with the contractor and tenant" multiline value={instructions} onChangeText={setInstructions} maxLength={2000} /> : null}
+        {vendorId ? <Field label="Private instructions for the assigned contractor" multiline value={instructions} onChangeText={setInstructions} maxLength={2000} /> : null}
         <Button title="Save assignment" onPress={() => void saveAssignment()} loading={busy} />
         <Button title="Cancel assignment change" variant="secondary" onPress={() => setAssigning(false)} disabled={busy} />
       </View> : <Button title={assigned ? "Change assignment or instructions" : "Assign contractor"} variant="secondary" onPress={() => {
@@ -202,7 +215,7 @@ function DispatchDetails({ audience, userId, workOrderId, requestId, vendors, ow
       <Text className="text-slate-700">{displayVisit(job.visit_start)} – {displayVisit(job.visit_end)}</Text>
     </View> : null}
     {accepted && !closed ? <View className="gap-2">
-      {job.can_confirm && job.visit_status === "proposed" ? <Button title="Confirm visit window" onPress={() => void act("confirm")} loading={busy} /> : null}
+      {job.can_confirm && job.visit_status === "proposed" ? <Button title={audience === "owner" ? "Confirm visit as property manager" : "Confirm visit window"} onPress={() => void act("confirm")} loading={busy} /> : null}
       {editingVisit ? <>
         <Text className="text-slate-600">Enter times in {Intl.DateTimeFormat().resolvedOptions().timeZone}.</Text>
         <Field label="Visit starts" placeholder="YYYY-MM-DD HH:MM" value={start} onChangeText={setStart} autoCapitalize="none" />

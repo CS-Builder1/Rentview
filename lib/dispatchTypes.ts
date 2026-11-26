@@ -32,6 +32,11 @@ export type DispatchViews = {
 export type ContractorInvitationStatus = "available" | "pending" | "connected";
 
 export type DispatchFunctions = {
+  contractor_open_owner_workspace: { Args: Record<never, never>; Returns: undefined };
+  dispatch_action_saved: {
+    Args: { p_work_order: string; p_revision: number; p_action: DispatchAction; p_notes?: string | null; p_photos?: string[] };
+    Returns: boolean;
+  };
   contractor_invitation_status: { Args: { p_vendor: string }; Returns: ContractorInvitationStatus | null };
   my_dispatch_jobs: { Args: Record<never, never>; Returns: DispatchJob[] };
   create_contractor_invite: { Args: { p_vendor: string }; Returns: string };
