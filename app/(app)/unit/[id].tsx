@@ -5,8 +5,8 @@ import {
   useLocalSearchParams,
   useRouter,
 } from "expo-router";
-import { useCallback, useState } from "react";
-import { Alert, Modal, Platform, Pressable, ScrollView, Text, View } from "react-native";
+import { useCallback, useRef, useState } from "react";
+import { Modal, Pressable, ScrollView, Text, View } from "react-native";
 
 import { DocumentsSection } from "../../../components/DocumentsSection";
 import {
@@ -18,19 +18,18 @@ import {
   Screen,
 } from "../../../components/ui";
 import { useAuth } from "../../../lib/auth";
-import { cachedSelect } from "../../../lib/cache";
+import { cachedSelectResult } from "../../../lib/cache";
 import { confirmAction } from "../../../lib/confirm";
 import { useOffline } from "../../../lib/offline";
 import type { Tables } from "../../../lib/database.types";
 import { Constants } from "../../../lib/database.types";
 import { formatCurrency, formatDate, titleCase } from "../../../lib/format";
 import { supabase } from "../../../lib/supabase";
-
-function notify(title: string, message: string) {
-  Platform.OS === "web"
-    ? window.alert(`${title}\n\n${message}`)
-    : Alert.alert(title, message);
-}
+import { notify } from "../../../lib/feedback";
+import { calendarDate, currencyCode, nonNegativeMoney } from "../../../lib/validation";
+import { operationError, readAllPages } from "../../../lib/operationsQuery";
+import { newRecordId } from "../../../lib/id";
+import { createInsertDraft, insertDraftIdentity, type InsertDraft } from "../../../lib/insertDraft";
 
 const UNIT_TYPES = Constants.public.Enums.unit_type;
 const UNIT_STATUSES = Constants.public.Enums.unit_status;
@@ -52,10 +51,13 @@ function Row({ label, value }: { label: string; value: string }) {
 export default function UnitDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const generation = useRef(0);
   const { session } = useAuth();
-  const { submitInsert } = useOffline();
+  const { submitInsert, operations } = useOffline();
 
   const [unit, setUnit] = useState<Unit | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [leases, setLeases] = useState<Tables<"leases">[]>([]);
   const [assets, setAssets] = useState<Tables<"assets">[]>([]);
   const [workOrders, setWorkOrders] = useState<Tables<"work_orders">[]>([]);
@@ -63,8 +65,13 @@ export default function UnitDetail() {
   // add-lease modal
   const [adding, setAdding] = useState(false);
   const [saving, setSaving] = useState(false);
+  const leaseDraft = useRef<InsertDraft | null>(null);
+  const savingRef = useRef(false);
   const [tenantName, setTenantName] = useState("");
   const [tenantPhone, setTenantPhone] = useState("");
+  const [tenantEmail, setTenantEmail] = useState("");
+  const [deposit, setDeposit] = useState("");
+  const [leaseCurrency, setLeaseCurrency] = useState("USD");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [rent, setRent] = useState("");
@@ -81,58 +88,42 @@ export default function UnitDetail() {
   const [eBeds, setEBeds] = useState("");
   const [eBaths, setEBaths] = useState("");
   const [eSize, setESize] = useState("");
+  const [eSizeUnit, setESizeUnit] = useState("sqft");
+  const [eCurrency, setECurrency] = useState("USD");
   const [eRent, setERent] = useState("");
 
-  const currency = unit?.properties?.currency ?? unit?.rent_currency ?? "USD";
+  const currency = unit?.rent_currency ?? unit?.properties?.currency ?? "USD";
 
   const load = useCallback(async () => {
-    if (!id) return;
+    const ticket = ++generation.current;
+    if (!id) { setLoadError("Choose a unit to continue."); setLoading(false); return; }
     const [u, l, a, w] = await Promise.all([
-      cachedSelect<Unit>(
-        `unit:${id}`,
-        supabase
-          .from("units")
-          .select("*, properties(name, currency)")
-          .eq("id", id)
-          .single(),
-      ),
-      cachedSelect<Tables<"leases">[]>(
-        `leases:unit:${id}`,
-        supabase
-          .from("leases")
-          .select("*")
-          .eq("unit_id", id)
-          .order("start_date", { ascending: false, nullsFirst: false }),
-      ),
-      cachedSelect<Tables<"assets">[]>(
-        `assets:unit:${id}`,
-        supabase.from("assets").select("*").eq("unit_id", id),
-      ),
-      cachedSelect<Tables<"work_orders">[]>(
-        `wos:unit:${id}`,
-        supabase
-          .from("work_orders")
-          .select("*")
-          .eq("unit_id", id)
-          .in("status", ["open", "in_progress", "on_hold"])
-          .order("created_at", { ascending: false }),
-      ),
+      cachedSelectResult<Unit>(`unit:${id}`, supabase.from("units").select("*, properties!units_property_id_owner_fk(name, currency)").eq("id", id).single()),
+      cachedSelectResult<Tables<"leases">[]>(`leases:unit:${id}`,
+        readAllPages<Tables<"leases">>((from, to) => supabase.from("leases").select("*", { count: "exact" }).eq("unit_id", id).order("start_date", { ascending: false, nullsFirst: false }).order("id").range(from, to))),
+      cachedSelectResult<Tables<"assets">[]>(`assets:unit:${id}`,
+        readAllPages<Tables<"assets">>((from, to) => supabase.from("assets").select("*", { count: "exact" }).eq("unit_id", id).order("name").order("id").range(from, to))),
+      cachedSelectResult<Tables<"work_orders">[]>(`wos:unit:${id}`,
+        readAllPages<Tables<"work_orders">>((from, to) => supabase.from("work_orders").select("*", { count: "exact" }).eq("unit_id", id).in("status", ["open", "in_progress", "on_hold"]).order("created_at", { ascending: false }).order("id").range(from, to))),
     ]);
-    setUnit(u ?? null);
-    setLeases(l ?? []);
-    setAssets(a ?? []);
-    setWorkOrders(w ?? []);
+    if (ticket !== generation.current) return;
+    setUnit(u.data); setLeases(l.data ?? []); setAssets(a.data ?? []); setWorkOrders(w.data ?? []);
+    setLoadError([u.error, l.error, a.error, w.error].filter(Boolean).join(" ") || null);
+    setLoading(false);
   }, [id]);
 
   useFocusEffect(
     useCallback(() => {
-      load();
+      void load();
+      return () => { generation.current++; };
     }, [load]),
   );
 
   function resetForm() {
+    leaseDraft.current = null;
     setTenantName("");
     setTenantPhone("");
+    setTenantEmail(""); setDeposit(""); setLeaseCurrency(currency);
     setStartDate("");
     setEndDate("");
     setRent("");
@@ -141,13 +132,21 @@ export default function UnitDetail() {
   }
 
   function openAddLease() {
-    resetForm();
-    setAdding(true);
+    if (savingRef.current) return;
+    try {
+      const identity = session ? createInsertDraft(session.user.id, newRecordId) : null;
+      resetForm(); leaseDraft.current = identity; setAdding(true);
+    } catch (error) { notify("Could not open lease", operationError(error)); }
   }
 
   function openEditLease(l: Tables<"leases">) {
+    if (savingRef.current) return;
+    leaseDraft.current = null;
     setTenantName(l.tenant_name);
     setTenantPhone(l.tenant_phone ?? "");
+    setTenantEmail(l.tenant_email ?? "");
+    setDeposit(l.deposit_amount == null ? "" : String(l.deposit_amount));
+    setLeaseCurrency(l.rent_currency ?? currency);
     setStartDate(l.start_date ?? "");
     setEndDate(l.end_date ?? "");
     setRent(l.rent_amount != null ? String(l.rent_amount) : "");
@@ -157,61 +156,53 @@ export default function UnitDetail() {
   }
 
   async function saveLease() {
-    if (!tenantName.trim() || !session || !id) return;
+    if (savingRef.current) return;
+    if (!tenantName.trim() || !session || !id) { notify("Missing tenant name", "Enter the tenant's name."); return; }
+    savingRef.current = true;
     setSaving(true);
-    const payload = {
-      tenant_name: tenantName.trim(),
-      tenant_phone: tenantPhone.trim() || null,
-      start_date: startDate.trim() || null,
-      end_date: endDate.trim() || null,
-      rent_amount: rent ? Number(rent) : (unit?.rent_amount ?? null),
-      rent_currency: currency,
-      status: leaseStatus,
-    };
     try {
+      const email = tenantEmail.trim().toLowerCase();
+      if (email && (email.length > 254 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email))) throw new Error("Enter a valid tenant email address.");
+      const start = calendarDate(startDate, "Lease start", true);
+      const end = calendarDate(endDate, "Lease end", true);
+      if (start && end && end < start) throw new Error("Lease end cannot be before the start date.");
+      const payload = {
+        tenant_name: tenantName.trim(), tenant_phone: tenantPhone.trim() || null, tenant_email: email || null,
+        start_date: start, end_date: end,
+        rent_amount: rent.trim() ? nonNegativeMoney(rent, "Rent") : (unit?.rent_amount ?? null),
+        rent_currency: currencyCode(leaseCurrency),
+        deposit_amount: deposit.trim() ? nonNegativeMoney(deposit, "Deposit") : null,
+        status: leaseStatus,
+      };
       if (editingLeaseId) {
-        const { error } = await supabase
-          .from("leases")
-          .update(payload)
-          .eq("id", editingLeaseId);
+        const { error } = await supabase.from("leases").update(payload).eq("id", editingLeaseId).select("id").single();
         if (error) throw error;
-        setAdding(false);
-        resetForm();
-        load();
+        setAdding(false); resetForm(); await load();
       } else {
-        const result = await submitInsert("leases", {
-          ...payload,
-          owner_id: session.user.id,
-          unit_id: id,
-        });
-        setAdding(false);
-        resetForm();
-        if (result === "queued") {
-          notify(
-            "Saved offline",
-            "This lease will sync automatically when you're back online.",
-          );
-        } else {
-          load();
-        }
+        const identity = insertDraftIdentity(leaseDraft.current, session.user.id, operations, "lease");
+        const result = await submitInsert("leases", { ...payload, ...identity, unit_id: id });
+        setAdding(false); resetForm();
+        if (result === "queued") notify("Saved on this device", "Review this lease under Sync activity until it uploads.");
+        else await load();
       }
-    } catch (e) {
-      notify("Could not save", e instanceof Error ? e.message : String(e));
-    } finally {
-      setSaving(false);
-    }
+    } catch (error) { notify("Could not save lease", operationError(error)); }
+    finally { savingRef.current = false; setSaving(false); }
   }
 
   function removeLease() {
-    if (!editingLeaseId) return;
+    if (!editingLeaseId || savingRef.current) return;
     confirmAction(
       "Delete lease",
       "This permanently removes the lease record. This cannot be undone.",
       async () => {
-        await supabase.from("leases").delete().eq("id", editingLeaseId);
-        setAdding(false);
-        resetForm();
-        load();
+        if (savingRef.current) return;
+        savingRef.current = true; setSaving(true);
+        try {
+          const { error } = await supabase.from("leases").delete().eq("id", editingLeaseId).select("id").single();
+          if (error) throw error;
+          setAdding(false); resetForm(); await load();
+        } catch (error) { notify("Could not delete lease", operationError(error)); }
+        finally { savingRef.current = false; setSaving(false); }
       },
     );
   }
@@ -224,31 +215,32 @@ export default function UnitDetail() {
     setEBeds(unit.bedrooms != null ? String(unit.bedrooms) : "");
     setEBaths(unit.bathrooms != null ? String(unit.bathrooms) : "");
     setESize(unit.size_value != null ? String(unit.size_value) : "");
+    setESizeUnit(unit.size_unit ?? "sqft"); setECurrency(currency);
     setERent(unit.rent_amount != null ? String(unit.rent_amount) : "");
     setEditing(true);
   }
 
   async function saveEdit() {
-    if (!eLabel.trim() || !id) return;
+    if (!eLabel.trim() || !id) { notify("Missing label", "Enter a unit label."); return; }
     setSaving(true);
-    const { error } = await supabase
-      .from("units")
-      .update({
-        label: eLabel.trim(),
-        unit_type: eType,
-        status: eStatus,
-        bedrooms: eBeds ? Number(eBeds) : null,
-        bathrooms: eBaths ? Number(eBaths) : null,
-        size_value: eSize ? Number(eSize) : null,
-        rent_amount: eRent ? Number(eRent) : null,
-        rent_currency: currency,
-      })
-      .eq("id", id);
-    setSaving(false);
-    if (!error) {
-      setEditing(false);
-      load();
-    }
+    try {
+      const beds = eBeds.trim() ? nonNegativeMoney(eBeds, "Bedrooms") : null;
+      const baths = eBaths.trim() ? nonNegativeMoney(eBaths, "Bathrooms") : null;
+      const size = eSize.trim() ? nonNegativeMoney(eSize, "Size") : null;
+      if (beds !== null && (!Number.isSafeInteger(beds) || beds > 32767)) throw new Error("Bedrooms must be a whole number from 0 to 32,767.");
+      if (baths !== null && (baths > 99.9 || Math.abs(baths * 10 - Math.round(baths * 10)) > 1e-8)) throw new Error("Bathrooms must be from 0 to 99.9, with at most one decimal place.");
+      if (size !== null && size > 99999999.99) throw new Error("The size is outside the supported range.");
+      if (!["sqft", "sqm"].includes(eSizeUnit)) throw new Error("Choose square feet or square metres.");
+      const { error } = await supabase.from("units").update({
+        label: eLabel.trim(), unit_type: eType, status: eStatus, bedrooms: beds, bathrooms: baths,
+        size_value: size, size_unit: eSizeUnit,
+        rent_amount: eRent.trim() ? nonNegativeMoney(eRent, "Rent") : null,
+        rent_currency: currencyCode(eCurrency),
+      }).eq("id", id).select("id").single();
+      if (error) throw error;
+      setEditing(false); await load();
+    } catch (error) { notify("Could not update unit", operationError(error)); }
+    finally { setSaving(false); }
   }
 
   function deleteUnit() {
@@ -257,13 +249,17 @@ export default function UnitDetail() {
       "This permanently deletes the unit and its leases. Assets and work orders are kept but unlinked from it. This cannot be undone.",
       async () => {
         if (!unit) return;
-        await supabase.from("units").delete().eq("id", unit.id);
-        router.replace(`/property/${unit.property_id}`);
+        try {
+          const { error } = await supabase.from("units").delete().eq("id", unit.id).select("id").single();
+          if (error) throw error;
+          router.replace(`/property/${unit.property_id}`);
+        } catch (error) { notify("Could not delete unit", operationError(error)); }
       },
     );
   }
 
-  if (!unit) return <Loading />;
+  if (loading) return <Loading />;
+  if (!unit) return <Screen><View className="p-5"><Text accessibilityRole="alert" className="mb-3 text-red-700">{loadError ?? "This unit is unavailable or you no longer have access."}</Text><Button title="Retry" onPress={() => void load()} /><Button title="Back to properties" variant="secondary" onPress={() => router.replace("/properties")} /></View></Screen>;
 
   return (
     <Screen>
@@ -283,15 +279,17 @@ export default function UnitDetail() {
         >
           {unit.label}
         </Text>
-        <Pressable onPress={openEdit} className="p-2">
+        <Pressable accessibilityRole="button" accessibilityLabel="Edit unit" onPress={openEdit} className="p-2">
           <Ionicons name="create-outline" size={22} color="#0f766e" />
         </Pressable>
-        <Pressable onPress={deleteUnit} className="p-2">
+        <Pressable accessibilityRole="button" accessibilityLabel="Delete unit" onPress={deleteUnit} className="p-2">
           <Ionicons name="trash-outline" size={22} color="#dc2626" />
         </Pressable>
       </View>
 
       <ScrollView contentContainerClassName="px-5 pb-12">
+        {loadError ? <View className="mb-3"><Text accessibilityRole="alert" className="mb-2 text-red-700">{loadError}</Text><Button title="Retry" variant="secondary" onPress={() => void load()} /></View> : null}
+        <View className="mb-3"><Button title="New maintenance job" onPress={() => router.push({ pathname: "/work-orders", params: { new: "1", propertyId: unit.property_id, unitId: unit.id } })} /></View>
         <Card>
           <View className="flex-row items-center justify-between">
             <Badge label={unit.status} />
@@ -326,6 +324,7 @@ export default function UnitDetail() {
             Lease & tenant
           </Text>
           <Pressable
+            disabled={saving}
             onPress={openAddLease}
             className="flex-row items-center rounded-full bg-brand px-3 py-1.5"
           >
@@ -355,7 +354,7 @@ export default function UnitDetail() {
                   : ""}
               </Text>
               <Pressable
-                onPress={() => router.push(`/lease/${l.id}`)}
+                onPress={event => { event.stopPropagation(); router.push(`/lease/${l.id}`); }}
                 className="mt-3 flex-row items-center self-start rounded-full border border-brand px-3 py-1.5"
               >
                 <Ionicons
@@ -412,7 +411,7 @@ export default function UnitDetail() {
         />
       </ScrollView>
 
-      <Modal visible={editing} animationType="slide" transparent>
+      <Modal visible={editing} onRequestClose={() => !saving && setEditing(false)} animationType="slide" transparent>
         <View className="flex-1 justify-end bg-black/40">
           <ScrollView
             className="max-h-[88%] rounded-t-3xl bg-slate-50"
@@ -476,8 +475,11 @@ export default function UnitDetail() {
               onChangeText={setESize}
               keyboardType="decimal-pad"
             />
+            <Text className="mb-2 font-medium text-slate-600">Area unit</Text>
+            <View className="mb-3 flex-row gap-2">{[["sqft", "Square feet"], ["sqm", "Square metres"]].map(([value, label]) => <Button key={value} title={label} variant={eSizeUnit === value ? "primary" : "secondary"} onPress={() => setESizeUnit(value)} />)}</View>
+            <Field label="Rent currency" value={eCurrency} onChangeText={setECurrency} autoCapitalize="characters" maxLength={3} />
             <Field
-              label={`Rent (${currency})`}
+              label={`Rent (${eCurrency})`}
               value={eRent}
               onChangeText={setERent}
               keyboardType="decimal-pad"
@@ -486,6 +488,7 @@ export default function UnitDetail() {
               <View className="flex-1">
                 <Button
                   title="Cancel"
+                  disabled={saving}
                   variant="secondary"
                   onPress={() => setEditing(false)}
                 />
@@ -498,7 +501,7 @@ export default function UnitDetail() {
         </View>
       </Modal>
 
-      <Modal visible={adding} animationType="slide" transparent>
+      <Modal visible={adding} onRequestClose={() => !savingRef.current && setAdding(false)} animationType="slide" transparent>
         <View className="flex-1 justify-end bg-black/40">
           <ScrollView
             className="max-h-[88%] rounded-t-3xl bg-slate-50"
@@ -510,21 +513,25 @@ export default function UnitDetail() {
             <Field
               label="Tenant name"
               value={tenantName}
+              editable={!saving}
               onChangeText={setTenantName}
               placeholder="Full name"
             />
             <Field
               label="Phone (optional)"
               value={tenantPhone}
+              editable={!saving}
               onChangeText={setTenantPhone}
               placeholder="+1-758-…"
               keyboardType="phone-pad"
             />
+            <Field label="Tenant email (optional)" value={tenantEmail} editable={!saving} onChangeText={setTenantEmail} keyboardType="email-address" autoCapitalize="none" autoComplete="email" />
             <View className="flex-row gap-3">
               <View className="flex-1">
                 <Field
-                  label="Start (YYYY-MM-DD)"
+                  label="Start (YYYY-MM-DD, optional)"
                   value={startDate}
+              editable={!saving}
                   onChangeText={setStartDate}
                   placeholder="2026-07-01"
                   autoCapitalize="none"
@@ -534,15 +541,19 @@ export default function UnitDetail() {
                 <Field
                   label="End (optional)"
                   value={endDate}
+              editable={!saving}
                   onChangeText={setEndDate}
                   placeholder="2027-06-30"
                   autoCapitalize="none"
                 />
               </View>
             </View>
+            <Field label="Lease currency" value={leaseCurrency} editable={!saving} onChangeText={setLeaseCurrency} autoCapitalize="characters" maxLength={3} />
+            <Field label={`Deposit (${leaseCurrency}, optional)`} value={deposit} editable={!saving} onChangeText={setDeposit} keyboardType="decimal-pad" />
             <Field
-              label={`Rent (${currency})`}
+              label={`Rent (${leaseCurrency})`}
               value={rent}
+              editable={!saving}
               onChangeText={setRent}
               placeholder={
                 unit.rent_amount != null ? String(unit.rent_amount) : "0.00"
@@ -554,6 +565,7 @@ export default function UnitDetail() {
               {LEASE_STATUSES.map((s) => (
                 <Pressable
                   key={s}
+                  disabled={saving}
                   onPress={() => setLeaseStatus(s)}
                   className={`mb-2 mr-2 rounded-full border px-3 py-2 ${
                     leaseStatus === s
@@ -575,8 +587,10 @@ export default function UnitDetail() {
               <View className="flex-1">
                 <Button
                   title="Cancel"
+                  disabled={saving}
                   variant="secondary"
                   onPress={() => {
+                    if (savingRef.current) return;
                     setAdding(false);
                     resetForm();
                   }}
@@ -588,7 +602,7 @@ export default function UnitDetail() {
             </View>
             {editingLeaseId ? (
               <View className="mt-3">
-                <Button title="Delete lease" variant="danger" onPress={removeLease} />
+                <Button title="Delete lease" disabled={saving} variant="danger" onPress={removeLease} />
               </View>
             ) : null}
           </ScrollView>

@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Tabs } from "expo-router";
+import { Tabs } from "expo-router/js-tabs";
 
 export default function TenantTabsLayout() {
   return (
@@ -14,6 +14,7 @@ export default function TenantTabsLayout() {
         name="index"
         options={{
           title: "Home",
+          tabBarAccessibilityLabel: "Home",
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="home-outline" color={color} size={size} />
           ),
@@ -23,6 +24,7 @@ export default function TenantTabsLayout() {
         name="requests"
         options={{
           title: "Requests",
+          tabBarAccessibilityLabel: "Requests",
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="construct-outline" color={color} size={size} />
           ),
@@ -32,6 +34,7 @@ export default function TenantTabsLayout() {
         name="rent"
         options={{
           title: "Rent",
+          tabBarAccessibilityLabel: "Rent",
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="cash-outline" color={color} size={size} />
           ),
@@ -41,6 +44,7 @@ export default function TenantTabsLayout() {
         name="more"
         options={{
           title: "More",
+          tabBarAccessibilityLabel: "More",
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="ellipsis-horizontal" color={color} size={size} />
           ),

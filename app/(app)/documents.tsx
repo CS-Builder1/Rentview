@@ -62,7 +62,7 @@ export default function Documents() {
     const [d, p] = await Promise.all([
       supabase
         .from("documents")
-        .select("*, properties(name)")
+        .select("*, properties!documents_property_id_owner_fk(name)")
         .order("created_at", { ascending: false }),
       supabase.from("properties").select("*").order("name"),
     ]);

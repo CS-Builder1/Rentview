@@ -1,0 +1,29 @@
+# Local configuration and versioned gateway authentication behavior.
+# This file does not change the linked hosted project's settings by itself.
+project_id = "rentview"
+
+[api]
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+major_version = 17
+
+[auth]
+site_url = "http://localhost:8081"
+additional_redirect_urls = ["http://localhost:8081/callback", "http://localhost:8081/callback?**", "rentview://callback", "rentview://callback?**"]
+
+# These handlers perform their own signature/shared-secret/session validation.
+[functions.lemonsqueezy-webhook]
+verify_jwt = false
+[functions.paypal-webhook]
+verify_jwt = false
+[functions.send-push]
+verify_jwt = false
+[functions.send-reminders]
+verify_jwt = false
+[functions.delete-account]
+verify_jwt = true

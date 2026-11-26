@@ -1,160 +1,29 @@
+import Constants from "expo-constants";
+import * as Device from "expo-device";
+import * as Notifications from "expo-notifications";
 import { useCallback, useEffect, useState } from "react";
-import { Switch, Text, View } from "react-native";
-
+import { AppState, Platform, Switch, Text, View } from "react-native";
 import { useAuth } from "../lib/auth";
-import { PUSH_SUPPORTED } from "../lib/push";
+import { PUSH_SUPPORTED, registerPushToken } from "../lib/push";
 import { supabase } from "../lib/supabase";
-import { Card } from "./ui";
+import { Button, Card } from "./ui";
 
-type Prefs = {
-  push_enabled: boolean;
-  requests: boolean;
-  messages: boolean;
-  announcements: boolean;
-};
-
-// No row means everything is on, so a user who never opens this screen still
-// hears about their requests.
-const DEFAULTS: Prefs = {
-  push_enabled: true,
-  requests: true,
-  messages: true,
-  announcements: true,
-};
-
-const LABELS: Record<
-  "owner" | "tenant",
-  { key: keyof Prefs; label: string; hint: string }[]
-> = {
-  owner: [
-    {
-      key: "requests",
-      label: "Tenant requests",
-      hint: "New reports and when a tenant closes one",
-    },
-    {
-      key: "messages",
-      label: "Messages",
-      hint: "Replies on a request thread",
-    },
-  ],
-  tenant: [
-    {
-      key: "requests",
-      label: "Repair updates",
-      hint: "When your landlord picks up or finishes a job",
-    },
-    {
-      key: "messages",
-      label: "Messages",
-      hint: "Replies from your landlord",
-    },
-    {
-      key: "announcements",
-      label: "Building notices",
-      hint: "Shut-offs, inspections and other broadcasts",
-    },
-  ],
-};
-
-function Row({
-  label,
-  hint,
-  value,
-  disabled,
-  onChange,
-}: {
-  label: string;
-  hint?: string;
-  value: boolean;
-  disabled?: boolean;
-  onChange: (next: boolean) => void;
-}) {
-  return (
-    <View className="flex-row items-center border-b border-slate-100 py-3">
-      <View className="flex-1 pr-3">
-        <Text
-          className={`text-base ${disabled ? "text-slate-400" : "text-slate-800"}`}
-        >
-          {label}
-        </Text>
-        {hint ? <Text className="mt-0.5 text-xs text-slate-400">{hint}</Text> : null}
-      </View>
-      <Switch
-        value={value}
-        onValueChange={onChange}
-        disabled={disabled}
-        trackColor={{ true: "#0f766e", false: "#cbd5e1" }}
-      />
-    </View>
-  );
-}
-
-/**
- * Per-user mute switches. Writes go straight through — the switch reflects
- * what was asked for immediately and reverts if the write fails, because a
- * toggle that lags feels broken.
- */
-export function NotificationPrefs({ variant }: { variant: "owner" | "tenant" }) {
-  const { session } = useAuth();
-  const [prefs, setPrefs] = useState<Prefs>(DEFAULTS);
-
-  const load = useCallback(async () => {
-    if (!session) return;
-    const { data } = await supabase
-      .from("notification_prefs")
-      .select("push_enabled, requests, messages, announcements")
-      .eq("user_id", session.user.id)
-      .maybeSingle();
-    if (data) setPrefs(data);
-  }, [session]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  async function update(patch: Partial<Prefs>) {
-    if (!session) return;
-    const previous = prefs;
-    const next = { ...prefs, ...patch };
-    setPrefs(next);
-    const { error } = await supabase
-      .from("notification_prefs")
-      .upsert({ user_id: session.user.id, ...next }, { onConflict: "user_id" });
-    if (error) setPrefs(previous);
-  }
-
-  const muted = !prefs.push_enabled;
-
-  return (
-    <View>
-      <Text className="mb-2 mt-4 text-sm font-semibold uppercase text-slate-400">
-        Notifications
-      </Text>
-      <Card>
-        <Row
-          label="Push notifications"
-          hint={muted ? "Everything is muted on this account" : undefined}
-          value={prefs.push_enabled}
-          onChange={(value) => update({ push_enabled: value })}
-        />
-        {LABELS[variant].map((row) => (
-          <Row
-            key={row.key}
-            label={row.label}
-            hint={row.hint}
-            value={prefs[row.key]}
-            disabled={muted}
-            onChange={(value) => update({ [row.key]: value } as Partial<Prefs>)}
-          />
-        ))}
-        {!PUSH_SUPPORTED ? (
-          <Text className="mt-3 text-xs text-slate-400">
-            These apply to the mobile app — the web app does not send push
-            notifications.
-          </Text>
-        ) : null}
-      </Card>
-    </View>
-  );
+type Prefs={push_enabled:boolean;email_enabled:boolean;requests:boolean;messages:boolean;announcements:boolean};
+const DEFAULTS:Prefs={push_enabled:true,email_enabled:true,requests:true,messages:true,announcements:true};
+const LABELS={owner:[{key:"requests",label:"Tenant requests",hint:"New reports and repair closure"},{key:"messages",label:"Messages",hint:"Replies on a repair request"}],tenant:[{key:"requests",label:"Repair updates",hint:"Acknowledgment, progress and resolution"},{key:"messages",label:"Messages",hint:"Replies on a repair request"},{key:"announcements",label:"Building notices",hint:"Shut-offs, inspections and broadcasts"}]} as const;
+function Row({label,hint,value,disabled,onChange}:{label:string;hint?:string;value:boolean;disabled:boolean;onChange:(value:boolean)=>void}){return <View className="flex-row items-center border-b border-slate-100 py-3"><View className="flex-1 pr-3"><Text className="text-base text-slate-800">{label}</Text>{hint?<Text className="mt-1 text-xs text-slate-500">{hint}</Text>:null}</View><Switch accessibilityLabel={label} accessibilityHint={hint} accessibilityState={{disabled,checked:value}} value={value} disabled={disabled} onValueChange={onChange} trackColor={{true:"#0f766e",false:"#cbd5e1"}}/></View>;}
+export function NotificationPrefs({variant}:{variant:"owner"|"tenant"}){
+ const {session}=useAuth();const uid=session?.user.id;const [prefs,setPrefs]=useState<Prefs>(DEFAULTS);const [loaded,setLoaded]=useState(false);const [busy,setBusy]=useState(false);const [error,setError]=useState("");const [readiness,setReadiness]=useState("Checking this device…");
+ const checkDevice=useCallback(async()=>{
+  if(!PUSH_SUPPORTED){setReadiness("Web push is unavailable. Keep RentView open to see refreshed conversations, or enable email below for supported activity alerts.");return;}
+  if(!Device.isDevice){setReadiness("Push delivery requires a physical mobile device.");return;}
+  if(!Constants.expoConfig?.extra?.eas?.projectId&&!Constants.easConfig?.projectId){setReadiness("Mobile notifications are not available in this build yet. Your preferences are still saved.");return;}
+  try{const permission=await Notifications.getPermissionsAsync();setReadiness(permission.granted?"Device permission is allowed. Use Enable on this device to register or refresh delivery; delivery also depends on the notification service.":permission.canAskAgain?"Device permission has not been granted. Enable notifications when you are ready.":"Device permission is blocked. Allow RentView notifications in your device Settings, then return here.");}catch{setReadiness("Could not check this device's notification permission. Try again.");}
+ },[]);
+ const load=useCallback(async()=>{if(!uid)return;setLoaded(false);setError("");try{const {data,error:readError}=await supabase.from("notification_prefs").select("push_enabled,email_enabled,requests,messages,announcements").eq("user_id",uid).maybeSingle();if(readError)throw readError;setPrefs(data??DEFAULTS);setLoaded(true);}catch(e){setError(e instanceof Error?e.message:"Notification preferences could not load. Retry before changing them.");}},[uid]);
+ useEffect(()=>{void load();void checkDevice();const foreground=AppState.addEventListener("change",state=>{if(state==="active")void checkDevice();});return()=>foreground.remove();},[load,checkDevice]);
+ async function update(patch:Partial<Prefs>){if(!uid||!loaded||busy)return;setBusy(true);setError("");const previous=prefs;const next={...prefs,...patch};setPrefs(next);try{const {data,error:writeError}=await supabase.from("notification_prefs").upsert({user_id:uid,...next},{onConflict:"user_id"}).select("push_enabled,email_enabled,requests,messages,announcements").single();if(writeError)throw writeError;setPrefs(data);}catch(e){setPrefs(previous);setError(e instanceof Error?e.message:"Preferences were not saved. Your previous settings were restored.");}finally{setBusy(false);}}
+ async function enable(){setBusy(true);setError("");try{const token=await registerPushToken();await checkDevice();if(!token)throw new Error("This device was not registered. Check permission and try again on a supported mobile build.");setReadiness("This device is registered for push. Delivery depends on account preferences and the notification service.");}catch(e){setError(e instanceof Error?e.message:"Could not register this device.");}finally{setBusy(false);}}
+ const disabled=!loaded||busy;const categoriesDisabled=disabled||(!prefs.push_enabled&&!prefs.email_enabled);
+ return <View><Text className="mb-2 mt-4 text-sm font-semibold uppercase text-slate-500">Notifications</Text><Card><Text accessibilityLiveRegion="polite" className="mb-3 text-sm text-slate-600">{readiness}</Text>{error?<Text accessibilityRole="alert" className="mb-3 text-red-700">{error}</Text>:null}{!loaded?<Button title="Retry loading preferences" variant="secondary" onPress={()=>void load()}/>:null}<Row label="Push notifications" hint="Allow mobile push on registered devices" value={prefs.push_enabled} disabled={disabled} onChange={value=>void update({push_enabled:value})}/><Row label="Email activity alerts" hint={`Allow supported activity emails to ${session?.user.email??"your account email"}. This preference does not confirm mail service readiness or delivery.`} value={prefs.email_enabled} disabled={disabled} onChange={value=>void update({email_enabled:value})}/>{LABELS[variant].map(row=><Row key={row.key} label={row.label} hint={row.hint} value={prefs[row.key]} disabled={categoriesDisabled} onChange={value=>void update({[row.key]:value})}/>)}{PUSH_SUPPORTED?<View className="mt-3"><Button title="Enable on this device" variant="secondary" disabled={busy} onPress={enable}/></View>:null}{Platform.OS!=="web"?<Text className="mt-3 text-xs text-slate-500">Preferences apply to this account across devices. Device Settings control permission separately.</Text>:null}</Card></View>;
 }

@@ -5,20 +5,23 @@ import {
   useLocalSearchParams,
   useRouter,
 } from "expo-router";
-import { useCallback, useState } from "react";
-import { Modal, Pressable, ScrollView, Text, View } from "react-native";
+import { useCallback, useRef, useState } from "react";
+import { Modal, Platform, Pressable, ScrollView, Share, Text, View } from "react-native";
 
 import QRCode from "react-native-qrcode-svg";
 
 import { DocumentsSection } from "../../../components/DocumentsSection";
-import { Badge, Button, Card, Field, Loading, Screen } from "../../../components/ui";
+import { Badge, Button, Card, EmptyState, Field, Loading, Screen } from "../../../components/ui";
 import { assetUrl } from "../../../lib/appUrl";
-import { cachedSelect } from "../../../lib/cache";
+import { cachedSelectResult } from "../../../lib/cache";
 import { confirmAction } from "../../../lib/confirm";
 import type { Tables } from "../../../lib/database.types";
 import { Constants } from "../../../lib/database.types";
 import { formatCurrency, formatDate, titleCase } from "../../../lib/format";
 import { supabase } from "../../../lib/supabase";
+import { operationError } from "../../../lib/operationsQuery";
+import { notify } from "../../../lib/feedback";
+import { localToday, positiveNumber, validCalendarDate } from "../../../lib/maintenance";
 
 const ASSET_STATUSES = Constants.public.Enums.asset_status;
 
@@ -33,7 +36,7 @@ function warrantyState(expiry: string | null): {
 } | null {
   if (!expiry) return null;
   const days = Math.ceil(
-    (new Date(expiry).getTime() - Date.now()) / 86400000,
+    (new Date(`${expiry}T12:00:00Z`).getTime() - new Date(`${localToday()}T12:00:00Z`).getTime()) / 86400000,
   );
   if (days < 0) return { label: "Warranty expired", tone: "text-red-600" };
   if (days <= 60)
@@ -54,6 +57,11 @@ export default function AssetDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const [asset, setAsset] = useState<Asset | null>(null);
+  const [loaded, setLoaded] = useState(false), [loadError, setLoadError] = useState<string | null>(null);
+  const [jobs, setJobs] = useState<Tables<"work_orders">[]>([]);
+  const [schedules, setSchedules] = useState<Tables<"maintenance_schedules">[]>([]);
+  const [costTotals, setCostTotals] = useState<{ currency: string; total: number }[]>([]);
+  const qrRef = useRef<{ toDataURL: (cb: (data: string) => void) => void } | null>(null);
 
   // edit modal
   const [editing, setEditing] = useState(false);
@@ -72,15 +80,14 @@ export default function AssetDetail() {
 
   const load = useCallback(async () => {
     if (!id) return;
-    const data = await cachedSelect<Asset>(
-      `asset:${id}`,
-      supabase
-        .from("assets")
-        .select("*, properties(name, currency), units(label)")
-        .eq("id", id)
-        .single(),
-    );
-    setAsset(data ?? null);
+    const [result, jobResult, scheduleResult, totals] = await Promise.all([
+      cachedSelectResult<Asset>(`asset:${id}`, supabase.from("assets").select("*, properties!assets_property_id_owner_fk(name, currency), units!assets_unit_property_owner_fk(label)").eq("id", id).single()),
+      cachedSelectResult<Tables<"work_orders">[]>(`asset:${id}:jobs`, supabase.from("work_orders").select("*").eq("asset_id", id).order("created_at", { ascending: false }).limit(50)),
+      cachedSelectResult<Tables<"maintenance_schedules">[]>(`asset:${id}:schedules`, supabase.from("maintenance_schedules").select("*").eq("asset_id", id).eq("is_active", true).order("next_due", { ascending: true, nullsFirst: false })),
+      supabase.rpc("asset_cost_totals", { p_asset_id: id }),
+    ]);
+    setAsset(result.data); setJobs(jobResult.data ?? []); setSchedules(scheduleResult.data ?? []); setCostTotals(totals.data ?? []);
+    setLoadError(result.error || jobResult.error || scheduleResult.error || totals.error?.message || null); setLoaded(true);
   }, [id]);
 
   useFocusEffect(
@@ -105,7 +112,12 @@ export default function AssetDetail() {
   }
 
   async function saveEdit() {
-    if (!eName.trim() || !id) return;
+    if (!eName.trim() || !id) { notify("Missing name", "Enter an asset name."); return; }
+    try {
+      if ((eInstall && !validCalendarDate(eInstall)) || (eWarranty && !validCalendarDate(eWarranty))) throw new Error("Choose valid calendar dates in YYYY-MM-DD format.");
+      if (eLife && !Number.isSafeInteger(positiveNumber(eLife, "Expected life"))) throw new Error("Expected life must be a whole number of years.");
+      if (eCost) positiveNumber(eCost, "Purchase cost", true);
+    } catch (e) { notify("Check asset details", operationError(e)); return; }
     setSaving(true);
     const { error } = await supabase
       .from("assets")
@@ -121,28 +133,42 @@ export default function AssetDetail() {
         purchase_cost: eCost ? Number(eCost) : null,
         status: eStatus,
       })
-      .eq("id", id);
+      .eq("id", id).select("id").single();
     setSaving(false);
-    if (!error) {
-      setEditing(false);
-      load();
-    }
+    if (error) { notify("Could not save asset", error.message); return; }
+    setEditing(false); await load();
   }
 
   function deleteAsset() {
     confirmAction(
-      "Delete asset",
-      "This permanently deletes the asset. Work orders and documents are kept but unlinked from it. This cannot be undone.",
+      "Retire asset",
+      "Mark this asset out of service while retaining its jobs, costs and documents. You can restore its status later.",
       async () => {
         if (!asset) return;
-        await supabase.from("assets").delete().eq("id", asset.id);
-        router.replace("/assets");
+        const { error } = await supabase.from("assets").update({ status: "out_of_service" }).eq("id", asset.id).select("id").single();
+        if (error) { notify("Could not retire asset", error.message); return; }
+        await load();
       },
+      "Retire",
     );
   }
 
-  if (!asset) return <Loading />;
+  if (!asset) return loaded ? <Screen><EmptyState title="Asset unavailable" subtitle={loadError || "It may have been removed or your access may have changed."} /><Button title="Retry" variant="secondary" onPress={() => void load()} /><Button title="Back to assets" onPress={() => router.replace("/assets")} /></Screen> : <Loading />;
+  async function shareAsset() { try { await Share.share({ title: asset!.name, message: `${asset!.name}\n${assetUrl(asset!.id)}` }); } catch (e) { notify("Could not share asset", operationError(e)); } }
+  function printLabel() {
+    if (Platform.OS !== "web") { void shareAsset(); return; }
+    const label = window.open("", "_blank");
+    if (!label) { notify("Allow a new tab", "Allow pop-ups to print this asset label."); return; }
+    label.opener = null;
+    const title = label.document.createElement("h1"); title.textContent = asset!.name;
+    const location = label.document.createElement("p"); location.textContent = [asset!.properties?.name, asset!.units?.label || "Shared / common"].filter(Boolean).join(" · ");
+    label.document.body.style.fontFamily = "system-ui, sans-serif"; label.document.body.style.textAlign = "center";
+    label.document.title = `${asset!.name} · RentView label`; label.document.body.append(title, location);
+    qrRef.current?.toDataURL(data => { const image = label.document.createElement("img"); image.width = 220; image.height = 220; image.alt = "Asset QR code"; image.onload = () => { label.focus(); label.print(); }; image.src = `data:image/png;base64,${data}`; label.document.body.append(image); });
+  }
 
+  let qrUrl: string | null = null;
+  try { qrUrl = assetUrl(asset.id); } catch { /* Sharing must fail soft when the web address is missing. */ }
   const currency = asset.properties?.currency ?? "USD";
   const warranty = warrantyState(asset.warranty_expiry);
 
@@ -151,6 +177,8 @@ export default function AssetDetail() {
       <Stack.Screen options={{ headerShown: false }} />
       <View className="flex-row items-center px-4 pb-2 pt-2">
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Back"
           onPress={() =>
             router.canGoBack() ? router.back() : router.replace("/assets")
           }
@@ -164,15 +192,17 @@ export default function AssetDetail() {
         >
           {asset.name}
         </Text>
-        <Pressable onPress={openEdit} className="p-2">
+        <Pressable accessibilityRole="button" accessibilityLabel="Edit details" onPress={openEdit} className="p-2">
           <Ionicons name="create-outline" size={22} color="#0f766e" />
         </Pressable>
-        <Pressable onPress={deleteAsset} className="p-2">
-          <Ionicons name="trash-outline" size={22} color="#dc2626" />
+        <Pressable accessibilityLabel="Retire asset and preserve history" onPress={deleteAsset} className="p-2">
+          <Ionicons name="archive-outline" size={22} color="#dc2626" />
         </Pressable>
       </View>
 
       <ScrollView contentContainerClassName="px-5 pb-12">
+        {loadError ? <View className="mb-3"><Text accessibilityRole="alert" className="mb-2 text-red-700">{loadError}</Text><Button title="Refresh" variant="secondary" onPress={() => void load()} /></View> : null}
+        <View className="mb-3 flex-row gap-2"><View className="flex-1"><Button title="New job" onPress={() => router.push({ pathname: "/work-orders", params: { new: "1", propertyId: asset.property_id, assetId: asset.id, ...(asset.unit_id ? { unitId: asset.unit_id } : {}) } })} /></View><View className="flex-1"><Button title="Schedule service" variant="secondary" onPress={() => router.push({ pathname: "/maintenance", params: { new: "1", propertyId: asset.property_id, assetId: asset.id, ...(asset.unit_id ? { unitId: asset.unit_id } : {}) } })} /></View></View>
         <Card>
           <View className="flex-row items-center justify-between">
             <Badge label={asset.status} />
@@ -226,18 +256,21 @@ export default function AssetDetail() {
           </Card>
         </View>
 
+        <Text className="mb-2 mt-4 text-lg font-semibold text-slate-900">Maintenance costs</Text><Card>{costTotals.length ? costTotals.map(t => <Row key={t.currency} label={`Recorded ${t.currency}`} value={formatCurrency(Number(t.total), t.currency)} />) : <Text className="text-slate-500">No expenses have been linked to this asset’s jobs yet.</Text>}</Card>
+        <Text className="mb-2 mt-4 text-lg font-semibold text-slate-900">Upcoming service</Text>{schedules.length ? schedules.map(s => <Card key={s.id} onPress={() => router.push({ pathname: "/maintenance", params: { assetId: asset.id } })}><Text className="font-semibold text-slate-800">{s.title}</Text><Text className="mt-1 text-slate-500">{s.next_due ? formatDate(s.next_due) : "No due date set"}</Text></Card>) : <Text className="text-slate-500">No active service schedules.</Text>}
+        <Text className="mb-2 mt-4 text-lg font-semibold text-slate-900">Service history</Text><Text className="mb-2 text-xs text-slate-500">Most recent 50 jobs</Text>{jobs.length ? jobs.map(j => <Card key={j.id} onPress={() => router.push(`/work-order/${j.id}`)}><View className="flex-row justify-between"><Text className="flex-1 font-semibold text-slate-800">{j.title}</Text><Badge label={j.status} /></View><Text className="mt-1 text-slate-500">{formatDate(j.completed_at || j.created_at)}</Text></Card>) : <Text className="text-slate-500">No jobs recorded for this asset.</Text>}
         {/* Printable QR tag — scanning it opens this asset in the app. */}
         <Text className="mb-2 mt-4 text-lg font-semibold text-slate-900">
           QR tag
         </Text>
         <Card>
           <View className="items-center py-2">
-            <QRCode value={assetUrl(asset.id)} size={160} />
+            {qrUrl ? <QRCode value={qrUrl} size={160} getRef={(ref) => { qrRef.current = ref; }} /> : <Text className="text-slate-600">Asset labels and sharing are currently unavailable.</Text>}
             <Text className="mt-3 text-center text-sm text-slate-500">
               Print and stick this on the asset. Scan it with the in-app
               scanner (or any phone camera) to jump straight here.
             </Text>
-          </View>
+          </View><View className="mt-3 flex-row gap-2">{Platform.OS === "web" ? <Button title="Print QR label" variant="secondary" disabled={!qrUrl} onPress={printLabel} /> : null}<Button title="Share asset link" variant="secondary" disabled={!qrUrl} onPress={() => void shareAsset()} /></View>
         </Card>
 
         <DocumentsSection
@@ -251,7 +284,7 @@ export default function AssetDetail() {
         />
       </ScrollView>
 
-      <Modal visible={editing} animationType="slide" transparent>
+      <Modal visible={editing} onRequestClose={() => !saving && setEditing(false)} animationType="slide" transparent>
         <View className="flex-1 justify-end bg-black/40">
           <ScrollView
             className="max-h-[90%] rounded-t-3xl bg-slate-50"

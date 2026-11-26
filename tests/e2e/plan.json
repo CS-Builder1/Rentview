@@ -1,0 +1,135 @@
+{
+  "status": "core_runner_passed_broader_plan_partially_verified",
+  "requires": "Explicitly disposable Supabase-compatible backend and synthetic identities; never the hosted RentView project",
+  "cases": [
+    {
+      "name": "owner-to-tenant repair",
+      "steps": [
+        "Owner A creates property, unit and lease",
+        "Owner shares server-generated invitation",
+        "Confirmed synthetic tenant claims link through signup and callback",
+        "Tenant submits repair with photo and messages",
+        "Owner triages and converts twice; one work order exists",
+        "Owner assigns vendor, consumes inventory and completes with linked cost",
+        "Tenant receives progress, rates or reopens",
+        "Owner finds asset history and currency-separated expense"
+      ]
+    },
+    {
+      "name": "authorization boundaries",
+      "checks": [
+        "Owner B cannot read or mutate Owner A records",
+        "Unrelated tenant cannot read requests, messages, rent or objects",
+        "Forged invite lease/owner and workflow field updates are refused",
+        "Direct Pro edits and untrusted billing account hints cannot grant access",
+        "Unlink revokes future request/photo authorization; signed-link expiry tested separately"
+      ]
+    },
+    {
+      "name": "failure and concurrency",
+      "checks": [
+        "Competing property creates respect Free capacity",
+        "Competing invite claims permit only one verified tenant",
+        "Concurrent stock use never overspends availability",
+        "Lost response and duplicate completion never double-post records or expenses",
+        "Offline queue survives auth switch, validation errors, storage failure and reload",
+        "Billing retry/order and deletion-vs-renewal preserve correct state"
+      ]
+    },
+    {
+      "name": "account and device recovery",
+      "checks": [
+        "Signup, confirmation and recovery callbacks on web and physical iOS/Android",
+        "Password update remains bound to initiating identity",
+        "Deletion resumes after partial cleanup, reload and missing profile",
+        "New account never inherits another account's confirmation or pending operations",
+        "Notification denied/disabled and provider outage remain visible"
+      ]
+    },
+    {
+      "name": "data correctness and usability",
+      "checks": [
+        "Mixed currencies never merge",
+        "Date-only values retain their day in Atlantic/Pacific timezones",
+        "Old receipts keep entered dates and export in full across pages",
+        "Search/filter context survives navigation",
+        "Keyboard and screen-reader labels work",
+        "Oversized/mismatched/active-content uploads and path traversal are refused"
+      ]
+    }
+  ],
+  "runner": "tests/e2e/local_e2e.py",
+  "safety": "Explicit disposable-local opt-in, loopback Auth/API/app, owner-only target credentials, synthetic .test identities; external browser HTTP/WebSockets blocked",
+  "last_core_report": "/workspace/scratch/rentview-journey-coverage/core-final-retry1/results.json",
+  "verified_layers": {
+    "core_browser_auth_api_storage_data": "13 checkpoints passed",
+    "synthetic_phone_desktop_and_url_edges": "36 passed",
+    "fresh_canonical_sql_and_legacy_replay": "15 stages passed",
+    "numeric_bad_values": "48 rejections passed",
+    "expense_completion_transactions": "3 independent races passed",
+    "identity_policy_optimization": "68 exact-only changes;2016 equivalence cases and prepared actor-switch tests passed",
+    "pg_net_local_privilege_repair": "strict ACLs/worker access on2localDBs;11post-repair API checks passed",
+    "local_recovery": "9 passed; local Mailpit/PKCE and interrupted partial deletion, no successful Edge-runtime completion claim",
+    "local_finance": "9 passed plus2 real precision/inflight probes",
+    "keyboard_accessibility": "9 passed in browser; full screen-reader/device audit remains open"
+  },
+  "remaining_limits": [
+    "real Google OAuth and external email delivery",
+    "physical-device callbacks, permissions, push and payment-provider delivery",
+    "successful Edge-runtime account deletion and provider runtime integration",
+    "full screen-reader speech/WCAG audit and physical-device accessibility",
+    "physical-device offline failure matrix and disconnected hard reload (web export has no service worker)",
+    "financial correction/reversal, retention and pricing/grace policy decisions"
+  ],
+  "previous_core_report": "/workspace/scratch/rentview-warning-triage/core-e2e/results.json",
+  "verification_order": "Current candidate2 source: recovery9,finance9,keyboard9,2financeprobes,core13 and browser36 passed; final app/lib/component source hashes match the served export. Earlier database and owner-ACL evidence is preserved; no schema/package changes occurred in this bounded continuation.",
+  "bounded_continuation": {
+    "status": "passed_bounded_local_scope",
+    "scope": "local recovery, finance and keyboard/accessibility only",
+    "scenarios": [
+      "real local email PKCE recovery, validation and interrupted-save retry",
+      "consumed links and missing browser verifier",
+      "delayed password operation during account switch",
+      "missing profile and pending deletion across reload",
+      "confirmation/draft isolation across accounts",
+      "multiple currency totals and >1000-row CSV pagination/filtering",
+      "Pacific/Atlantic leap-day and end-month receipt edits",
+      "CSV formula escaping",
+      "failed expense draft retention and repeated-save identity",
+      "keyboard navigation, names, selection state, modal focus/escape/back and unsaved draft preservation"
+    ],
+    "baseline_reports": {
+      "finance": "/workspace/scratch/rentview-journey-coverage/finance-baseline/results.json",
+      "recovery": "/workspace/scratch/rentview-journey-coverage/recovery-baseline/results.json",
+      "accessibility": "/workspace/scratch/rentview-journey-coverage/accessibility-baseline/results.json"
+    },
+    "new_defects_confirmed": [
+      "duplicate durable operations for repeated failed expense saves",
+      "floating-point cent drift in expense/category totals",
+      "in-flight save completion erased a subsequent expense draft",
+      "backend expense errors displayed as object text",
+      "shared-browser account switch triggered React navigation update loop",
+      "icon glyphs polluted tab names; property type lacked role/state/keyboard controls; detail Back lacked name; inactive modal covered Home after browser Back"
+    ],
+    "excluded": [
+      "physical devices",
+      "screen-reader speech certification",
+      "external providers",
+      "hosted changes",
+      "new features"
+    ],
+    "reports": {
+      "recovery": "/workspace/scratch/rentview-journey-coverage/recovery-final-retry1/results.json",
+      "finance": "/workspace/scratch/rentview-journey-coverage/finance-final/results.json",
+      "keyboard_accessibility": "/workspace/scratch/rentview-journey-coverage/accessibility-final/results.json",
+      "precision": "/workspace/scratch/rentview-journey-coverage/finance-precision-final.json",
+      "inflight_form": "/workspace/scratch/rentview-journey-coverage/finance-inflight-final.json"
+    },
+    "checks": {
+      "recovery": 9,
+      "finance": 9,
+      "keyboard_accessibility": 9,
+      "finance_probes": 2
+    }
+  }
+}

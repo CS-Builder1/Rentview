@@ -31,10 +31,17 @@ yarn-error.*
 *.pem
 
 # local env files
-.env*.local
+.env
+.env.*
+!.env.example
 
 # typescript
 *.tsbuildinfo
+
+# Local verification artifacts
+__pycache__/
+*.py[cod]
+supabase/.temp/
 
 # generated native folders
 /ios

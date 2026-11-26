@@ -5,9 +5,8 @@ import {
   useLocalSearchParams,
   useRouter,
 } from "expo-router";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import {
-  Alert,
   Modal,
   Platform,
   Pressable,
@@ -26,12 +25,19 @@ import {
   Screen,
 } from "../../../components/ui";
 import { useAuth } from "../../../lib/auth";
-import { cachedSelect } from "../../../lib/cache";
+import { cachedSelectResult } from "../../../lib/cache";
 import { confirmAction } from "../../../lib/confirm";
 import type { Tables } from "../../../lib/database.types";
 import { Constants } from "../../../lib/database.types";
 import { formatCurrency, formatDate, titleCase } from "../../../lib/format";
 import { supabase } from "../../../lib/supabase";
+import { createOnce } from "../../../lib/createOnce";
+import { newRecordId } from "../../../lib/id";
+import { inviteUrl } from "../../../lib/appUrl";
+import { notify } from "../../../lib/feedback";
+import { calendarDate, currencyCode, nonNegativeMoney } from "../../../lib/validation";
+import { localToday } from "../../../lib/maintenance";
+import { operationError, readAllPages } from "../../../lib/operationsQuery";
 
 type Lease = Tables<"leases"> & {
   units: {
@@ -42,24 +48,6 @@ type Lease = Tables<"leases"> & {
 };
 
 const METHODS = Constants.public.Enums.payment_method;
-
-// Ambiguous characters (0/O, 1/I/L) are left out so a code read aloud or
-// written on paper still works.
-const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
-
-function newCode(length = 8): string {
-  let out = "";
-  for (let i = 0; i < length; i += 1) {
-    out += CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)];
-  }
-  return out;
-}
-
-function notify(title: string, message: string) {
-  Platform.OS === "web"
-    ? window.alert(`${title}\n\n${message}`)
-    : Alert.alert(title, message);
-}
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
@@ -75,12 +63,17 @@ function Row({ label, value }: { label: string; value: string }) {
 export default function LeaseDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const generation = useRef(0);
+  const paymentDraftId = useRef<string | null>(null);
   const { session } = useAuth();
 
   const [lease, setLease] = useState<Lease | null>(null);
   const [invites, setInvites] = useState<Tables<"tenant_invites">[]>([]);
   const [payments, setPayments] = useState<Tables<"rent_payments">[]>([]);
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // record-payment modal
   const [adding, setAdding] = useState(false);
@@ -90,81 +83,63 @@ export default function LeaseDetail() {
   const [paidOn, setPaidOn] = useState("");
   const [method, setMethod] = useState<(typeof METHODS)[number]>("bank_transfer");
   const [note, setNote] = useState("");
+  const [editingPaymentId, setEditingPaymentId] = useState<string | null>(null);
+  const [paymentCurrency, setPaymentCurrency] = useState("USD");
 
   const currency =
     lease?.rent_currency ?? lease?.units?.properties?.currency ?? "USD";
 
   const load = useCallback(async () => {
-    if (!id) return;
+    const ticket = ++generation.current;
+    if (!id) { setLoadError("Choose a lease to continue."); setLoading(false); return; }
+    setRefreshing(true);
     const [leaseData, inviteData, paymentData] = await Promise.all([
-      cachedSelect<Lease>(
-        `lease:${id}`,
-        supabase
-          .from("leases")
-          .select("*, units(label, property_id, properties(name, currency))")
-          .eq("id", id)
-          .single(),
-      ),
-      cachedSelect<Tables<"tenant_invites">[]>(
-        `invites:${id}`,
-        supabase
-          .from("tenant_invites")
-          .select("*")
-          .eq("lease_id", id)
-          .order("created_at", { ascending: false }),
-      ),
-      cachedSelect<Tables<"rent_payments">[]>(
-        `payments:${id}`,
-        supabase
-          .from("rent_payments")
-          .select("*")
-          .eq("lease_id", id)
-          .order("due_date", { ascending: false, nullsFirst: false }),
-      ),
+      cachedSelectResult<Lease>(`lease:${id}`, supabase.from("leases")
+        .select("*, units!leases_unit_id_owner_fk(label, property_id, properties!units_property_id_owner_fk(name, currency))").eq("id", id).single()),
+      cachedSelectResult<Tables<"tenant_invites">[]>(`invites:${id}`,
+        readAllPages<Tables<"tenant_invites">>((from, to) => supabase.from("tenant_invites")
+          .select("*", { count: "exact" }).eq("lease_id", id).order("created_at", { ascending: false }).order("id").range(from, to))),
+      cachedSelectResult<Tables<"rent_payments">[]>(`payments:${id}`,
+        readAllPages<Tables<"rent_payments">>((from, to) => supabase.from("rent_payments")
+          .select("*", { count: "exact" }).eq("lease_id", id).order("due_date", { ascending: false, nullsFirst: false }).order("id").range(from, to))),
     ]);
-    setLease(leaseData ?? null);
-    setInvites(inviteData ?? []);
-    setPayments(paymentData ?? []);
+    if (ticket !== generation.current) return;
+    setLease(leaseData.data); setInvites(inviteData.data ?? []); setPayments(paymentData.data ?? []);
+    setLoadError([leaseData.error, inviteData.error, paymentData.error].filter(Boolean).join(" ") || null);
+    setLoading(false);
+    setRefreshing(false);
   }, [id]);
 
   useFocusEffect(
     useCallback(() => {
-      load();
+      void load();
+      return () => { generation.current++; };
     }, [load]),
   );
 
   async function generateInvite() {
-    if (!lease || !session) return;
+    if (!lease || !session || busy) return;
     setBusy(true);
-    const { error } = await supabase.from("tenant_invites").insert({
-      owner_id: session.user.id,
-      lease_id: lease.id,
-      code: newCode(),
-      email: lease.tenant_email,
-    });
-    setBusy(false);
-    if (error) {
-      notify("Could not create invite", error.message);
-      return;
-    }
-    load();
+    try {
+      const { data, error } = await supabase.rpc("create_tenant_invite", {
+        p_lease_id: lease.id, p_email: lease.tenant_email || null,
+      });
+      if (error) throw error;
+      if (!data?.code) throw new Error("No invitation was created. Please retry.");
+      await load();
+    } catch (error) { notify("Could not create invitation", operationError(error)); }
+    finally { setBusy(false); }
   }
 
   async function shareCode(code: string) {
-    const message =
-      `Join RentView to report repairs and see your rent history.\n\n` +
-      `Your invite code: ${code}\n\n` +
-      `Create an account, then enter this code under "Join with an invite code".`;
-    if (Platform.OS === "web") {
-      try {
-        await navigator.clipboard.writeText(code);
-        notify("Code copied", `${code} is on your clipboard.`);
-      } catch {
-        notify("Invite code", code);
-      }
-      return;
-    }
-    await Share.share({ message });
+    try {
+      const url = inviteUrl(code);
+      const message = `Join RentView to report repairs and see your rent history.\n\n${url}\n\nInvitation code: ${code}`;
+      if (Platform.OS === "web") {
+        try { await navigator.clipboard.writeText(url); notify("Invitation link copied", "Share this link privately with your tenant. It continues through sign-in or account creation."); }
+        catch { notify("Tenant invitation", message); }
+      } else await Share.share({ message, url });
+    } catch (error) { notify("Could not share invitation", operationError(error)); }
   }
 
   function revokeInvite(inviteId: string) {
@@ -172,8 +147,14 @@ export default function LeaseDetail() {
       "Revoke invite",
       "The code stops working immediately. You can generate a new one.",
       async () => {
-        await supabase.from("tenant_invites").delete().eq("id", inviteId);
-        load();
+        if (busy) return;
+        setBusy(true);
+        try {
+          const { error } = await supabase.from("tenant_invites").delete().eq("id", inviteId).select("id").single();
+          if (error) throw error;
+          await load();
+        } catch (error) { notify("Could not revoke invitation", operationError(error)); }
+        finally { setBusy(false); }
       },
       "Revoke",
     );
@@ -185,40 +166,67 @@ export default function LeaseDetail() {
       "Remove portal access",
       "The tenant keeps their login but can no longer see this lease, its requests or its payment history. Use this when they move out.",
       async () => {
-        await supabase
-          .from("leases")
-          .update({ tenant_user_id: null })
-          .eq("id", lease.id);
-        load();
+        if (busy) return;
+        setBusy(true);
+        try {
+          const { error } = await supabase.from("leases").update({ tenant_user_id: null })
+            .eq("id", lease.id).select("id").single();
+          if (error) throw error;
+          await load();
+        } catch (error) { notify("Could not remove portal access", operationError(error)); }
+        finally { setBusy(false); }
       },
       "Remove",
     );
   }
 
+  function openPayment(payment?: Tables<"rent_payments">) {
+    paymentDraftId.current = null;
+    setEditingPaymentId(payment?.id ?? null);
+    setAmount(payment ? String(payment.amount) : lease?.rent_amount == null ? "" : String(lease.rent_amount));
+    setDueDate(payment?.due_date ?? ""); setPaidOn(payment?.paid_on ?? "");
+    setMethod(payment?.method ?? "bank_transfer"); setNote(payment?.note ?? "");
+    setPaymentCurrency(payment?.currency ?? currency); setAdding(true);
+  }
+
   async function savePayment() {
-    if (!lease || !session || !amount.trim()) return;
+    if (!lease || !session || saving) return;
     setSaving(true);
-    const { error } = await supabase.from("rent_payments").insert({
-      owner_id: session.user.id,
-      lease_id: lease.id,
-      amount: Number(amount),
-      currency,
-      due_date: dueDate.trim() || null,
-      paid_on: paidOn.trim() || null,
-      method,
-      note: note.trim() || null,
-    });
-    setSaving(false);
-    if (error) {
-      notify("Could not save", error.message);
-      return;
-    }
-    setAdding(false);
-    setAmount("");
-    setDueDate("");
-    setPaidOn("");
-    setNote("");
-    load();
+    try {
+      const value = nonNegativeMoney(amount, "Payment amount");
+      if (!value) throw new Error("Payment amount must be greater than zero.");
+      const paid = calendarDate(paidOn, "Paid on", true);
+      if (paid && paid > localToday()) throw new Error("Paid on cannot be in the future.");
+      const payload = {
+        amount: value, currency: currencyCode(paymentCurrency),
+        due_date: calendarDate(dueDate, "Due date", true), paid_on: paid,
+        method, note: note.trim() || null,
+      };
+      if (editingPaymentId) {
+        const { error } = await supabase.from("rent_payments").update(payload).eq("id", editingPaymentId).select("id").single();
+        if (error) throw error;
+      } else {
+        paymentDraftId.current ??= newRecordId();
+        const record = { ...payload, id: paymentDraftId.current, owner_id: session.user.id, lease_id: lease.id };
+        await createOnce(record,
+          () => supabase.from("rent_payments").insert(record).select("id").single(),
+          () => supabase.from("rent_payments").select("*").eq("id", record.id).single());
+      }
+      setAdding(false); setEditingPaymentId(null); await load();
+    } catch (error) { notify("Could not save payment record", operationError(error)); }
+    finally { setSaving(false); }
+  }
+
+  async function markPaid(payment: Tables<"rent_payments">) {
+    if (payment.paid_on || busy) return;
+    setBusy(true);
+    try {
+      const { error } = await supabase.from("rent_payments").update({ paid_on: localToday() })
+        .eq("id", payment.id).is("paid_on", null).select("id").single();
+      if (error) throw error;
+      await load();
+    } catch (error) { notify("Could not mark payment paid", operationError(error)); }
+    finally { setBusy(false); }
   }
 
   function removePayment(paymentId: string) {
@@ -226,13 +234,20 @@ export default function LeaseDetail() {
       "Delete payment",
       "This removes the record from the tenant's history too.",
       async () => {
-        await supabase.from("rent_payments").delete().eq("id", paymentId);
-        load();
+        if (busy) return;
+        setBusy(true);
+        try {
+          const { error } = await supabase.from("rent_payments").delete().eq("id", paymentId).select("id").single();
+          if (error) throw error;
+          await load();
+        } catch (error) { notify("Could not delete payment record", operationError(error)); }
+        finally { setBusy(false); }
       },
     );
   }
 
-  if (!lease) return <Loading />;
+  if (loading) return <Loading />;
+  if (!lease) return <Screen><View className="p-5"><Text accessibilityRole="alert" className="mb-3 text-red-700">{loadError ?? "This lease is unavailable or you no longer have access."}</Text><Button title="Retry" onPress={() => void load()} /><Button title="Back to properties" variant="secondary" onPress={() => router.replace("/properties")} /></View></Screen>;
 
   const activeInvite = invites.find(
     (i) => !i.claimed_at && new Date(i.expires_at) > new Date(),
@@ -256,9 +271,11 @@ export default function LeaseDetail() {
         <Text className="flex-1 text-xl font-bold text-slate-900" numberOfLines={1}>
           {lease.tenant_name}
         </Text>
+        <Button title="Refresh lease" variant="secondary" loading={refreshing} disabled={busy || saving} onPress={() => void load()} />
       </View>
 
       <ScrollView contentContainerClassName="px-5 pb-10">
+        {loadError ? <View className="mb-3"><Text accessibilityRole="alert" className="mb-2 text-red-700">{loadError}</Text><Button title="Retry" variant="secondary" onPress={() => void load()} /></View> : null}
         <Card>
           <View className="flex-row items-center justify-between">
             <Text className="text-base font-semibold text-slate-900">
@@ -313,24 +330,26 @@ export default function LeaseDetail() {
                 title="Remove portal access"
                 variant="secondary"
                 onPress={unlinkTenant}
+                disabled={busy}
               />
             </View>
           </Card>
         ) : activeInvite ? (
           <Card>
             <Text className="text-sm text-slate-500">
-              Share this code with {lease.tenant_name}:
+              Share this private invitation with {lease.tenant_name}:
             </Text>
             <Text className="my-2 text-3xl font-bold tracking-[4px] text-brand">
               {activeInvite.code}
             </Text>
             <Text className="text-xs text-slate-400">
               Expires {formatDate(activeInvite.expires_at)} · single use
+              {activeInvite.email ? ` · Only ${activeInvite.email} can claim after verifying their email.` : ""}
             </Text>
             <View className="mt-3 flex-row gap-3">
               <View className="flex-1">
                 <Button
-                  title={Platform.OS === "web" ? "Copy code" : "Share code"}
+                  title={Platform.OS === "web" ? "Copy invitation link" : "Share invitation link"}
                   onPress={() => shareCode(activeInvite.code)}
                 />
               </View>
@@ -338,6 +357,7 @@ export default function LeaseDetail() {
                 <Button
                   title="Revoke"
                   variant="secondary"
+                  disabled={busy}
                   onPress={() => revokeInvite(activeInvite.id)}
                 />
               </View>
@@ -351,7 +371,8 @@ export default function LeaseDetail() {
             </Text>
             <View className="mt-3">
               <Button
-                title="Generate invite code"
+                title={lease.status === "active" ? "Generate tenant invitation" : "Activate the lease to invite"}
+                disabled={lease.status !== "active"}
                 onPress={generateInvite}
                 loading={busy}
               />
@@ -365,7 +386,7 @@ export default function LeaseDetail() {
             Rent payments
           </Text>
           <Pressable
-            onPress={() => setAdding(true)}
+            onPress={() => openPayment()}
             className="flex-row items-center rounded-full bg-brand px-3 py-1.5"
           >
             <Ionicons name="add" color="#fff" size={16} />
@@ -385,7 +406,7 @@ export default function LeaseDetail() {
                 <Text className="text-base font-semibold text-slate-900">
                   {formatCurrency(p.amount, p.currency)}
                 </Text>
-                <Pressable onPress={() => removePayment(p.id)}>
+                <Pressable accessibilityRole="button" accessibilityLabel="Delete payment record" disabled={busy} onPress={() => removePayment(p.id)}>
                   <Ionicons name="trash-outline" size={18} color="#dc2626" />
                 </Pressable>
               </View>
@@ -400,22 +421,24 @@ export default function LeaseDetail() {
               {p.note ? (
                 <Text className="mt-1 text-xs text-slate-400">{p.note}</Text>
               ) : null}
+              <View className="mt-3 flex-row gap-2"><Button title="Edit record" variant="secondary" disabled={busy} onPress={() => openPayment(p)} />{!p.paid_on ? <Button title="Mark paid today" disabled={busy} onPress={() => void markPaid(p)} /> : null}</View>
             </Card>
           ))
         )}
       </ScrollView>
 
-      <Modal visible={adding} animationType="slide" transparent>
+      <Modal visible={adding} onRequestClose={() => !saving && setAdding(false)} animationType="slide" transparent>
         <View className="flex-1 justify-end bg-black/40">
           <ScrollView
             className="max-h-[88%] rounded-t-3xl bg-slate-50"
             contentContainerClassName="p-5"
           >
             <Text className="mb-4 text-xl font-bold text-slate-900">
-              Record a payment
+              {editingPaymentId ? "Edit payment record" : "Record a payment"}
             </Text>
+            <Field label="Currency" value={paymentCurrency} onChangeText={setPaymentCurrency} autoCapitalize="characters" maxLength={3} />
             <Field
-              label={`Amount (${currency})`}
+              label={`Amount (${paymentCurrency})`}
               value={amount}
               onChangeText={setAmount}
               keyboardType="decimal-pad"
@@ -465,6 +488,7 @@ export default function LeaseDetail() {
               <View className="flex-1">
                 <Button
                   title="Cancel"
+                  disabled={saving}
                   variant="secondary"
                   onPress={() => setAdding(false)}
                 />

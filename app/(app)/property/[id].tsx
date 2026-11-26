@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { Modal, Pressable, ScrollView, Text, View } from "react-native";
 
 import { DocumentsSection } from "../../../components/DocumentsSection";
@@ -14,12 +14,17 @@ import {
   Screen,
 } from "../../../components/ui";
 import { useAuth } from "../../../lib/auth";
-import { cachedSelect } from "../../../lib/cache";
+import { cachedSelectResult } from "../../../lib/cache";
 import { confirmAction } from "../../../lib/confirm";
 import type { Tables } from "../../../lib/database.types";
 import { Constants } from "../../../lib/database.types";
 import { formatCurrency, titleCase } from "../../../lib/format";
 import { supabase } from "../../../lib/supabase";
+import { createOnce } from "../../../lib/createOnce";
+import { newRecordId } from "../../../lib/id";
+import { notify } from "../../../lib/feedback";
+import { currencyCode, nonNegativeMoney } from "../../../lib/validation";
+import { operationError, readAllPages } from "../../../lib/operationsQuery";
 
 const UNIT_TYPES = Constants.public.Enums.unit_type;
 const UNIT_STATUSES = Constants.public.Enums.unit_status;
@@ -28,6 +33,8 @@ const PROPERTY_TYPES = Constants.public.Enums.property_type;
 export default function PropertyDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const generation = useRef(0);
+  const unitDraftId = useRef<string | null>(null);
   const { session } = useAuth();
 
   const [property, setProperty] = useState<Tables<"properties"> | null>(null);
@@ -36,7 +43,9 @@ export default function PropertyDetail() {
   const [openWorkOrders, setOpenWorkOrders] = useState<Tables<"work_orders">[]>(
     [],
   );
-  const [spend, setSpend] = useState(0);
+  const [spend, setSpend] = useState<Map<string, number>>(new Map());
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -59,56 +68,37 @@ export default function PropertyDetail() {
   const [eNotes, setENotes] = useState("");
 
   const load = useCallback(async () => {
-    if (!id) return;
+    const ticket = ++generation.current;
+    if (!id) { setLoading(false); setLoadError("Choose a property to continue."); return; }
     const [prop, unitRows, assetRows, woRows, expenseRows] = await Promise.all([
-      cachedSelect<Tables<"properties">>(
-        `property:${id}`,
-        supabase.from("properties").select("*").eq("id", id).single(),
-      ),
-      cachedSelect<Tables<"units">[]>(
-        `units:prop:${id}`,
-        supabase
-          .from("units")
-          .select("*")
-          .eq("property_id", id)
-          .order("created_at", { ascending: true }),
-      ),
-      cachedSelect<Tables<"assets">[]>(
-        `assets:prop:${id}`,
-        supabase
-          .from("assets")
-          .select("*")
-          .eq("property_id", id)
-          .order("created_at", { ascending: true }),
-      ),
-      cachedSelect<Tables<"work_orders">[]>(
-        `wos:prop:${id}`,
-        supabase
-          .from("work_orders")
-          .select("*")
-          .eq("property_id", id)
-          .in("status", ["open", "in_progress", "on_hold"])
-          .order("created_at", { ascending: false }),
-      ),
-      cachedSelect<{ amount: number }[]>(
-        `expenses:prop:${id}`,
-        supabase.from("expenses").select("amount").eq("property_id", id),
-      ),
+      cachedSelectResult<Tables<"properties">>(`property:${id}`,
+        supabase.from("properties").select("*").eq("id", id).single()),
+      cachedSelectResult<Tables<"units">[]>(`units:prop:${id}`,
+        readAllPages<Tables<"units">>((from, to) => supabase.from("units").select("*", { count: "exact" }).eq("property_id", id).order("created_at").order("id").range(from, to))),
+      cachedSelectResult<Tables<"assets">[]>(`assets:prop:${id}`,
+        readAllPages<Tables<"assets">>((from, to) => supabase.from("assets").select("*", { count: "exact" }).eq("property_id", id).order("name").order("id").range(from, to))),
+      cachedSelectResult<Tables<"work_orders">[]>(`wos:prop:${id}`,
+        readAllPages<Tables<"work_orders">>((from, to) => supabase.from("work_orders").select("*", { count: "exact" }).eq("property_id", id).in("status", ["open", "in_progress", "on_hold"]).order("created_at", { ascending: false }).order("id").range(from, to))),
+      cachedSelectResult<{ amount: number; currency: string }[]>(`expenses:prop:${id}`,
+        readAllPages<{ amount: number; currency: string }>((from, to) => supabase.from("expenses").select("amount, currency", { count: "exact" }).eq("property_id", id).order("id").range(from, to))),
     ]);
-    setProperty(prop ?? null);
-    setUnits(unitRows ?? []);
-    setAssets(assetRows ?? []);
-    setOpenWorkOrders(woRows ?? []);
-    setSpend((expenseRows ?? []).reduce((s, r) => s + Number(r.amount ?? 0), 0));
+    if (ticket !== generation.current) return;
+    setProperty(prop.data); setUnits(unitRows.data ?? []); setAssets(assetRows.data ?? []); setOpenWorkOrders(woRows.data ?? []);
+    setLoadError([prop.error, unitRows.error, assetRows.error, woRows.error, expenseRows.error].filter(Boolean).join(" ") || null);
+    const grouped = new Map<string, number>();
+    for (const row of expenseRows.data ?? []) grouped.set(row.currency, (grouped.get(row.currency) ?? 0) + Number(row.amount));
+    setSpend(grouped); setLoading(false);
   }, [id]);
 
   useFocusEffect(
     useCallback(() => {
-      load();
+      void load();
+      return () => { generation.current++; };
     }, [load]),
   );
 
   function resetForm() {
+    unitDraftId.current = null;
     setLabel("");
     setUnitType("apartment");
     setStatus("vacant");
@@ -116,23 +106,19 @@ export default function PropertyDetail() {
   }
 
   async function saveUnit() {
-    if (!label.trim() || !session || !id) return;
+    if (!label.trim() || !session || !id) { notify("Missing label", "Enter a unit label."); return; }
     setSaving(true);
-    const { error } = await supabase.from("units").insert({
-      owner_id: session.user.id,
-      property_id: id,
-      label: label.trim(),
-      unit_type: unitType,
-      status,
-      rent_amount: rent ? Number(rent) : null,
-      rent_currency: property?.currency ?? "USD",
-    });
-    setSaving(false);
-    if (!error) {
-      setAdding(false);
-      resetForm();
-      load();
-    }
+    try {
+      unitDraftId.current ??= newRecordId();
+      const payload = { id: unitDraftId.current, owner_id: session.user.id, property_id: id,
+        label: label.trim(), unit_type: unitType, status,
+        rent_amount: rent.trim() ? nonNegativeMoney(rent, "Rent") : null, rent_currency: property?.currency ?? "USD" };
+      await createOnce(payload,
+        () => supabase.from("units").insert(payload).select("id").single(),
+        () => supabase.from("units").select("*").eq("id", payload.id).single());
+      setAdding(false); resetForm(); await load();
+    } catch (error) { notify("Could not save unit", operationError(error)); }
+    finally { setSaving(false); }
   }
 
   function openEdit() {
@@ -147,24 +133,18 @@ export default function PropertyDetail() {
   }
 
   async function saveEdit() {
-    if (!eName.trim() || !id) return;
+    if (!eName.trim() || !id) { notify("Missing name", "Enter a property name."); return; }
     setSaving(true);
-    const { error } = await supabase
-      .from("properties")
-      .update({
-        name: eName.trim(),
-        property_type: eType,
-        city: eCity.trim() || null,
-        currency: eCurrency.trim() || "USD",
-        estimated_value: eValue ? Number(eValue) : null,
+    try {
+      const { error } = await supabase.from("properties").update({
+        name: eName.trim(), property_type: eType, city: eCity.trim() || null,
+        currency: currencyCode(eCurrency), estimated_value: eValue.trim() ? nonNegativeMoney(eValue, "Estimated value") : null,
         notes: eNotes.trim() || null,
-      })
-      .eq("id", id);
-    setSaving(false);
-    if (!error) {
-      setEditing(false);
-      load();
-    }
+      }).eq("id", id).select("id").single();
+      if (error) throw error;
+      setEditing(false); await load();
+    } catch (error) { notify("Could not update property", operationError(error)); }
+    finally { setSaving(false); }
   }
 
   function deleteProperty() {
@@ -173,19 +153,25 @@ export default function PropertyDetail() {
       "This permanently deletes the property and all its units, assets, work orders and records. This cannot be undone.",
       async () => {
         if (!id) return;
-        await supabase.from("properties").delete().eq("id", id);
-        router.replace("/properties");
+        try {
+          const { error } = await supabase.from("properties").delete().eq("id", id).select("id").single();
+          if (error) throw error;
+          router.replace("/properties");
+        } catch (error) { notify("Could not delete property", operationError(error)); }
       },
     );
   }
 
-  if (!property || !units) return <Loading />;
+  if (loading) return <Loading />;
+  if (!property || !units) return <Screen><View className="p-5"><Text accessibilityRole="alert" className="mb-3 text-red-700">{loadError ?? "This property is unavailable or you no longer have access."}</Text><Button title="Retry" onPress={() => void load()} /><Button title="Back to properties" variant="secondary" onPress={() => router.replace("/properties")} /></View></Screen>;
 
   return (
     <Screen>
       <Stack.Screen options={{ headerShown: false }} />
       <View className="flex-row items-center px-4 pb-2 pt-2">
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Back"
           onPress={() =>
             router.canGoBack() ? router.back() : router.replace("/properties")
           }
@@ -196,15 +182,17 @@ export default function PropertyDetail() {
         <Text className="flex-1 text-xl font-bold text-slate-900" numberOfLines={1}>
           {property.name}
         </Text>
-        <Pressable onPress={openEdit} className="p-2">
+        <Pressable accessibilityRole="button" accessibilityLabel="Edit property" onPress={openEdit} className="p-2">
           <Ionicons name="create-outline" size={22} color="#0f766e" />
         </Pressable>
-        <Pressable onPress={deleteProperty} className="p-2">
+        <Pressable accessibilityRole="button" accessibilityLabel="Delete property" onPress={deleteProperty} className="p-2">
           <Ionicons name="trash-outline" size={22} color="#dc2626" />
         </Pressable>
       </View>
 
       <ScrollView contentContainerClassName="px-5 pb-10">
+        {loadError ? <View className="mb-3"><Text accessibilityRole="alert" className="mb-2 text-red-700">{loadError}</Text><Button title="Retry" variant="secondary" onPress={() => void load()} /></View> : null}
+        <View className="mb-3"><Button title="New maintenance job" onPress={() => router.push({ pathname: "/work-orders", params: { new: "1", propertyId: property.id } })} /></View>
         <Card>
           <View className="flex-row items-center justify-between">
             <Badge label={property.property_type} />
@@ -309,13 +297,13 @@ export default function PropertyDetail() {
           <View className="flex-row items-center justify-between">
             <Text className="text-slate-600">Total spend tracked</Text>
             <Text className="text-lg font-bold text-slate-900">
-              {formatCurrency(spend, property.currency)}
+              {[...spend.entries()].map(([currency, amount]) => formatCurrency(amount, currency)).join(" + ") || (loadError ? "Unavailable" : formatCurrency(0, property.currency))}
             </Text>
           </View>
         </Card>
       </ScrollView>
 
-      <Modal visible={editing} animationType="slide" transparent>
+      <Modal visible={editing} onRequestClose={() => !saving && setEditing(false)} animationType="slide" transparent>
         <View className="flex-1 justify-end bg-black/40">
           <ScrollView
             className="max-h-[88%] rounded-t-3xl bg-slate-50"
@@ -367,6 +355,7 @@ export default function PropertyDetail() {
               <View className="flex-1">
                 <Button
                   title="Cancel"
+                  disabled={saving}
                   variant="secondary"
                   onPress={() => setEditing(false)}
                 />
@@ -379,7 +368,7 @@ export default function PropertyDetail() {
         </View>
       </Modal>
 
-      <Modal visible={adding} animationType="slide" transparent>
+      <Modal visible={adding} onRequestClose={() => !saving && setAdding(false)} animationType="slide" transparent>
         <View className="flex-1 justify-end bg-black/40">
           <ScrollView
             className="max-h-[85%] rounded-t-3xl bg-slate-50"
@@ -452,6 +441,7 @@ export default function PropertyDetail() {
               <View className="flex-1">
                 <Button
                   title="Cancel"
+                  disabled={saving}
                   variant="secondary"
                   onPress={() => {
                     setAdding(false);

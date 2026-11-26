@@ -54,7 +54,7 @@ export default function Announcements() {
         "announcements",
         supabase
           .from("announcements")
-          .select("*, properties(name)")
+          .select("*, properties!announcements_property_id_owner_fk(name)")
           .order("created_at", { ascending: false }),
       ),
       cachedSelect<Tables<"properties">[]>(

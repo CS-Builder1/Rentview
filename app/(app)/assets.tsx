@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Stack, useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useState } from "react";
+import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, Modal, Platform, Pressable, ScrollView, Text, View } from "react-native";
 
 import {
@@ -13,12 +13,16 @@ import {
   Screen,
 } from "../../components/ui";
 import { useAuth } from "../../lib/auth";
-import { cachedSelect } from "../../lib/cache";
+import { cachedSelectResult } from "../../lib/cache";
 import { useOffline } from "../../lib/offline";
 import type { Tables } from "../../lib/database.types";
 import { Constants } from "../../lib/database.types";
 import { formatCurrency, formatDate, titleCase } from "../../lib/format";
 import { supabase } from "../../lib/supabase";
+import { operationError, readAllPages } from "../../lib/operationsQuery";
+import { localToday, positiveNumber, validCalendarDate } from "../../lib/maintenance";
+import { newRecordId } from "../../lib/id";
+import { createInsertDraft, insertDraftIdentity, type InsertDraft } from "../../lib/insertDraft";
 
 function notify(title: string, message: string) {
   Platform.OS === "web"
@@ -35,13 +39,19 @@ const STATUSES = Constants.public.Enums.asset_status;
 
 export default function Assets() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ filter?: string; propertyId?: string; unitId?: string; new?: string }>();
+  const [search, setSearch] = useState("");
+  const locationGeneration = useRef(0);
+  const [error, setError] = useState<string | null>(null);
   const { session } = useAuth();
-  const { submitInsert } = useOffline();
+  const { submitInsert, operations } = useOffline();
   const [assets, setAssets] = useState<Asset[] | null>(null);
   const [properties, setProperties] = useState<Tables<"properties">[]>([]);
   const [units, setUnits] = useState<Tables<"units">[]>([]);
   const [adding, setAdding] = useState(false);
   const [saving, setSaving] = useState(false);
+  const draft = useRef<InsertDraft | null>(null);
+  const savingRef = useRef(false);
 
   // form
   const [name, setName] = useState("");
@@ -54,20 +64,21 @@ export default function Assets() {
 
   const load = useCallback(async () => {
     const [a, p] = await Promise.all([
-      cachedSelect<Asset[]>(
+      cachedSelectResult<Asset[]>(
         "assets",
-        supabase
+        readAllPages<Asset>((from, to) => supabase
           .from("assets")
-          .select("*, properties(name, currency), units(label)")
-          .order("created_at", { ascending: false }),
+          .select("*, properties!assets_property_id_owner_fk(name, currency), units!assets_unit_property_owner_fk(label)", { count: "exact" })
+          .order("created_at", { ascending: false }).order("id").range(from, to)),
       ),
-      cachedSelect<Tables<"properties">[]>(
+      cachedSelectResult<Tables<"properties">[]>(
         "properties_min",
         supabase.from("properties").select("*").order("name"),
       ),
     ]);
-    setAssets(a ?? []);
-    setProperties(p ?? []);
+    setAssets(a.data ?? []);
+    setProperties(p.data ?? []);
+    setError(a.error || p.error);
   }, []);
 
   useFocusEffect(
@@ -77,17 +88,29 @@ export default function Assets() {
   );
 
   async function pickProperty(pid: string) {
+    const ticket = ++locationGeneration.current;
     setPropertyId(pid);
     setUnitId(null);
-    const { data } = await supabase
+    setUnits([]);
+    const { data, error: e } = await supabase
       .from("units")
       .select("*")
       .eq("property_id", pid)
       .order("label");
+    if (ticket !== locationGeneration.current) return;
+    if (e) { notify("Could not load units", e.message); return; }
     setUnits(data ?? []);
   }
 
+  useEffect(() => {
+    if (params.new !== "1" || !params.propertyId || savingRef.current) return;
+    if (!beginDraft()) return;
+    void pickProperty(params.propertyId).then(() => setUnitId(params.unitId ?? null));
+  }, [params.new, params.propertyId, params.unitId]);
+
   function resetForm() {
+    draft.current = null;
+    locationGeneration.current++;
     setName("");
     setCategory("");
     setPropertyId(null);
@@ -98,12 +121,29 @@ export default function Assets() {
     setStatus("operational");
   }
 
+  function beginDraft(): boolean {
+    if (savingRef.current) return false;
+    try {
+      const identity = session ? createInsertDraft(session.user.id, newRecordId) : null;
+      resetForm();
+      draft.current = identity;
+      setAdding(true);
+      return true;
+    } catch (error) { notify("Could not open asset", operationError(error)); return false; }
+  }
+  function openAdd() { beginDraft(); }
+
   async function save() {
-    if (!name.trim() || !propertyId || !session) return;
+    if (savingRef.current) return;
+    if (!name.trim() || !propertyId || !session) { notify("Missing details", "Enter a name and choose a property."); return; }
+    try { if (warranty && !validCalendarDate(warranty)) throw new Error("Choose a valid warranty date in YYYY-MM-DD format."); if (life && !Number.isSafeInteger(positiveNumber(life, "Expected life"))) throw new Error("Expected life must be a whole number of years."); }
+    catch (e) { notify("Check asset details", operationError(e)); return; }
+    savingRef.current = true;
     setSaving(true);
     try {
+      const identity = insertDraftIdentity(draft.current, session.user.id, operations, "asset");
       const result = await submitInsert("assets", {
-        owner_id: session.user.id,
+        ...identity,
         property_id: propertyId,
         unit_id: unitId,
         name: name.trim(),
@@ -123,19 +163,23 @@ export default function Assets() {
         load();
       }
     } catch (e) {
-      notify("Could not save", e instanceof Error ? e.message : String(e));
+      notify("Could not save", operationError(e));
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   }
 
   if (!assets) return <Loading />;
+  const visible = assets.filter(a => (!params.propertyId || a.property_id === params.propertyId) && `${a.name} ${a.category ?? ""} ${a.properties?.name ?? ""} ${a.units?.label ?? ""}`.toLowerCase().includes(search.toLowerCase()) && (params.filter !== "warranty" || (!!a.warranty_expiry && a.warranty_expiry >= localToday() && a.warranty_expiry <= new Date(Date.now() + 60 * 86400000).toISOString().slice(0, 10))));
 
   return (
     <Screen>
       <Stack.Screen options={{ headerShown: false }} />
       <View className="flex-row items-center px-4 pb-2 pt-2">
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Back"
           onPress={() =>
             router.canGoBack() ? router.back() : router.replace("/more")
           }
@@ -144,11 +188,12 @@ export default function Assets() {
           <Ionicons name="chevron-back" size={24} color="#0f766e" />
         </Pressable>
         <Text className="flex-1 text-xl font-bold text-slate-900">Assets</Text>
-        <Pressable onPress={() => router.push("/scan")} className="p-2">
+        <Pressable accessibilityRole="button" accessibilityLabel="Scan asset QR tag" onPress={() => router.push("/scan")} className="p-2">
           <Ionicons name="qr-code-outline" size={22} color="#0f766e" />
         </Pressable>
         <Pressable
-          onPress={() => setAdding(true)}
+          disabled={saving}
+          onPress={openAdd}
           className="flex-row items-center rounded-full bg-brand px-3 py-2"
         >
           <Ionicons name="add" color="#fff" size={18} />
@@ -156,14 +201,14 @@ export default function Assets() {
         </Pressable>
       </View>
 
-      <ScrollView contentContainerClassName="px-5 pb-10">
-        {assets.length === 0 ? (
+      <ScrollView contentContainerClassName="px-5 pb-10"><Field label="Search assets" value={search} onChangeText={setSearch} placeholder="Name, property, unit or category" />{error ? <><Text accessibilityRole="alert" className="mb-2 text-red-700">{error}</Text><Button title="Retry" variant="secondary" onPress={() => void load()} /></> : null}{params.filter === "warranty" ? <View className="mb-3"><Button title="Show all assets" variant="secondary" onPress={() => router.setParams({ filter: "all" })} /></View> : null}
+        {visible.length === 0 && !error ? (
           <EmptyState
             title="No assets tracked"
             subtitle="Track appliances, HVAC, and fixtures — make, warranty, and expected life for replacement forecasting."
           />
         ) : (
-          assets.map((a) => (
+          visible.map((a) => (
             <Card key={a.id} onPress={() => router.push(`/asset/${a.id}`)}>
               <View className="flex-row items-center justify-between">
                 <Text className="flex-1 pr-2 text-base font-semibold text-slate-900">
@@ -194,7 +239,7 @@ export default function Assets() {
         )}
       </ScrollView>
 
-      <Modal visible={adding} animationType="slide" transparent>
+      <Modal visible={adding} onRequestClose={() => !savingRef.current && setAdding(false)} animationType="slide" transparent>
         <View className="flex-1 justify-end bg-black/40">
           <ScrollView
             className="max-h-[88%] rounded-t-3xl bg-slate-50"
@@ -205,12 +250,14 @@ export default function Assets() {
             <Field
               label="Name"
               value={name}
+              editable={!saving}
               onChangeText={setName}
               placeholder="e.g. Split AC unit, Refrigerator"
             />
             <Field
               label="Category (optional)"
               value={category}
+              editable={!saving}
               onChangeText={setCategory}
               placeholder="HVAC, Appliance, Plumbing…"
             />
@@ -223,6 +270,7 @@ export default function Assets() {
                 {properties.map((p) => (
                   <Pressable
                     key={p.id}
+                    disabled={saving}
                     onPress={() => pickProperty(p.id)}
                     className={`mb-2 mr-2 rounded-full border px-3 py-2 ${
                       propertyId === p.id
@@ -253,6 +301,7 @@ export default function Assets() {
                   {units.map((u) => (
                     <Pressable
                       key={u.id}
+                      disabled={saving}
                       onPress={() => setUnitId(unitId === u.id ? null : u.id)}
                       className={`mb-2 mr-2 rounded-full border px-3 py-2 ${
                         unitId === u.id
@@ -278,6 +327,7 @@ export default function Assets() {
             <Field
               label="Warranty expiry (YYYY-MM-DD, optional)"
               value={warranty}
+              editable={!saving}
               onChangeText={setWarranty}
               placeholder="2028-01-31"
               autoCapitalize="none"
@@ -285,6 +335,7 @@ export default function Assets() {
             <Field
               label="Expected life (years, optional)"
               value={life}
+              editable={!saving}
               onChangeText={setLife}
               placeholder="10"
               keyboardType="number-pad"
@@ -295,6 +346,7 @@ export default function Assets() {
               {STATUSES.map((s) => (
                 <Pressable
                   key={s}
+                  disabled={saving}
                   onPress={() => setStatus(s)}
                   className={`mb-2 mr-2 rounded-full border px-3 py-2 ${
                     status === s ? "border-brand bg-brand" : "border-slate-300 bg-white"
@@ -313,8 +365,10 @@ export default function Assets() {
               <View className="flex-1">
                 <Button
                   title="Cancel"
+                  disabled={saving}
                   variant="secondary"
                   onPress={() => {
+                    if (savingRef.current) return;
                     setAdding(false);
                     resetForm();
                   }}

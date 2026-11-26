@@ -14,6 +14,111 @@ export type Database = {
   }
   public: {
     Tables: {
+      maintenance_completions: {
+        Row: {
+          id: string
+          owner_id: string
+          schedule_id: string | null
+          property_id: string | null
+          unit_id: string | null
+          asset_id: string | null
+          completed_on: string
+          notes: string | null
+          next_due: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          owner_id?: string
+          schedule_id?: string | null
+          property_id?: string | null
+          unit_id?: string | null
+          asset_id?: string | null
+          completed_on?: string
+          notes?: string | null
+          next_due?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          owner_id?: string
+          schedule_id?: string | null
+          property_id?: string | null
+          unit_id?: string | null
+          asset_id?: string | null
+          completed_on?: string
+          notes?: string | null
+          next_due?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
+      inventory_movements: {
+        Row: {
+          id: string
+          owner_id: string
+          inventory_item_id: string | null
+          work_order_id: string | null
+          part_id: string | null
+          quantity_change: number
+          reason: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          owner_id?: string
+          inventory_item_id?: string | null
+          work_order_id?: string | null
+          part_id?: string | null
+          quantity_change?: number
+          reason?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          owner_id?: string
+          inventory_item_id?: string | null
+          work_order_id?: string | null
+          part_id?: string | null
+          quantity_change?: number
+          reason?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
+      work_order_events: {
+        Row: {
+          id: string
+          owner_id: string
+          work_order_id: string
+          asset_id: string | null
+          event_type: string
+          summary: string | null
+          data: Json
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          owner_id?: string
+          work_order_id?: string
+          asset_id?: string | null
+          event_type?: string
+          summary?: string | null
+          data?: Json
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          owner_id?: string
+          work_order_id?: string
+          asset_id?: string | null
+          event_type?: string
+          summary?: string | null
+          data?: Json
+          created_at?: string
+        }
+        Relationships: []
+      }
       announcements: {
         Row: {
           body: string | null
@@ -40,6 +145,14 @@ export type Database = {
           title?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "announcements_property_id_owner_fk"
+            columns: ["property_id","owner_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id","owner_id"]
+          },
+
           {
             foreignKeyName: "announcements_property_id_fkey"
             columns: ["property_id"]
@@ -114,6 +227,28 @@ export type Database = {
           warranty_expiry?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "assets_property_id_owner_fk"
+            columns: ["property_id","owner_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id","owner_id"]
+          },
+          {
+            foreignKeyName: "assets_unit_id_owner_fk"
+            columns: ["unit_id","owner_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id","owner_id"]
+          },
+          {
+            foreignKeyName: "assets_unit_property_owner_fk"
+            columns: ["unit_id","property_id","owner_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id","property_id","owner_id"]
+          },
+
           {
             foreignKeyName: "assets_property_id_fkey"
             columns: ["property_id"]
@@ -205,6 +340,56 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "documents_property_id_owner_fk"
+            columns: ["property_id","owner_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id","owner_id"]
+          },
+          {
+            foreignKeyName: "documents_unit_id_owner_fk"
+            columns: ["unit_id","owner_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id","owner_id"]
+          },
+          {
+            foreignKeyName: "documents_asset_id_owner_fk"
+            columns: ["asset_id","owner_id"]
+            isOneToOne: false
+            referencedRelation: "assets"
+            referencedColumns: ["id","owner_id"]
+          },
+          {
+            foreignKeyName: "documents_work_order_id_owner_fk"
+            columns: ["work_order_id","owner_id"]
+            isOneToOne: false
+            referencedRelation: "work_orders"
+            referencedColumns: ["id","owner_id"]
+          },
+          {
+            foreignKeyName: "documents_unit_property_owner_fk"
+            columns: ["unit_id","property_id","owner_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id","property_id","owner_id"]
+          },
+          {
+            foreignKeyName: "documents_asset_property_owner_fk"
+            columns: ["asset_id","property_id","owner_id"]
+            isOneToOne: false
+            referencedRelation: "assets"
+            referencedColumns: ["id","property_id","owner_id"]
+          },
+          {
+            foreignKeyName: "documents_job_property_owner_fk"
+            columns: ["work_order_id","property_id","owner_id"]
+            isOneToOne: false
+            referencedRelation: "work_orders"
+            referencedColumns: ["id","property_id","owner_id"]
+          },
+
+          {
             foreignKeyName: "documents_asset_id_fkey"
             columns: ["asset_id"]
             isOneToOne: false
@@ -294,6 +479,49 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "expenses_property_id_owner_fk"
+            columns: ["property_id","owner_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id","owner_id"]
+          },
+          {
+            foreignKeyName: "expenses_unit_id_owner_fk"
+            columns: ["unit_id","owner_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id","owner_id"]
+          },
+          {
+            foreignKeyName: "expenses_work_order_id_owner_fk"
+            columns: ["work_order_id","owner_id"]
+            isOneToOne: false
+            referencedRelation: "work_orders"
+            referencedColumns: ["id","owner_id"]
+          },
+          {
+            foreignKeyName: "expenses_vendor_id_owner_fk"
+            columns: ["vendor_id","owner_id"]
+            isOneToOne: false
+            referencedRelation: "vendors"
+            referencedColumns: ["id","owner_id"]
+          },
+          {
+            foreignKeyName: "expenses_unit_property_owner_fk"
+            columns: ["unit_id","property_id","owner_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id","property_id","owner_id"]
+          },
+          {
+            foreignKeyName: "expenses_job_property_owner_fk"
+            columns: ["work_order_id","property_id","owner_id"]
+            isOneToOne: false
+            referencedRelation: "work_orders"
+            referencedColumns: ["id","property_id","owner_id"]
+          },
+
+          {
             foreignKeyName: "expenses_property_id_fkey"
             columns: ["property_id"]
             isOneToOne: false
@@ -377,6 +605,28 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "inventory_items_property_id_owner_fk"
+            columns: ["property_id","owner_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id","owner_id"]
+          },
+          {
+            foreignKeyName: "inventory_items_unit_id_owner_fk"
+            columns: ["unit_id","owner_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id","owner_id"]
+          },
+          {
+            foreignKeyName: "inventory_items_unit_property_owner_fk"
+            columns: ["unit_id","property_id","owner_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id","property_id","owner_id"]
+          },
+
+          {
             foreignKeyName: "inventory_items_property_id_fkey"
             columns: ["property_id"]
             isOneToOne: false
@@ -449,6 +699,14 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "leases_unit_id_owner_fk"
+            columns: ["unit_id","owner_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id","owner_id"]
+          },
+
+          {
             foreignKeyName: "leases_unit_id_fkey"
             columns: ["unit_id"]
             isOneToOne: false
@@ -470,7 +728,7 @@ export type Database = {
           rating_comment: string | null
           resolved_at: string | null
           status: Database["public"]["Enums"]["request_status"]
-          tenant_user_id: string
+          tenant_user_id: string | null
           title: string
           unit_id: string
           updated_at: string
@@ -489,7 +747,7 @@ export type Database = {
           rating_comment?: string | null
           resolved_at?: string | null
           status?: Database["public"]["Enums"]["request_status"]
-          tenant_user_id: string
+          tenant_user_id?: string | null
           title: string
           unit_id: string
           updated_at?: string
@@ -508,7 +766,7 @@ export type Database = {
           rating_comment?: string | null
           resolved_at?: string | null
           status?: Database["public"]["Enums"]["request_status"]
-          tenant_user_id?: string
+          tenant_user_id?: string | null
           title?: string
           unit_id?: string
           updated_at?: string
@@ -516,6 +774,56 @@ export type Database = {
           work_order_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "maintenance_requests_lease_id_owner_fk"
+            columns: ["lease_id","owner_id"]
+            isOneToOne: false
+            referencedRelation: "leases"
+            referencedColumns: ["id","owner_id"]
+          },
+          {
+            foreignKeyName: "maintenance_requests_unit_id_owner_fk"
+            columns: ["unit_id","owner_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id","owner_id"]
+          },
+          {
+            foreignKeyName: "maintenance_requests_property_id_owner_fk"
+            columns: ["property_id","owner_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id","owner_id"]
+          },
+          {
+            foreignKeyName: "maintenance_requests_work_order_id_owner_fk"
+            columns: ["work_order_id","owner_id"]
+            isOneToOne: false
+            referencedRelation: "work_orders"
+            referencedColumns: ["id","owner_id"]
+          },
+          {
+            foreignKeyName: "maintenance_requests_unit_property_owner_fk"
+            columns: ["unit_id","property_id","owner_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id","property_id","owner_id"]
+          },
+          {
+            foreignKeyName: "maintenance_requests_job_property_owner_fk"
+            columns: ["work_order_id","property_id","owner_id"]
+            isOneToOne: false
+            referencedRelation: "work_orders"
+            referencedColumns: ["id","property_id","owner_id"]
+          },
+          {
+            foreignKeyName: "requests_lease_unit_owner_fk"
+            columns: ["lease_id","unit_id","owner_id"]
+            isOneToOne: false
+            referencedRelation: "leases"
+            referencedColumns: ["id","unit_id","owner_id"]
+          },
+
           {
             foreignKeyName: "maintenance_requests_lease_id_fkey"
             columns: ["lease_id"]
@@ -555,6 +863,8 @@ export type Database = {
       }
       maintenance_schedules: {
         Row: {
+          anchor_day: number | null
+          cadence: string
           asset_id: string | null
           created_at: string
           description: string | null
@@ -571,6 +881,8 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          anchor_day?: number | null
+          cadence?: string
           asset_id?: string | null
           created_at?: string
           description?: string | null
@@ -587,6 +899,8 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          anchor_day?: number | null
+          cadence?: string
           asset_id?: string | null
           created_at?: string
           description?: string | null
@@ -603,6 +917,42 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "maintenance_schedules_property_id_owner_fk"
+            columns: ["property_id","owner_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id","owner_id"]
+          },
+          {
+            foreignKeyName: "maintenance_schedules_unit_id_owner_fk"
+            columns: ["unit_id","owner_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id","owner_id"]
+          },
+          {
+            foreignKeyName: "maintenance_schedules_asset_id_owner_fk"
+            columns: ["asset_id","owner_id"]
+            isOneToOne: false
+            referencedRelation: "assets"
+            referencedColumns: ["id","owner_id"]
+          },
+          {
+            foreignKeyName: "maintenance_schedules_unit_property_owner_fk"
+            columns: ["unit_id","property_id","owner_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id","property_id","owner_id"]
+          },
+          {
+            foreignKeyName: "maintenance_schedules_asset_property_owner_fk"
+            columns: ["asset_id","property_id","owner_id"]
+            isOneToOne: false
+            referencedRelation: "assets"
+            referencedColumns: ["id","property_id","owner_id"]
+          },
+
           {
             foreignKeyName: "maintenance_schedules_asset_id_fkey"
             columns: ["asset_id"]
@@ -628,6 +978,7 @@ export type Database = {
       }
       notification_prefs: {
         Row: {
+          email_enabled: boolean
           announcements: boolean
           created_at: string
           messages: boolean
@@ -637,6 +988,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          email_enabled?: boolean
           announcements?: boolean
           created_at?: string
           messages?: boolean
@@ -646,6 +998,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          email_enabled?: boolean
           announcements?: boolean
           created_at?: string
           messages?: boolean
@@ -812,6 +1165,14 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "rent_payments_lease_id_owner_fk"
+            columns: ["lease_id","owner_id"]
+            isOneToOne: false
+            referencedRelation: "leases"
+            referencedColumns: ["id","owner_id"]
+          },
+
+          {
             foreignKeyName: "rent_payments_lease_id_fkey"
             columns: ["lease_id"]
             isOneToOne: false
@@ -833,21 +1194,21 @@ export type Database = {
           created_at: string
           id: string
           request_id: string
-          sender_id: string
+          sender_id: string | null
         }
         Insert: {
           body: string
           created_at?: string
           id?: string
           request_id: string
-          sender_id: string
+          sender_id?: string | null
         }
         Update: {
           body?: string
           created_at?: string
           id?: string
           request_id?: string
-          sender_id?: string
+          sender_id?: string | null
         }
         Relationships: [
           {
@@ -861,18 +1222,21 @@ export type Database = {
       }
       request_photos: {
         Row: {
+          uploaded_by: string | null
           created_at: string
           id: string
           request_id: string
           storage_path: string
         }
         Insert: {
+          uploaded_by?: string | null
           created_at?: string
           id?: string
           request_id: string
           storage_path: string
         }
         Update: {
+          uploaded_by?: string | null
           created_at?: string
           id?: string
           request_id?: string
@@ -890,6 +1254,7 @@ export type Database = {
       }
       subscriptions: {
         Row: {
+          billing_verified_at: string | null
           cancel_at_period_end: boolean
           created_at: string
           current_period_end: string | null
@@ -903,6 +1268,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          billing_verified_at?: string | null
           cancel_at_period_end?: boolean
           created_at?: string
           current_period_end?: string | null
@@ -916,6 +1282,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          billing_verified_at?: string | null
           cancel_at_period_end?: boolean
           created_at?: string
           current_period_end?: string | null
@@ -975,6 +1342,28 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "tasks_property_id_owner_fk"
+            columns: ["property_id","owner_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id","owner_id"]
+          },
+          {
+            foreignKeyName: "tasks_unit_id_owner_fk"
+            columns: ["unit_id","owner_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id","owner_id"]
+          },
+          {
+            foreignKeyName: "tasks_unit_property_owner_fk"
+            columns: ["unit_id","property_id","owner_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id","property_id","owner_id"]
+          },
+
+          {
             foreignKeyName: "tasks_property_id_fkey"
             columns: ["property_id"]
             isOneToOne: false
@@ -1025,6 +1414,14 @@ export type Database = {
           owner_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "tenant_invites_lease_id_owner_fk"
+            columns: ["lease_id","owner_id"]
+            isOneToOne: false
+            referencedRelation: "leases"
+            referencedColumns: ["id","owner_id"]
+          },
+
           {
             foreignKeyName: "tenant_invites_lease_id_fkey"
             columns: ["lease_id"]
@@ -1098,6 +1495,14 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "units_property_id_owner_fk"
+            columns: ["property_id","owner_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id","owner_id"]
+          },
+
+          {
             foreignKeyName: "units_property_id_fkey"
             columns: ["property_id"]
             isOneToOne: false
@@ -1147,6 +1552,8 @@ export type Database = {
       }
       work_order_parts: {
         Row: {
+          removed_at: string | null
+          operation_input: Json | null
           cost_currency: string | null
           created_at: string
           description: string | null
@@ -1158,6 +1565,8 @@ export type Database = {
           work_order_id: string
         }
         Insert: {
+          removed_at?: string | null
+          operation_input?: Json | null
           cost_currency?: string | null
           created_at?: string
           description?: string | null
@@ -1169,6 +1578,8 @@ export type Database = {
           work_order_id: string
         }
         Update: {
+          removed_at?: string | null
+          operation_input?: Json | null
           cost_currency?: string | null
           created_at?: string
           description?: string | null
@@ -1180,6 +1591,21 @@ export type Database = {
           work_order_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "work_order_parts_work_order_id_owner_fk"
+            columns: ["work_order_id","owner_id"]
+            isOneToOne: false
+            referencedRelation: "work_orders"
+            referencedColumns: ["id","owner_id"]
+          },
+          {
+            foreignKeyName: "work_order_parts_inventory_item_id_owner_fk"
+            columns: ["inventory_item_id","owner_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_items"
+            referencedColumns: ["id","owner_id"]
+          },
+
           {
             foreignKeyName: "work_order_parts_inventory_item_id_fkey"
             columns: ["inventory_item_id"]
@@ -1198,6 +1624,8 @@ export type Database = {
       }
       work_orders: {
         Row: {
+          completion_input: Json | null
+          completion_expense_id: string | null
           asset_id: string | null
           completed_at: string | null
           cost: number | null
@@ -1216,6 +1644,8 @@ export type Database = {
           vendor_id: string | null
         }
         Insert: {
+          completion_input?: Json | null
+          completion_expense_id?: string | null
           asset_id?: string | null
           completed_at?: string | null
           cost?: number | null
@@ -1234,6 +1664,8 @@ export type Database = {
           vendor_id?: string | null
         }
         Update: {
+          completion_input?: Json | null
+          completion_expense_id?: string | null
           asset_id?: string | null
           completed_at?: string | null
           cost?: number | null
@@ -1252,6 +1684,56 @@ export type Database = {
           vendor_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "work_orders_property_id_owner_fk"
+            columns: ["property_id","owner_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id","owner_id"]
+          },
+          {
+            foreignKeyName: "work_orders_unit_id_owner_fk"
+            columns: ["unit_id","owner_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id","owner_id"]
+          },
+          {
+            foreignKeyName: "work_orders_asset_id_owner_fk"
+            columns: ["asset_id","owner_id"]
+            isOneToOne: false
+            referencedRelation: "assets"
+            referencedColumns: ["id","owner_id"]
+          },
+          {
+            foreignKeyName: "work_orders_vendor_id_owner_fk"
+            columns: ["vendor_id","owner_id"]
+            isOneToOne: false
+            referencedRelation: "vendors"
+            referencedColumns: ["id","owner_id"]
+          },
+          {
+            foreignKeyName: "work_orders_unit_property_owner_fk"
+            columns: ["unit_id","property_id","owner_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id","property_id","owner_id"]
+          },
+          {
+            foreignKeyName: "work_orders_asset_property_owner_fk"
+            columns: ["asset_id","property_id","owner_id"]
+            isOneToOne: false
+            referencedRelation: "assets"
+            referencedColumns: ["id","property_id","owner_id"]
+          },
+          {
+            foreignKeyName: "work_orders_completion_expense_owner_fk"
+            columns: ["completion_expense_id","owner_id"]
+            isOneToOne: false
+            referencedRelation: "expenses"
+            referencedColumns: ["id","owner_id"]
+          },
+
           {
             foreignKeyName: "work_orders_asset_id_fkey"
             columns: ["asset_id"]
@@ -1324,6 +1806,40 @@ export type Database = {
       }
     }
     Functions: {
+      billing_reconciliation_pending: { Args: Record<PropertyKey, never>; Returns: boolean }
+      current_account_is_active: { Args: Record<PropertyKey, never>; Returns: boolean }
+      create_tenant_invite: {
+        Args: { p_lease_id: string; p_email?: string | null }
+        Returns: Database["public"]["Tables"]["tenant_invites"]["Row"]
+      }
+      can_access_request: { Args: { p_request_id: string }; Returns: boolean }
+      close_tenant_request: { Args: { p_request_id: string }; Returns: undefined }
+      rate_request_resolution: {
+        Args: { p_request_id: string; p_rating: number; p_comment?: string | null }
+        Returns: undefined
+      }
+      reopen_tenant_request: {
+        Args: { p_request_id: string; p_reason: string }
+        Returns: undefined
+      }
+      convert_request_to_work_order: { Args: { p_request_id: string }; Returns: string }
+      add_work_order_part: {
+        Args: {
+          p_work_order_id: string; p_inventory_item_id: string | null; p_description: string | null
+          p_quantity: number; p_unit_cost: number | null; p_currency: string; p_operation_id?: string
+        }
+        Returns: string
+      }
+      remove_work_order_part: { Args: { p_part_id: string }; Returns: undefined }
+      complete_work_order: {
+        Args: { p_work_order_id: string; p_labor_amount: number; p_currency: string; p_summary?: string | null; p_use_existing_expenses?: boolean; p_time_zone?: string }
+        Returns: string
+      }
+      complete_maintenance_schedule: {
+        Args: { p_schedule_id: string; p_completed_on?: string; p_notes?: string | null; p_time_zone?: string }
+        Returns: string
+      }
+      asset_cost_totals: { Args: { p_asset_id: string }; Returns: { currency: string; total: number }[] }
       claim_tenant_invite: { Args: { invite_code: string }; Returns: Json }
       is_tenant_of_lease: { Args: { p_lease: string }; Returns: boolean }
       register_push_token: {
