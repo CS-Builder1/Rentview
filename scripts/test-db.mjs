@@ -13,7 +13,25 @@ if (version.error || version.status !== 0) {
 }
 const root = fileURLToPath(new URL('..', import.meta.url));
 const env = { PATH: process.env.PATH ?? '', LANG: 'C.UTF-8', PGCONNECT_TIMEOUT: '5' };
-for (const file of ['tests/db/trust.sql', 'tests/db/property-handover.sql', 'tests/db/backend-services.sql', 'tests/db/numerics.sql', 'tests/db/tenant-projection.sql', 'tests/db/rls-performance.sql', 'tests/db/pg-net-boundary.sql', 'tests/db/relationship-deletion.sql', 'tests/db/review-operations.sql', 'tests/db/billing-reconciliation.sql', 'tests/db/notification-delivery.sql', 'tests/db/deletion-worker.sql']) {
+const suites = [
+  'tests/db/trust.sql',
+  'tests/db/property-handover.sql',
+  'tests/db/backend-services.sql',
+  'tests/db/numerics.sql',
+  'tests/db/tenant-projection.sql',
+  'tests/db/rls-performance.sql',
+  'tests/db/pg-net-boundary.sql',
+  'tests/db/relationship-deletion.sql',
+  'tests/db/review-operations.sql',
+  'tests/db/billing-reconciliation.sql',
+  'tests/db/notification-delivery.sql',
+  'tests/db/deletion-worker.sql',
+  'tests/db/property-history.sql',
+  'tests/db/inbox.sql',
+  'tests/db/dispatch.sql',
+  'tests/db/rent-allocations.sql',
+];
+for (const file of suites) {
   const result = spawnSync('psql', ['--no-psqlrc', '--set', 'ON_ERROR_STOP=1', '--dbname', raw, '--file', path.join(root, file)], { env, stdio: 'inherit', timeout: 60000 });
   if (result.error || result.status !== 0) {
     console.error('Local database regression failed or could not run; validation is incomplete.'); process.exit(result.status ?? 1);

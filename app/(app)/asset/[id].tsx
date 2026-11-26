@@ -206,6 +206,13 @@ export default function AssetDetail() {
       </View>
 
       <ScrollView contentContainerClassName="px-5 pb-12">
+        <View className="mb-3">
+          <Button
+            title="Condition & repair history"
+            variant="secondary"
+            onPress={() => router.push({ pathname: "/history", params: { propertyId: asset.property_id, ...(asset.unit_id ? { unitId: asset.unit_id } : {}), assetId: asset.id } })}
+          />
+        </View>
         {loadError ? <View className="mb-3"><Text accessibilityRole="alert" className="mb-2 text-red-700">{loadError}</Text><Button title="Refresh" variant="secondary" onPress={() => void load()} /></View> : null}
         <View className="mb-3 flex-row gap-2"><View className="flex-1"><Button title="New job" onPress={() => router.push({ pathname: "/work-orders", params: { new: "1", propertyId: asset.property_id, assetId: asset.id, ...(asset.unit_id ? { unitId: asset.unit_id } : {}) } })} /></View><View className="flex-1"><Button title="Schedule service" variant="secondary" onPress={() => router.push({ pathname: "/maintenance", params: { new: "1", propertyId: asset.property_id, assetId: asset.id, ...(asset.unit_id ? { unitId: asset.unit_id } : {}) } })} /></View></View>
         <Card>

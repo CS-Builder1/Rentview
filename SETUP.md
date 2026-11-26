@@ -1,5 +1,7 @@
 # Validation and release setup
 
+To reproduce the November 24 rental operations walkthrough and current local checks, see [Suite verification](SUITE_VERIFICATION.md).
+
 ## 2026-10-30 review follow-up
 
 Bounded local verification is complete: 146 unit/handler tests, both TypeScript

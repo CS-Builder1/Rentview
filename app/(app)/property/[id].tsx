@@ -194,6 +194,13 @@ export default function PropertyDetail() {
 
       <ScrollView contentContainerClassName="px-5 pb-10">
         {property.owner_id === session?.user.id ? <PropertyManagers propertyId={property.id} /> : null}
+        <View className="mb-3">
+          <Button
+            title="Condition & repair history"
+            variant="secondary"
+            onPress={() => router.push({ pathname: "/history", params: { propertyId: property.id } })}
+          />
+        </View>
         {loadError ? <View className="mb-3"><Text accessibilityRole="alert" className="mb-2 text-red-700">{loadError}</Text><Button title="Retry" variant="secondary" onPress={() => void load()} /></View> : null}
         <View className="mb-3"><Button title="New maintenance job" onPress={() => router.push({ pathname: "/work-orders", params: { new: "1", propertyId: property.id } })} /></View>
         <Card>

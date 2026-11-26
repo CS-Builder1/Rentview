@@ -291,6 +291,13 @@ export default function UnitDetail() {
       </View>
 
       <ScrollView contentContainerClassName="px-5 pb-12">
+        <View className="mb-3">
+          <Button
+            title="Condition & repair history"
+            variant="secondary"
+            onPress={() => router.push({ pathname: "/history", params: { propertyId: unit.property_id, unitId: unit.id } })}
+          />
+        </View>
         {loadError ? <View className="mb-3"><Text accessibilityRole="alert" className="mb-2 text-red-700">{loadError}</Text><Button title="Retry" variant="secondary" onPress={() => void load()} /></View> : null}
         <View className="mb-3"><Button title="New maintenance job" onPress={() => router.push({ pathname: "/work-orders", params: { new: "1", propertyId: unit.property_id, unitId: unit.id } })} /></View>
         <Card>

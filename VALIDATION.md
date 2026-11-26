@@ -1,5 +1,7 @@
 # Local implementation validation
 
+For the November 24 combined application test run, including contractor dispatch, inspections, lease turnover and real Edge account deletion, see [Suite verification](SUITE_VERIFICATION.md).
+
 ## 2026-10-30 PR review follow-up
 
 The bounded local follow-up passed against the final application source and the

@@ -9,6 +9,7 @@ import type { Cell } from "../../lib/csvCore";
 import type { Tables } from "../../lib/database.types";
 import { titleCase } from "../../lib/format";
 import { supabase } from "../../lib/supabase";
+import { operatingStatement, type StatementEntry } from "../../lib/operatingReport";
 import { totalsByCurrency } from "../../lib/dashboard";
 import { operationError, readAllPages } from "../../lib/operationsQuery";
 
@@ -57,7 +58,7 @@ export default function ExportPacket() {
     }, [load]),
   );
 
-  async function run() {
+  async function run(includeRent = false) {
     setBusy(true);
     try {
       const bounds = periodBounds(period);
@@ -85,8 +86,26 @@ export default function ExportPacket() {
         vendors: { name: string } | null;
       }>;
 
-      if (rows.length === 0) {
-        notify("Nothing to export", "No expenses match that property and period.");
+      const entries: StatementEntry[] = [];
+      if (includeRent) {
+        let query = supabase.from("rent_receipts_report").select("*", { count: "exact" }).order("paid_on").order("id");
+        if (propertyId) query = query.eq("property_id", propertyId);
+        if (bounds.start) query = query.gte("paid_on", bounds.start);
+        if (bounds.end) query = query.lte("paid_on", bounds.end);
+        const receipts = await readAllPages<Tables<"rent_receipts_report">>((from, to) => query.range(from, to));
+        if (receipts.error) throw receipts.error;
+        entries.push(...(receipts.data ?? []).map(receipt => ({
+          date: receipt.paid_on, property: receipt.property_name, unit: receipt.unit_label,
+          type: "Rent received" as const, amount: receipt.amount, currency: receipt.currency, vendor: "", label: "",
+        })));
+        entries.push(...rows.map(expense => ({
+          date: expense.incurred_on, property: expense.properties?.name ?? "", unit: expense.units?.label ?? "",
+          type: "Expense incurred" as const, amount: expense.amount, currency: expense.currency, vendor: expense.vendors?.name ?? "",
+          label: [titleCase(expense.category), expense.description].filter(Boolean).join(" · "),
+        })));
+      }
+      if (rows.length === 0 && entries.length === 0) {
+        notify("Nothing to export", includeRent ? "No rent receipts or expenses match that property and period." : "No expenses match that property and period.");
         return;
       }
 
@@ -117,16 +136,16 @@ export default function ExportPacket() {
       for (const [cur, total] of totals)
         totalRows.push(["", "", "", "", "", `Total (${cur})`, decimalCell(total), cur]);
 
-      const csv = toCsv(headers, [...body, ...totalRows]);
+      const csv = includeRent ? operatingStatement(entries) : toCsv(headers, [...body, ...totalRows]);
       const prop = propertyId
         ? (properties?.find((p) => p.id === propertyId)?.name ?? "property")
         : "all-properties";
       const safe = prop.replace(/[^\w]+/g, "-").toLowerCase();
-      const filename = `rentview-expenses-${safe}-${bounds.label}.csv`;
+      const filename = `rentview-${includeRent ? "operating-statement" : "expenses"}-${safe}-${bounds.label}.csv`;
 
       await exportText(filename, "text/csv", csv);
       if (Platform.OS === "web") {
-        notify("Export ready", `${rows.length} expense(s) downloaded as ${filename}.`);
+        notify("Export ready", `${includeRent ? entries.length : rows.length} record(s) downloaded as ${filename}.`);
       }
     } catch (e) {
       notify("Export failed", e instanceof Error ? e.message : String(e));
@@ -219,9 +238,11 @@ export default function ExportPacket() {
 
         <Button
           title={busy ? "Preparing…" : "Export CSV"}
-          onPress={run}
+          onPress={() => void run()}
           loading={busy}
         />
+        <View className="mt-3"><Button title="Export rent and expenses CSV" variant="secondary" disabled={busy} onPress={() => void run(true)} /></View>
+        <Text className="mt-2 text-slate-600">The combined statement groups rent by receipt date and expenses by incurred date, with totals for each currency.</Text>
         <Text className="mt-3 text-xs text-slate-400">
           The file includes date, property, unit, category, description,
           vendor and amount, with totals per currency. For your records —

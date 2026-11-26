@@ -85,6 +85,7 @@ export type Database = {
           property_id: string | null
           unit_id: string | null
           asset_id: string | null
+          imported_from_schedule: boolean
           completed_on: string
           notes: string | null
           next_due: string | null
@@ -97,6 +98,7 @@ export type Database = {
           property_id?: string | null
           unit_id?: string | null
           asset_id?: string | null
+          imported_from_schedule?: boolean
           completed_on?: string
           notes?: string | null
           next_due?: string | null
@@ -109,6 +111,7 @@ export type Database = {
           property_id?: string | null
           unit_id?: string | null
           asset_id?: string | null
+          imported_from_schedule?: boolean
           completed_on?: string
           notes?: string | null
           next_due?: string | null
@@ -1213,6 +1216,15 @@ export type Database = {
         }
         Relationships: []
       }
+      rent_allocations: {
+        Row: { id: string; charge_id: string; receipt_id: string; amount: number; created_at: string }
+        Insert: { id: string; charge_id: string; receipt_id: string; amount: number; created_at?: string }
+        Update: { id?: string; charge_id?: string; receipt_id?: string; amount?: number; created_at?: string }
+        Relationships: [
+          { foreignKeyName: "rent_allocations_charge_id_fkey"; columns: ["charge_id"]; isOneToOne: false; referencedRelation: "rent_payments"; referencedColumns: ["id"] },
+          { foreignKeyName: "rent_allocations_receipt_id_fkey"; columns: ["receipt_id"]; isOneToOne: false; referencedRelation: "rent_payments"; referencedColumns: ["id"] }
+        ]
+      }
       rent_payments: {
         Row: {
           created_by: string | null
@@ -1874,6 +1886,18 @@ export type Database = {
       }
     }
     Views: DispatchViews & {
+      rent_record_balances: {
+        Row: Database["public"]["Tables"]["rent_payments"]["Row"] & { applied_amount: number }
+        Relationships: []
+      }
+      rent_receipts_report: {
+        Row: { id: string; paid_on: string; amount: number; currency: string; property_id: string; property_name: string; unit_label: string }
+        Relationships: []
+      }
+      property_event_history: {
+        Row: import("./history").HistoryEvent
+        Relationships: []
+      }
       tenant_lease_details: {
         Row: {
           address_line1: string | null
@@ -1928,6 +1952,23 @@ export type Database = {
       cancel_portfolio_transfer: { Args: Record<PropertyKey, never>; Returns: undefined }
       revoke_lease_portal: { Args: { p_lease: string; p_archive?: boolean }; Returns: undefined }
 
+      apply_rent_receipt: {
+        Args: {
+          p_operation_id: string; p_charge_id: string; p_receipt_id: string; p_amount: number
+          p_paid_on?: string; p_method?: Database["public"]["Enums"]["payment_method"] | null; p_note?: string; p_time_zone?: string
+        }
+        Returns: string
+      }
+      record_property_history: {
+        Args: {
+          p_id: string; p_property: string; p_unit: string | null; p_asset: string | null;
+          p_lease: string | null; p_kind: string; p_date: string; p_title: string;
+          p_details: string; p_observer: string; p_phase: string | null;
+          p_rooms: Json; p_evidence: string[]; p_follow_up: boolean
+        }
+        Returns: string
+      }
+      resolve_property_history: { Args: { p_id: string }; Returns: undefined }
       billing_reconciliation_pending: { Args: Record<PropertyKey, never>; Returns: boolean }
       current_account_is_active: { Args: Record<PropertyKey, never>; Returns: boolean }
       create_tenant_invite: {

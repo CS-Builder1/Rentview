@@ -48,12 +48,15 @@ Pricing: a generous **Free** tier + a single **Pro** tier (~$19/mo), billed on t
 app/                     Expo Router routes
   (auth)/login.tsx       Sign in / sign up
   claim.tsx              Tenant invite-code claim (either role)
-  (app)/                 Owner app
+  inbox.tsx              Activity and lease conversations
+  contractor/            Assigned jobs and visits
+  (app)/                 Owner and property manager app
     (tabs)/index.tsx     Portfolio overview
     (tabs)/properties.tsx  Properties list + add
     property/[id].tsx    Property detail + units (varying complexes)
     unit/[id].tsx        Unit detail + leases
-    lease/[id].tsx       Tenant invites + rent payment history
+    lease/[id].tsx       Tenant invites, charges and receipt allocation
+    history.tsx          Dated observations, inspections, visits and history export
     (tabs)/work-orders.tsx Work orders list + add
     requests.tsx         Tenant request inbox
     request/[id].tsx     Triage: status, thread, convert to work order
@@ -81,28 +84,20 @@ supabase/
                          send-push, lemonsqueezy-webhook, paypal-webhook)
 ```
 
-## Local implementation milestone (unreleased)
+## Local verification
 
-The current worktree contains access-control, offline, billing, tenant-flow and owner-workflow changes. The matching SQL is versioned in `supabase/migrations/20261028190215_trust_and_operations.sql` and `20261028193614_optimize_identity_policies.sql`, tested against disposable local Supabase/PostgreSQL. Neither has been applied to the hosted project. The separate owner-only `supabase/privileged/lock_down_pg_net.sql` also passed locally; it is not an automatic migration. Do not deploy these frontend/Edge changes against the old schema. See [VALIDATION.md](./VALIDATION.md) for passing checks and coverage limits, and [SECURITY_RELEASE_GATES.md](./SECURITY_RELEASE_GATES.md) for open advisories and release decisions.
+The November review covers property access and ownership transfer, renter and contractor communication, offline recovery, property condition histories, lease turnover and rent reconciliation. The step-by-step report lists the journeys exercised with local Auth, PostgreSQL, Storage and Edge Functions, along with the checks that require a physical device or provider account. [Suite verification](SUITE_VERIFICATION.md)
 
-The combined application changes pass 108 regression tests, both type checks,
-13 local core E2E checkpoints and 36 browser edge checks. Separate bounded suites
-add nine checks each for recovery/account interruptions, finance/CSV/timezones and
-keyboard/accessibility, plus exact-cent and in-flight-save probes. These fixes
-preserve expense drafts and operation IDs, prevent delayed saves from erasing new
-drafts, keep cross-tab auth navigation stable and expose readable keyboard
-controls. Physical-device behavior, successful Edge-runtime deletion, real
-provider delivery and a full accessibility audit remain release gates.
-
-Local checks use the installed toolchain without starting CI (the dependency-free test harness requires Node 24+):
+Run the unit and TypeScript checks with Node 24 or later.
 
 ```bash
+npm ci
 npm test
 npm run typecheck
 npm run typecheck:tests
 ```
 
-`npm run test:db` refuses remote URLs and requires an explicitly disposable local Supabase-compatible database. Real local RLS, Storage, browser-to-database, failure and concurrency checks now supplement the unit/handler fixtures. See [SETUP.md](./SETUP.md) for validation and release gates. No hosted settings, credentials, migrations or providers have been changed.
+The database suite requires an explicitly disposable local Supabase-compatible database. The migration files and privileged extension-owner maintenance have separate prerequisites. Earlier verification and release decisions are recorded in [VALIDATION.md](./VALIDATION.md), [SETUP.md](./SETUP.md) and [SECURITY_RELEASE_GATES.md](./SECURITY_RELEASE_GATES.md).
 
 ## Getting started
 
@@ -115,10 +110,7 @@ npm run typecheck
 
 ### Database
 
-The schema lives in `supabase/migrations/`. The trust/operations and identity-optimization migrations are
-local only; earlier baseline migrations do not establish that hosted schema is
-current. Complete the release gates in [SETUP.md](./SETUP.md) before an authorized
-hosted upgrade. The following commands are release operations, not test setup:
+The schema lives in `supabase/migrations/`. The proposed application needs the complete migration sequence. Hosted upgrades require the prerequisites in [SETUP.md](./SETUP.md). The following commands are for a separately approved release.
 
 ```bash
 supabase link --project-ref <ref>
@@ -134,25 +126,16 @@ Anything that needs your own accounts or credentials — Expo, Lemon Squeezy,
 PayPal, Resend — is tracked in **[SETUP.md](./SETUP.md)**. The app runs with
 all of it unset; each feature fails soft.
 
-## Tenant portal
+## Working with a manager, renter and contractor
 
-One codebase, two roles. `profiles.role` decides which app renders — existing accounts
-stay `owner`, and only claiming an invite flips an account to `tenant`.
+1. Open a property to invite a manager by email and choose the properties they manage. Each manager signs in with their own verified account. An owner can hand over management or offer the portfolio to a successor.
+2. Open an active lease and share its resident invitation. The confirmed renter can open a general lease conversation, view their rent balance, or report a repair with location, urgency and photos.
+3. Open the repair in the manager inbox and convert it to a work order. From **Vendors**, invite the contractor using their confirmed email, then assign the job. The worker can accept or decline. The resident can propose a different visit window or confirm an appointment.
+4. The contractor records what they did and can attach photos. The renter sees the visit and completion details, can rate the result, and can reopen the repair. The manager posts financial closeout separately.
+5. From the property, unit or asset, open **Condition & repair history** to find a past job, record a dated observation, compare move-in and move-out inspections, or export the filtered history. Archive the lease on turnover to retain the owner's records.
+6. Use **Rent and leases** to record charges and receipts, including partial payments. The renter and manager see balances by currency. The accountant packet can include rent receipts and expenses.
 
-1. **Invite** — the owner opens a lease (Unit → lease card → *Invite to portal*) and
-   generates a single-use code that expires in 14 days.
-2. **Claim** — the tenant creates a normal account and enters the code under *Join with
-   an invite code*. `claim_tenant_invite` validates it, links the lease, and flips the
-   role. An account that owns properties is never demoted.
-3. **Report** — the tenant submits a request against their own **active** lease. Every
-   scoping column is re-validated in the database, so nothing can be forged.
-4. **Triage** — the request lands in the owner's inbox. Converting it opens a work order
-   and links the two; a trigger mirrors the work order's status back to the request, so
-   the tenant sees progress without ever seeing costs, vendors, parts or notes.
-5. **Close the loop** — the tenant rates the fix once it is resolved.
-
-Rent payments are records the owner logs, visible to that lease's tenant. RentView does
-not process payments.
+The inbox keeps unread activity for each recipient. Native push and external email also require configured providers. RentView records rent paid through the parties’ agreed payment method.
 
 ## Billing
 
@@ -270,12 +253,7 @@ properties/units/leases, assets with QR entry, work orders with photos and parts
 vendors, inventory, expenses, preventive maintenance, document upload, offline-first
 capture with a sync queue, accountant CSV export, and scheduled email reminders.
 
-**Tenant portal — built.** Owners generate a single-use invite code on a lease; the
-tenant claims it at sign-in and the app routes them to the portal instead of the owner
-app. Tenants see their lease, report repairs with photos, message the owner on the
-request, follow status, see the rent the owner has recorded, and rate the fix. Owners
-triage requests in an inbox, convert one into a work order in a tap (costs, vendors and
-parts stay private), and broadcast announcements to a property or the whole portfolio.
+**Resident and contractor portals.** Residents can message management, report repairs, confirm visits, view balances and reopen unresolved work. Contractors can accept or decline assignments, coordinate visits and submit completion evidence. Property staff can retrieve a unit's prior repairs and compare inspections after a tenancy ends. See the [suite verification](SUITE_VERIFICATION.md) for the scenarios exercised against local Auth, PostgreSQL and Storage.
 
 **Push notifications — implemented locally; device/provider delivery unverified.**
 Database triggers and durable workers select recipients and honor notification
@@ -287,7 +265,4 @@ Trusted initial provider binding, reconciliation and provider delivery must pass
 before enabling paid checkout. Ordinary signup remains available. The local
 source has not been deployed.
 
-**Next:** resolve the explicit upstream, hosted, device/provider and product gates
-in [SECURITY_RELEASE_GATES.md](./SECURITY_RELEASE_GATES.md). The synthetic local
-owner/tenant core journey and bounded recovery, finance and keyboard suites pass;
-remaining coverage limits stay explicit in [VALIDATION.md](./VALIDATION.md).
+For the current review results and remaining device, provider and hosted checks, see [suite verification](SUITE_VERIFICATION.md).

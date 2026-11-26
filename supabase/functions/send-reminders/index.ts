@@ -40,14 +40,17 @@ Deno.serve(async req => {
     const deadline = Date.now() + 70_000;
     for (const owner of owners) {
       if (Date.now() > deadline) break; // Remaining owners stay eligible for the next scheduled batch.
-      const [warrantyResult, maintenanceResult] = await Promise.all([
-        admin.from("assets").select("name,warranty_expiry,properties!assets_property_id_owner_fk(name)").eq("owner_id", owner.owner_id).not("warranty_expiry", "is", null).gte("warranty_expiry", calendar.today).lte("warranty_expiry", calendar.soon).order("warranty_expiry").limit(500),
-        admin.from("maintenance_schedules").select("title,next_due,properties!maintenance_schedules_property_id_owner_fk(name)").eq("owner_id", owner.owner_id).eq("is_active", true).not("next_due", "is", null).lte("next_due", calendar.today).order("next_due").limit(500),
+      const [warrantyResult, maintenanceResult, leaseResult] = await Promise.all([
+        admin.from("assets").select("name,warranty_expiry,properties!assets_property_id_owner_fk(name)", { count: "exact" }).eq("owner_id", owner.owner_id).not("warranty_expiry", "is", null).gte("warranty_expiry", calendar.today).lte("warranty_expiry", calendar.soon).order("warranty_expiry").order("id").limit(500),
+        admin.from("maintenance_schedules").select("title,next_due,properties!maintenance_schedules_property_id_owner_fk(name)", { count: "exact" }).eq("owner_id", owner.owner_id).eq("is_active", true).not("next_due", "is", null).lte("next_due", calendar.today).order("next_due").order("id").limit(500),
+        admin.from("leases").select("tenant_name,end_date", { count: "exact" }).eq("owner_id", owner.owner_id).eq("status", "active").gte("end_date", calendar.today).lte("end_date", calendar.soon).order("end_date").order("id").limit(500),
       ]);
+      if (leaseResult.error) throw leaseResult.error;
       if (warrantyResult.error) throw warrantyResult.error;
       if (maintenanceResult.error) throw maintenanceResult.error;
       const warranties = warrantyResult.data ?? [], maintenance = maintenanceResult.data ?? [];
-      if (!warranties.length && !maintenance.length) continue;
+      const leases = leaseResult.data ?? [];
+      if (!warranties.length && !maintenance.length && !leases.length) continue;
       dueUsers++;
       const { data: claimData, error: claimError } = await admin.rpc("claim_reminder", { p_owner_id: owner.owner_id, p_day: calendar.today }).maybeSingle();
       if (claimError) throw claimError;
@@ -64,10 +67,13 @@ Deno.serve(async req => {
         const lines = [
           ...warranties.map(item => `${item.name}${property(item.properties) ? ` (${property(item.properties)})` : ""} — warranty expires ${item.warranty_expiry}`),
           ...maintenance.map(item => `${item.title}${property(item.properties) ? ` (${property(item.properties)})` : ""} — maintenance due ${item.next_due}`),
+          ...leases.map(item => `${item.tenant_name} — lease ends ${item.end_date}`),
         ];
-        const text = `RentView warranty and maintenance reminders\n\n${lines.join("\n")}\n\nOpen RentView to see all due items and manage your records.`;
-        const html = `<!doctype html><html lang="en"><head><title>RentView reminders</title></head><body><h1>Warranty and maintenance reminders</h1><ul>${lines.map(line => `<li>${escapeHtml(line)}</li>`).join("")}</ul><p>Open RentView to see all due items and manage your records.</p></body></html>`;
-        const response = await fetchWithTimeout("https://api.resend.com/emails", { method: "POST", headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json", "Idempotency-Key": `rentview-reminder-${owner.owner_id}-${calendar.today}` }, body: JSON.stringify({ from, to: account.user.email, subject: "RentView: warranty and maintenance reminders", html, text }) });
+        const total = (warrantyResult.count ?? warranties.length) + (maintenanceResult.count ?? maintenance.length) + (leaseResult.count ?? leases.length);
+        if (total > lines.length) lines.push(`${total - lines.length} additional items. Open RentView for the full lists.`);
+        const text = `RentView lease, warranty and maintenance reminders\n\n${lines.join("\n")}\n\nOpen RentView to see all due items and manage your records.`;
+        const html = `<!doctype html><html lang="en"><head><title>RentView reminders</title></head><body><h1>Lease, warranty and maintenance reminders</h1><ul>${lines.map(line => `<li>${escapeHtml(line)}</li>`).join("")}</ul><p>Open RentView to see all due items and manage your records.</p></body></html>`;
+        const response = await fetchWithTimeout("https://api.resend.com/emails", { method: "POST", headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json", "Idempotency-Key": `rentview-reminder-${owner.owner_id}-${calendar.today}` }, body: JSON.stringify({ from, to: account.user.email, subject: "RentView: lease, warranty and maintenance reminders", html, text }) });
         if (!response.ok) throw new Error(`Email service HTTP ${response.status}`);
         const receipt = await response.json();
         const { error } = await admin.rpc("finish_reminder", { p_id: claim.id, p_claim_token: claim.claim_token, p_success: true, p_provider_id: typeof receipt.id === "string" ? receipt.id : null });
