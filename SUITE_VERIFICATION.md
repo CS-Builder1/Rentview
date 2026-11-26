@@ -1,5 +1,20 @@
 # RentView review and verification
 
+## November 26 review fixes
+
+| Check | Results on the combined review stack |
+| --- | --- |
+| Unit, handler and build | 172 tests and both TypeScript checks passed. The production web export succeeded. The iOS and Android exports contained Hermes bundles and all 42 iOS and 46 Android assets referenced by the manifests. |
+| Database | All 16 registered SQL fixtures and the concurrent child-write/portfolio-transfer test passed on both a fresh database and an upgrade from the previously reviewed PR #6 schema. The base PR's fresh migration replay passed all 38 stages. The access migration was also tested after first installing the revised base PR separately. |
+| Authenticated browser | All 78 checkpoints in nine local Chromium suites passed. These include the four-browser repair flow, archived correspondence, private contractor instructions, lost responses on decline and completion, and attachment retrieval after manager deletion. |
+| Manager finance | Four additional checkpoints passed. A manager applied USD 400 against a USD 1,000 charge, downloaded a property-scoped report, and retried the remaining USD 600 after a committed response was lost. The successor retained both allocations after a portfolio transfer. |
+| Account deletion | Five additional Chromium checks passed against the real local Edge, Auth and Storage services. In a separate run, a held billing lock caused GoTrue to reject deletion with SQLSTATE `40001`. Edge returned a retryable 503 and released its claim. The next call completed and Auth returned 404 for the synthetic account. |
+| Offline photo | A 6,294,463-byte PNG was queued offline, restored from persistent storage, and retrieved byte-for-byte after sync as one document. The stored queue entry contained only a compact reference. |
+
+The browser tests used synthetic accounts on the local Supabase stack. The production web, Android and iOS exports used the updated app source. Physical mobile-device execution and external-provider delivery remain separate release checks.
+
+## November 24 baseline
+
 November 24, 2026. These checks used synthetic properties and separate accounts against local Supabase Auth, PostgreSQL 17, PostgREST, Storage, Mailpit and the Edge runtime. Chromium exercised the web interface at phone and desktop sizes. The review stack starts with the existing trust and offline fixes in #3, then adds property access in #4, contractor dispatch and messaging in #5, and property history, rent reconciliation and end-to-end tests in this PR.
 
 ## Walk through a rental operation
@@ -61,7 +76,7 @@ rv_mail=http://127.0.0.1:54324
 rv_results=$(mktemp -d)
 rv_args=(--base-url "$rv_web" --credentials-file "$RV_LOCAL_CREDENTIALS" --allow-disposable-local)
 python3 scripts/test-browser.py "$rv_web" --output "$rv_results/signed-out"
-for suite in local_e2e local_field_suite local_property_records local_portfolio_operations local_invite_journeys local_edge_deletion local_finance local_review_regressions local_accessibility finance_precision_probe finance_inflight_probe; do
+for suite in local_e2e local_field_suite local_property_records local_portfolio_operations local_invite_journeys local_edge_deletion local_manager_finance local_finance local_review_regressions local_accessibility finance_precision_probe finance_inflight_probe; do
   python3 "tests/e2e/$suite.py" "${rv_args[@]}" --output "$rv_results/$suite"
 done
 python3 tests/e2e/local_recovery.py "${rv_args[@]}" --mail-url "$rv_mail" --output "$rv_results/recovery"
@@ -71,7 +86,7 @@ If an offline Edge runtime cannot reach JSR, the deletion test accepts an option
 
 ## GitHub preview status
 
-Vercel's automatic preview stopped at the public configuration check. The missing preview variables were `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY` and `EXPO_PUBLIC_APP_URL`. An approved staging database with the combined migrations and the matching preview origin are prerequisites for a hosted walkthrough. The recorded browser results came from the local production web export. [Vercel build](https://vercel.com/cs-builder1s-projects/rentview/8CmFP6gfTbLB4yp5pMf2VYGcYUUK)
+The Vercel branch environment for PR #6 has the staging Supabase URL, publishable key and app URL. On November 26, a read-only check of the dedicated staging database found that it still lacked the rent-allocation table, retained lease conversations and the updated invite wrapper. Hosted workflow verification requires the reviewed schema on that branch. The individual previews for #4 and #5 also require their own `EXPO_PUBLIC_APP_URL`. [Preview settings](https://vercel.com/cs-builder1s-projects/rentview/settings/environment-variables)
 
 ## Checks that still require release access
 
