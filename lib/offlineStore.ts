@@ -1,4 +1,6 @@
 /** Durable, account-scoped offline state. This module has no React/native dependencies. */
+import { decode } from "base64-arraybuffer";
+import type { PhotoStorage } from "./photoStorage";
 import { MAX_IMAGE_BYTES } from "./uploadPolicy";
 export interface QueueStorage {
   getItem(key: string): Promise<string | null>;
@@ -31,13 +33,17 @@ export type QueuedInsert = OperationState & {
 };
 export type QueuedPhoto = OperationState & {
   kind: "photo";
-  base64: string;
+  photoKey: string;
+  byteLength: number;
   contentType: string;
   storagePath: string;
   doc: Record<string, unknown>;
 };
 export type QueuedOp = QueuedInsert | QueuedPhoto;
-export type PhotoSubmission = Pick<QueuedPhoto, "base64" | "contentType" | "storagePath" | "doc">;
+export type PhotoSubmission = Pick<QueuedPhoto, "contentType" | "storagePath" | "doc"> & { base64: string };
+type InlinePhoto = Omit<QueuedPhoto, "photoKey" | "byteLength"> & { base64: string };
+export type PreparedOperation = QueuedInsert | InlinePhoto;
+type StoredOperation = QueuedOp | InlinePhoto;
 
 export function errorMessage(error: unknown): string {
   return error instanceof Error
@@ -70,7 +76,7 @@ function assertInsert(accountId: string, table: string, payload: Record<string, 
   assertJson(payload);
 }
 
-function assertPhoto(accountId: string, photo: PhotoSubmission): void {
+function assertPhoto(accountId: string, photo: Pick<PhotoSubmission, "doc" | "storagePath" | "contentType">): void {
   assertAccount(accountId);
   if (photo.doc.owner_id !== accountId || photo.storagePath.split("/")[0] !== accountId) {
     throw new Error("The photo belongs to a different account.");
@@ -78,36 +84,46 @@ function assertPhoto(accountId: string, photo: PhotoSubmission): void {
   if (!UUID.test(String(photo.doc.id ?? ""))) throw new Error("The photo has no valid record ID.");
   if (photo.storagePath.split("/").some((part) => !part || part === "." || part === "..")) throw new Error("The photo path is invalid.");
   if (!/^image\/(jpeg|png|webp|gif|heic|heif)$/i.test(photo.contentType)) throw new Error("Choose a supported photo format.");
-  const decodedBytes = photo.base64.length / 4 * 3 - (photo.base64.endsWith("==") ? 2 : photo.base64.endsWith("=") ? 1 : 0);
-  if (!photo.base64 || photo.base64.length % 4 !== 0 || decodedBytes > MAX_IMAGE_BYTES || !/^[A-Za-z0-9+/]*={0,2}$/.test(photo.base64)) {
-    throw new Error("Choose a photo smaller than 10 MB.");
-  }
   assertJson(photo.doc);
 }
 
-function decodeQueue(raw: string | null, accountId: string): QueuedOp[] {
+function sizeOfBase64(encoded: string): number {
+  const bytes = encoded.length / 4 * 3 - (encoded.endsWith("==") ? 2 : encoded.endsWith("=") ? 1 : 0);
+  if (!encoded || encoded.length % 4 !== 0 || bytes > MAX_IMAGE_BYTES || !/^[A-Za-z0-9+/]*={0,2}$/.test(encoded)) {
+    throw new Error("Choose a valid photo no larger than 10 MB.");
+  }
+  return bytes;
+}
+
+function assertOperation(op: StoredOperation, accountId: string): void {
+  if (op.accountId !== accountId || !UUID.test(op.id) || !Number.isInteger(op.revision) || op.revision < 0 ||
+      !Number.isFinite(op.createdAt) || !Number.isInteger(op.attempts) || op.attempts < 0 ||
+      !["pending", "failed"].includes(op.status)) throw new Error("Invalid saved operation.");
+  if (op.kind === "insert") {
+    assertInsert(accountId, op.table, op.payload);
+    if (op.payload.id !== op.id) throw new Error("Invalid saved insert identity. Existing data was preserved.");
+  } else if (op.kind === "photo") {
+    assertPhoto(accountId, op);
+    if (op.doc.id !== op.id) throw new Error("Invalid saved photo identity.");
+    if ("base64" in op) sizeOfBase64(op.base64);
+    else if (op.photoKey !== accountId + "/" + op.id || !Number.isSafeInteger(op.byteLength) ||
+        op.byteLength <= 0 || op.byteLength > MAX_IMAGE_BYTES) throw new Error("Invalid saved photo reference.");
+  } else throw new Error("Unsupported saved operation.");
+}
+
+function decodeQueue(raw: string | null, accountId: string): StoredOperation[] {
   if (raw === null) return [];
   try {
-    const items: unknown = JSON.parse(raw);
+    const items: StoredOperation[] = JSON.parse(raw);
     if (!Array.isArray(items)) throw new Error();
-    for (const entry of items) {
-      if (!entry || typeof entry !== "object") throw new Error();
-      const op = entry as QueuedOp;
-      if (op.accountId !== accountId || !UUID.test(op.id) || !Number.isInteger(op.revision) || op.revision < 0 ||
-          !Number.isFinite(op.createdAt) || !Number.isInteger(op.attempts) || op.attempts < 0 ||
-          !["pending", "failed"].includes(op.status)) throw new Error();
-      if (op.kind === "insert") { assertInsert(accountId, op.table, op.payload); if (op.payload.id !== op.id) throw new Error(); }
-      else if (op.kind === "photo") { assertPhoto(accountId, op); if (op.doc.id !== op.id) throw new Error(); }
-      else throw new Error();
-    }
-    return items as QueuedOp[];
+    for (const item of items) assertOperation(item, accountId);
+    return items;
   } catch {
-    // Preserve the original bytes. An unreadable queue is never an empty queue.
     throw new Error("Saved changes could not be read. They have been preserved on this device; contact support before clearing app storage.");
   }
 }
 
-export function createOfflineStore(storage: QueueStorage, randomUUID: () => string, now = Date.now, exclusive?: <T>(work: () => Promise<T>) => Promise<T>) {
+export function createOfflineStore(storage: QueueStorage, randomUUID: () => string, now = Date.now, exclusive?: <T>(work: () => Promise<T>) => Promise<T>, photos?: PhotoStorage) {
   let serial: Promise<unknown> = Promise.resolve();
   const lock = <T>(work: () => Promise<T>): Promise<T> => {
     const execute = () => exclusive ? exclusive(work) : work();
@@ -116,8 +132,46 @@ export function createOfflineStore(storage: QueueStorage, randomUUID: () => stri
     return result;
   };
   const key = (accountId: string) => PREFIX + accountId;
-  const readUnlocked = async (accountId: string) => decodeQueue(await storage.getItem(key(accountId)), accountId);
-  const write = async (accountId: string, items: QueuedOp[]) => storage.setItem(key(accountId), JSON.stringify(items));
+  const write = (accountId: string, items: QueuedOp[]) => storage.setItem(key(accountId), JSON.stringify(items));
+  const cleaned = new Set<string>();
+
+  function photoStorage(): PhotoStorage {
+    if (!photos) throw new Error("Photo storage is unavailable on this device.");
+    return photos;
+  }
+
+  async function persistPhoto(op: InlinePhoto): Promise<QueuedPhoto> {
+    const { base64, ...metadata } = op;
+    const bytes = decode(base64);
+    const photoKey = op.accountId + "/" + op.id;
+    await photoStorage().write(photoKey, bytes);
+    return { ...metadata, photoKey, byteLength: bytes.byteLength };
+  }
+
+  async function readUnlocked(accountId: string): Promise<QueuedOp[]> {
+    const original = decodeQueue(await storage.getItem(key(accountId)), accountId);
+    const items: QueuedOp[] = [];
+    let migrated = false;
+    for (const op of original) {
+      if (op.kind === "photo" && "base64" in op) {
+        items.push(await persistPhoto(op));
+        migrated = true;
+      } else items.push(op);
+    }
+    // Keep the original inline copy until all files and replacement metadata are durable.
+    if (migrated) await write(accountId, items);
+    // A crash between independent storage commits can leave an unreferenced file.
+    // The same queue lock also protects this sweep across tabs and concurrent captures.
+    if (photos && !cleaned.has(accountId)) {
+      const keep = new Set(items.flatMap(op => op.kind === "photo" ? [op.photoKey] : []));
+      try {
+        for (const file of await photos.list(accountId)) if (!keep.has(file)) await photos.remove(file);
+        cleaned.add(accountId);
+      } catch { /* Retry cleanup on the next read. Other changes remain available. */ }
+    }
+    return items;
+  }
+
   const base = (accountId: string, id: string): OperationState => ({
     id, accountId, createdAt: now(), revision: 0, status: "pending", attempts: 0, error: null, lastAttemptAt: null,
   });
@@ -129,14 +183,18 @@ export function createOfflineStore(storage: QueueStorage, randomUUID: () => stri
     return { ...base(accountId, id), kind: "insert", table, payload: next };
   }
 
-  function preparePhoto(accountId: string, photo: PhotoSubmission): QueuedPhoto {
+  function preparePhoto(accountId: string, photo: PhotoSubmission): InlinePhoto {
     const id = photo.doc.id === undefined ? randomUUID() : String(photo.doc.id);
     const slash = photo.storagePath.lastIndexOf("/");
     const filename = photo.storagePath.slice(slash + 1);
     const dot = filename.lastIndexOf(".");
     const uniqueName = dot < 0 ? `${filename}-${id}` : `${filename.slice(0, dot)}-${id}${filename.slice(dot)}`;
-    const next = { ...photo, storagePath: `${photo.storagePath.slice(0, slash + 1)}${uniqueName}`, doc: { ...photo.doc, id } };
+    const next = {
+      base64: photo.base64, contentType: photo.contentType,
+      storagePath: `${photo.storagePath.slice(0, slash + 1)}${uniqueName}`, doc: { ...photo.doc, id },
+    };
     assertPhoto(accountId, next);
+    sizeOfBase64(next.base64);
     return { ...base(accountId, id), kind: "photo", ...next };
   }
 
@@ -150,25 +208,24 @@ export function createOfflineStore(storage: QueueStorage, randomUUID: () => stri
     const invalid: unknown[] = [];
     for (let index = 0; index < legacy.length; index += 1) {
       const entry = legacy[index];
+      const legacySource = `${index}:${String(entry?.id ?? "unknown")}`;
+      let op: PreparedOperation;
       try {
         if (!entry || typeof entry !== "object") throw new Error();
-        const old = entry as Record<string, unknown>;
-        const photo = old.kind === "photo";
-        const payload = (photo ? old.doc : old.payload) as Record<string, unknown>;
+        const photo = entry.kind === "photo";
+        const payload = photo ? entry.doc : entry.payload;
         const accountId = String(payload?.owner_id ?? "");
-        assertAccount(accountId);
-        const items = groups.get(accountId) ?? await readUnlocked(accountId);
-        groups.set(accountId, items);
-        const legacySource = `${index}:${String(old.id ?? "unknown")}`;
-        if (items.some((op) => op.legacySource === legacySource)) continue;
-        const op = photo
-          ? preparePhoto(accountId, old as unknown as PhotoSubmission)
-          : prepareInsert(accountId, String(old.table), payload);
-        op.legacySource = legacySource;
-        op.status = "failed";
-        op.error = "Recovered from an older app version. Check for an existing record before retrying; older changes had no duplicate protection.";
-        items.push(op);
-      } catch { invalid.push(entry); }
+        op = photo ? preparePhoto(accountId, entry) : prepareInsert(accountId, String(entry.table), payload);
+      } catch { invalid.push(entry); continue; }
+      // Storage failures are retryable. Never quarantine a valid legacy entry on I/O failure.
+      const items = groups.get(op.accountId) ?? await readUnlocked(op.accountId);
+      groups.set(op.accountId, items);
+      if (items.some(item => item.legacySource === legacySource)) continue;
+      if (items.some(item => item.id === op.id)) { invalid.push(entry); continue; }
+      op.legacySource = legacySource;
+      op.status = "failed";
+      op.error = "Recovered from an older app version. Check for an existing record before retrying; older changes had no duplicate protection.";
+      items.push(op.kind === "photo" ? await persistPhoto(op) : op);
     }
     for (const [accountId, items] of groups) await write(accountId, items);
     if (invalid.length) {
@@ -194,13 +251,19 @@ export function createOfflineStore(storage: QueueStorage, randomUUID: () => stri
     return readUnlocked(accountId);
   });
 
-  const put = (op: QueuedOp) => lock(async () => {
+  const put = (op: PreparedOperation) => lock(async () => {
     await migrateLegacy();
-    decodeQueue(JSON.stringify([op]), op.accountId);
+    assertOperation(op, op.accountId);
     const existing = await readUnlocked(op.accountId);
-    if (existing.some((item) => item.id === op.id)) throw new Error("A change with this ID is already waiting to sync.");
-    if (op.kind === "insert") assertInsert(op.accountId, op.table, op.payload); else assertPhoto(op.accountId, op);
-    await write(op.accountId, [...existing, op]);
+    if (existing.some(item => item.id === op.id)) throw new Error("A change with this ID is already waiting to sync.");
+    if (op.kind === "insert") return write(op.accountId, [...existing, op]);
+    try {
+      const reference = await persistPhoto(op);
+      await write(op.accountId, [...existing, reference]);
+    } catch (error) {
+      cleaned.delete(op.accountId); // Recheck the authoritative queue before removing any file.
+      throw error;
+    }
   });
 
   const modify = (accountId: string, id: string, transform: (item: QueuedOp) => QueuedOp | null, revision?: number) => lock(async () => {
@@ -208,14 +271,35 @@ export function createOfflineStore(storage: QueueStorage, randomUUID: () => stri
     const items = await readUnlocked(accountId);
     const index = items.findIndex((item) => item.id === id && (revision === undefined || item.revision === revision));
     if (index < 0) return null;
-    const next = transform(items[index]);
+    const previous = items[index];
+    const next = transform(previous);
     if (next) items[index] = next; else items.splice(index, 1);
     await write(accountId, items);
+    if (!next && previous.kind === "photo") {
+      try { await photoStorage().remove(previous.photoKey); }
+      catch { cleaned.delete(accountId); } // Retry on next read after the durable acknowledgement.
+    }
     return next;
   });
 
   return {
     prepareInsert, preparePhoto, read, put,
+    async readPhoto(photo: QueuedPhoto): Promise<ArrayBuffer> {
+      const bytes = await photoStorage().read(photo.photoKey);
+      if (bytes.byteLength !== photo.byteLength) throw new Error("The saved photo is incomplete. Discard it and choose the photo again.");
+      return bytes;
+    },
+    clearAccount: (accountId: string) => lock(async () => {
+      assertAccount(accountId);
+      try {
+        await migrateLegacy();
+      } finally {
+        // Even an unreadable legacy queue must not retain this deleted account's scoped captures.
+        await storage.removeItem(key(accountId));
+        cleaned.delete(accountId);
+        if (photos) for (const file of await photos.list(accountId)) await photos.remove(file);
+      }
+    }),
     async hasQuarantinedChanges(): Promise<boolean> { return (await storage.getItem(QUARANTINE_KEY)) !== null; },
     remove: (accountId: string, id: string, revision?: number) => modify(accountId, id, () => null, revision),
     markAttempt: (accountId: string, id: string, revision: number) => modify(accountId, id,
@@ -238,7 +322,7 @@ export type OfflineStore = ReturnType<typeof createOfflineStore>;
 export interface OfflineTransport {
   insert(table: string, payload: Record<string, unknown>): Promise<{ error: unknown }>;
   find(table: string, id: string): Promise<{ data: Record<string, unknown> | null; error: unknown }>;
-  upload(photo: QueuedPhoto): Promise<void>;
+  upload(photo: QueuedPhoto, bytes: ArrayBuffer): Promise<void>;
   documentPayload(photo: QueuedPhoto): Record<string, unknown>;
 }
 
@@ -264,9 +348,9 @@ export async function insertIdempotently(transport: OfflineTransport, table: str
   }
 }
 
-export async function replayOperation(op: QueuedOp, transport: OfflineTransport): Promise<void> {
+export async function replayOperation(op: QueuedOp, transport: OfflineTransport, store: OfflineStore): Promise<void> {
   if (op.kind === "insert") return insertIdempotently(transport, op.table, op.payload);
-  await transport.upload(op);
+  await transport.upload(op, await store.readPhoto(op));
   await insertIdempotently(transport, "documents", transport.documentPayload(op));
 }
 
@@ -280,7 +364,7 @@ export async function flushOfflineQueue(store: OfflineStore, transport: OfflineT
     const op = await store.markAttempt(accountId, pending.id, pending.revision);
     if (!op || op.status !== "pending" || !maySync()) continue;
     try {
-      await replayOperation(op, transport);
+      await replayOperation(op, transport, store);
       if (!maySync()) break; // Retain for a safe idempotent retry in the original account.
       await store.remove(accountId, op.id, op.revision);
       synced += 1;

@@ -42,7 +42,8 @@ def reviewed_identity_source(root):
 def reviewed_followup_sources(root):
     """Every review correction is explicit, ordered and independently hash-bound."""
     sources = []
-    for suffix in ("repair_review_operations", "reconcile_billing_safely", "notification_terminal_delivery", "identity_deletion_worker_claim"):
+    for suffix in ("repair_review_operations", "reconcile_billing_safely", "notification_terminal_delivery", "identity_deletion_worker_claim",
+                   "review_billing_and_reminders", "limit_tenant_invite_claims", "recover_idle_deletion_claim", "return_unused_stock"):
         candidates = list((root / "supabase/migrations").glob(f"*_{suffix}.sql"))
         if len(candidates) != 1:
             raise RuntimeError(f"Expected exactly one reviewed {suffix} migration; no database contacted")
@@ -103,7 +104,7 @@ def main():
     draft = reviewed_sql_source(root)
     identity_migration = reviewed_identity_source(root)
     followups = reviewed_followup_sources(root)
-    report = {"status": "running", "runner_contract_version": 2, "container": arguments.container,
+    report = {"status": "running", "runner_contract_version": 3, "container": arguments.container,
               "migration_application_method": "transactional SQL replay; does not populate Supabase CLI history",
               "followup_migrations": [{"path": str(p.relative_to(root)), "sha256": hashlib.sha256(p.read_bytes()).hexdigest()} for p in followups], "target": "task-specific disposable Docker PostgreSQL", "hosted_changes": False,
               "draft_path": str(draft.relative_to(root)), "draft_sha256": hashlib.sha256(draft.read_bytes()).hexdigest(),
@@ -124,7 +125,11 @@ def main():
     followup_stages = ["apply reviewed operations correction in one transaction",
                        "apply reviewed billing reconciliation correction in one transaction",
                        "apply reviewed notification correction in one transaction",
-                       "apply reviewed exclusive deletion worker claim in one transaction"]
+                       "apply reviewed exclusive deletion worker claim in one transaction",
+                       "apply reviewed billing continuity and reminder selection",
+                       "apply reviewed invite throttling and legacy expiry",
+                       "apply reviewed idle deletion worker recovery",
+                       "apply reviewed unused stock returns"]
     regression_stages = ["legacy preservation, denial, cleanup and full constraint validation", identity_stage] + storage_maintenance_stages + followup_stages + [
         "identity predicate equivalence, actor boundaries and measured InitPlan regressions",
         "ownership, invitation, operations, fractional stock and deletion regressions",
@@ -219,6 +224,10 @@ def main():
             (followup_stages[1], "to_regclass('rentview_private.billing_reconciliation_audit') is not null and to_regprocedure('public.billing_reconciliation_pending()') is not null"),
             (followup_stages[2], "to_regprocedure('public.finish_notification(uuid,uuid,boolean,jsonb,text,boolean)') is not null and to_regprocedure('public.finish_notification(uuid,uuid,boolean,jsonb,text)') is null"),
             (followup_stages[3], "to_regclass('rentview_private.identity_deletion_workers') is not null and to_regprocedure('public.owned_storage_paths(uuid,uuid,integer)') is not null and not has_function_privilege('service_role','public.owned_storage_paths(uuid,integer)','execute')"),
+            (followup_stages[4], "position('account_deletion_requests' in pg_get_functiondef('public.due_reminder_owners(date,date,integer)'::regprocedure))>0 and position('p_period_end := prior.period_end' in pg_get_functiondef('public.apply_billing_event(text,text,text,uuid,text,text,text,text,timestamptz,boolean,timestamptz,jsonb)'::regprocedure))>0"),
+            (followup_stages[5], "to_regclass('rentview_private.tenant_invite_claim_failures') is not null and to_regprocedure('rentview_private.claim_tenant_invite_checked(text)') is not null and to_regprocedure('rentview_private.claim_tenant_invite_throttled(text)') is not null"),
+            (followup_stages[6], "position('clock_timestamp()' in pg_get_functiondef('public.claim_identity_deletion_worker(uuid,uuid)'::regprocedure))>0"),
+            (followup_stages[7], "position('Parts cannot be returned after financial completion' in pg_get_functiondef('public.remove_work_order_part(uuid)'::regprocedure))>0"),
         ]
         for applied_stage, predicate in readiness:
             if applied_stage in passed and db.sql("select (" + predicate + ")::text;") != "true":

@@ -6,6 +6,7 @@ import {
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 
 import { cachedSelectResult, clearCache, setCacheAccount } from "./cache";
+import { offlineStore } from "./offlineQueue";
 import { clearAuthDestination } from "./authDestination";
 import { unregisterPushToken } from "./push";
 import { completeDeviceSignOut } from "./sessionActions";
@@ -143,7 +144,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
   const signOut = useCallback(() => performSignOut(), [performSignOut]);
-  const finishAccountDeletion = useCallback((expectedUserId: string) => performSignOut(expectedUserId), [performSignOut]);
+  const finishAccountDeletion = useCallback(async (expectedUserId: string) => {
+    try { await offlineStore.clearAccount(expectedUserId); }
+    finally { await performSignOut(expectedUserId); }
+  }, [performSignOut]);
 
   const value = useMemo<AuthContextValue>(() => ({
     session,

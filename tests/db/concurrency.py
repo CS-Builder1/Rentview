@@ -1,4 +1,4 @@
-"""Adversarial cost transactions against the approved disposable Docker DB only.
+"""Concurrent cost posting and identity deletion against the approved disposable Docker DB only.
 
 No credentials or remote URLs are accepted. Start the task-specific local stack,
 apply the validated schema, then run with --allow-disposable-local. All fixtures
@@ -137,6 +137,37 @@ def wait_for_lock(db, app_name, *, advisory):
     raise AssertionError("Transaction did not reach the expected server-side lock barrier")
 
 
+def billing_lock_deletion_retry(db):
+    # Match the handler's transaction boundaries. The lock must arrive after
+    # final prepare, since the prepare RPC itself waits for the billing lock.
+    owner, first, retry = (uuid.uuid4() for _ in range(3))
+    db.sql(f"insert into auth.users(id,email,raw_user_meta_data,email_confirmed_at) "
+           f"values('{owner}','delete-contention-{owner}@example.test','{{}}',now());")
+    try:
+        db.sql(f"select public.prepare_identity_deletion('{owner}');")
+        assert_true(db, f"public.claim_identity_deletion_worker('{owner}','{first}')='claimed'", "First attempt failed to claim")
+        db.sql(f"select public.prepare_identity_deletion('{owner}');")
+        assert_true(db, f"public.begin_identity_deletion_step('{owner}','{first}')", "First Auth step failed to start")
+        lock = Transaction(db, f"begin; select pg_advisory_xact_lock(hashtextextended('billing-owner:{owner}',0));")
+        try:
+            db.sql(f"delete from auth.users where id='{owner}';", expected_state="40001",
+                   expected_message="Billing is being updated.")
+            assert_true(db, f"public.finish_identity_deletion_step('{owner}','{first}')", "Rejected Auth step could not finish")
+            assert_true(db, f"public.release_identity_deletion_worker('{owner}','{first}')", "Rejected Auth step retained the claim")
+        finally:
+            lock.close()
+        db.sql(f"select public.prepare_identity_deletion('{owner}');")
+        assert_true(db, f"public.claim_identity_deletion_worker('{owner}','{retry}')='claimed'", "Retry could not claim")
+        db.sql(f"select public.prepare_identity_deletion('{owner}');")
+        assert_true(db, f"public.begin_identity_deletion_step('{owner}','{retry}')", "Retry could not start Auth step")
+        db.sql(f"delete from auth.users where id='{owner}';")
+        assert_true(db, f"not exists(select 1 from auth.users where id='{owner}') and not exists("
+                        f"select 1 from rentview_private.identity_deletion_workers where owner_id='{owner}')",
+                    "Retry did not complete identity and worker removal")
+    finally:
+        db.sql(f"delete from auth.users where id='{owner}';")
+
+
 def run(db):
     checks = []
     db.sql(f"begin; insert into auth.users(id,email,raw_user_meta_data,email_confirmed_at) values('{OWNER}','cost-concurrency@example.test','{{}}',now());\n"
@@ -220,6 +251,8 @@ for each row execute function rentview_private.fixture_pause_expense_delete();""
             db.sql("drop trigger aaa_rentview_fixture_pause_delete on public.expenses; drop function rentview_private.fixture_pause_expense_delete();")
         assert_true(db, f"(select cost=5 and completion_expense_id='{INVOICES[2]}' from public.work_orders where id='{JOBS[2]}')", "Concurrent deletion broke the canonical expense")
         checks.append("concurrent invoice deletion fails retryably without deadlock")
+        billing_lock_deletion_retry(db)
+        checks.append("billing-owner lock rejects Auth deletion and retry succeeds after release")
         return checks
     finally:
         for transaction in active:

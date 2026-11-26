@@ -275,6 +275,21 @@ def race(fn, values):
         return list(workers.map(start, values))
 
 
+def check_invite_attempt_limit(api, token, independent_token):
+    endpoint = "/rest/v1/rpc/claim_tenant_invite"
+    body = {"invite_code": "INVALID-FIXTURE"}
+    for _ in range(9):
+        api.denied("POST", endpoint, token=token, body=body, statuses=(400,), codes=("23514",))
+
+    def claim(_):
+        return api.request("POST", endpoint, token=token, body=body)
+
+    outcomes = sorted((status, result["code"]) for status, result in race(claim, range(2)))
+    assert outcomes == [(400, "23514"), (400, "P0001")], "Expected just one remaining attempt."
+    api.denied("POST", endpoint, token=token, body=body, statuses=(400,), codes=("P0001",))
+    api.denied("POST", endpoint, token=independent_token, body=body, statuses=(400,), codes=("23514",))
+
+
 def one_winner(responses):
     successful = [index for index, (status, _) in enumerate(responses) if 200 <= status < 300]
     assert len(successful) == 1, "A constrained race did not have exactly one successful write."
@@ -730,6 +745,9 @@ def main(argv=None):
         api.patch("leases", race_lease["id"], {"status": "expired"}, owner["token"])
         api.denied("POST", "/rest/v1/maintenance_requests", token=winner["token"], body={"owner_id": owner["id"], "lease_id": race_lease["id"], "unit_id": negative_unit["id"], "property_id": property_id, "tenant_user_id": winner["id"], "title": "Inactive lease must refuse repair"})
         checkpoint("concurrent capacity, stock and invitation claims preserve limits; inactive lease cannot submit", "real-local-api-data")
+
+        check_invite_attempt_limit(api, other_owner["token"], outsider["token"])
+        checkpoint("failed invite claims persist across HTTP errors and concurrent attempts respect the per-account limit", "real-local-api-data")
 
         current_step = "expiry_and_revocation"
         expired_lease = api.insert("leases", {"owner_id": owner["id"], "unit_id": negative_unit["id"], "tenant_name": "Fixture expired invite", "tenant_email": tenant_email, "status": "active"}, owner["token"])

@@ -94,6 +94,7 @@ export default function Announcements() {
   }
 
   function remove(id: string) {
+    if (!session || !items?.some((a) => a.id === id && a.owner_id === session.user.id)) return;
     confirmAction(
       "Delete announcement",
       "Tenants will no longer see this notice.",
@@ -143,9 +144,11 @@ export default function Announcements() {
                 <Text className="flex-1 pr-2 text-base font-semibold text-slate-900">
                   {a.title}
                 </Text>
-                <Pressable onPress={() => remove(a.id)}>
-                  <Ionicons name="trash-outline" size={18} color="#dc2626" />
-                </Pressable>
+                {a.owner_id === session?.user.id ? (
+                  <Pressable onPress={() => remove(a.id)}>
+                    <Ionicons name="trash-outline" size={18} color="#dc2626" />
+                  </Pressable>
+                ) : null}
               </View>
               {a.body ? (
                 <Text className="mt-1 text-slate-600">{a.body}</Text>

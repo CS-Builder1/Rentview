@@ -207,10 +207,10 @@ export default function WorkOrderDetail() {
   async function shareJob() {
     if (!wo) return;
     try {
-      const { data, error } = await supabase.from("dispatch_jobs").select("title, property_name, unit_label, description, instructions").eq("work_order_id", wo.id).single();
+      const { data, error } = await supabase.from("dispatch_jobs").select("title, property_name, unit_label, description").eq("work_order_id", wo.id).single();
       if (error) throw error;
       const message = [data.title, [data.property_name, data.unit_label ?? "Shared / common"].join(" · "),
-        data.description, data.instructions, wo.due_date ? `Due: ${formatDate(wo.due_date)}` : "",
+        data.description, wo.due_date ? `Due: ${formatDate(wo.due_date)}` : "",
         "Please contact the property manager to arrange access."].filter(Boolean).join("\n\n");
       await Share.share({ title: data.title, message });
     }

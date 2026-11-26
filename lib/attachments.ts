@@ -86,6 +86,17 @@ export async function signedUrl(storagePath: string, expiresIn = 300, bucket: At
   return data?.signedUrl ?? null;
 }
 
+/** Remove the metadata first. Storage retains objects still referenced by another document. */
+export async function deleteDocument(id: string): Promise<void> {
+  const { data, error } = await supabase.from("documents").delete().eq("id", id).select("storage_path").single();
+  if (error) throw new Error(error.message);
+  try {
+    await removeAttachment(data.storage_path);
+  } catch (cause) {
+    throw new Error(`The document record was removed. File cleanup failed: ${cause instanceof Error ? cause.message : String(cause)}`);
+  }
+}
+
 export async function removeAttachment(storagePath: string): Promise<void> {
   assertStoragePath(storagePath);
   const { error } = await supabase.storage.from(BUCKET).remove([storagePath]);

@@ -37,3 +37,5 @@ for (const file of suites) {
     console.error('Local database regression failed or could not run; validation is incomplete.'); process.exit(result.status ?? 1);
   }
 }
+const { verifyPortfolioConcurrency } = await import('../tests/db/portfolio-concurrency.mjs');
+await verifyPortfolioConcurrency(raw, env);

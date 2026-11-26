@@ -1,9 +1,19 @@
-// Authenticated, retryable deletion. A service-only, non-expiring token claim
+// Authenticated, retryable deletion. A service-only token claim
 // serializes name-based Storage cleanup. Unknown destructive outcomes stay
 // blocked for operator review; a clock must never let a second worker overtake
 // an old Storage request that can still delete a replacement at the same name.
 import { createClient } from "jsr:@supabase/supabase-js@2.109.0";
 import { errorResponse, HttpError, json } from "../_shared/http.ts";
+
+// Both SDKs can return network failures in their error field. Auth even uses
+// AuthRetryableFetchError for GoTrue's terminal HTTP 500 database refusal.
+// A missing response or gateway timeout cannot acknowledge a destructive call.
+function confirmedProviderRejection(error: { name: string; status?: number }): boolean {
+  const { name, status } = error;
+  if (name !== "AuthApiError" && name !== "AuthRetryableFetchError" && name !== "StorageApiError") return false;
+  if (typeof status !== "number" || status < 400 || status > 599) return false;
+  return ![408, 499, 502, 503, 504].includes(status) && !(status >= 520 && status <= 530);
+}
 
 Deno.serve(async req => {
   let worker: { admin: ReturnType<typeof createClient>; userId: string; token: string } | null = null;
@@ -39,12 +49,23 @@ Deno.serve(async req => {
       // persistent step started. Never release this claim on an unknown outcome.
       destructivePending = true;
       const { data, error } = await admin.rpc("begin_identity_deletion_step", claimArgs);
-      if (error || data !== true) throw error ?? new HttpError(409, "Deletion worker no longer owns this action. Contact support before continuing.");
+      if (error) throw error;
+      if (data === false) {
+        destructivePending = false;
+        throw new HttpError(409, "Another deletion attempt owns this action. Try again after it finishes.");
+      }
+      if (data !== true) throw new Error("Deletion step could not be confirmed");
     }
     async function finishDestructiveStep() {
       const { data, error } = await admin.rpc("finish_identity_deletion_step", claimArgs);
       if (error || data !== true) throw error ?? new HttpError(409, "Deletion completion could not be confirmed. Contact support before continuing.");
       destructivePending = false;
+    }
+    async function providerRejection(error: { name: string; status?: number }) {
+      if (!confirmedProviderRejection(error)) throw error;
+      await finishDestructiveStep();
+      return json({ pending: true, requiresReview: false, code: "deletion_retryable",
+        error: "The service could not complete deletion. Try again to continue." }, 503, true);
     }
     const deadline = Date.now() + 70_000;
     let removed = 0;
@@ -58,7 +79,7 @@ Deno.serve(async req => {
       for (const [bucket, names] of buckets) {
         await beginDestructiveStep();
         const { error } = await admin.storage.from(bucket).remove(names);
-        if (error) throw error; // A partial/unknown batch is unsafe for automatic takeover.
+        if (error) return await providerRejection(error);
         await finishDestructiveStep();
         if (bucket === "attachments") {
           const { error: metadataError } = await admin.rpc("forget_deleted_uploads", { ...claimArgs, p_paths: names });
@@ -76,7 +97,7 @@ Deno.serve(async req => {
     }
     await beginDestructiveStep();
     const { error: deletionError } = await admin.auth.admin.deleteUser(userId);
-    if (deletionError) throw deletionError;
+    if (deletionError) return await providerRejection(deletionError);
     // Successful Auth deletion cascades the private claim. No old cleanup HTTP
     // request is outstanding, and remaining unexpired JWTs fail the DB guard.
     destructivePending = false;

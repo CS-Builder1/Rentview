@@ -12,6 +12,7 @@ import QRCode from "react-native-qrcode-svg";
 
 import { DocumentsSection } from "../../../components/DocumentsSection";
 import { Badge, Button, Card, EmptyState, Field, Loading, Screen } from "../../../components/ui";
+import { useAuth } from "../../../lib/auth";
 import { assetUrl } from "../../../lib/appUrl";
 import { cachedSelectResult } from "../../../lib/cache";
 import { confirmAction } from "../../../lib/confirm";
@@ -56,6 +57,7 @@ function Row({ label, value }: { label: string; value: string }) {
 export default function AssetDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const { session } = useAuth();
   const [asset, setAsset] = useState<Asset | null>(null);
   const [loaded, setLoaded] = useState(false), [loadError, setLoadError] = useState<string | null>(null);
   const [jobs, setJobs] = useState<Tables<"work_orders">[]>([]);
@@ -140,6 +142,7 @@ export default function AssetDetail() {
   }
 
   function deleteAsset() {
+    if (!asset || asset.owner_id !== session?.user.id) return;
     confirmAction(
       "Retire asset",
       "Mark this asset out of service while retaining its jobs, costs and documents. You can restore its status later.",
@@ -195,9 +198,11 @@ export default function AssetDetail() {
         <Pressable accessibilityRole="button" accessibilityLabel="Edit details" onPress={openEdit} className="p-2">
           <Ionicons name="create-outline" size={22} color="#0f766e" />
         </Pressable>
-        <Pressable accessibilityLabel="Retire asset and preserve history" onPress={deleteAsset} className="p-2">
-          <Ionicons name="archive-outline" size={22} color="#dc2626" />
-        </Pressable>
+        {asset.owner_id === session?.user.id ? (
+          <Pressable accessibilityLabel="Retire asset and preserve history" onPress={deleteAsset} className="p-2">
+            <Ionicons name="archive-outline" size={22} color="#dc2626" />
+          </Pressable>
+        ) : null}
       </View>
 
       <ScrollView contentContainerClassName="px-5 pb-12">

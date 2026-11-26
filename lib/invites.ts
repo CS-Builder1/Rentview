@@ -20,6 +20,11 @@ export function safeReturnPath(value: unknown, fallback = "/"): string {
       const valid = normalizeInviteCode(code);
       return valid ? `${url.pathname}?code=${encodeURIComponent(valid)}` : url.pathname;
     }
+    if (/^\/conversation\/[a-f0-9-]+$/.test(url.pathname)) {
+      const thread = url.searchParams.get("thread");
+      return thread && /^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(thread)
+        ? `${url.pathname}?thread=${thread}` : url.pathname;
+    }
     if (/^\/(?:tenant(?:\/(?:requests|rent|more|notices|new-request|request\/[a-f0-9-]+))?|account|inbox|conversation\/[a-f0-9-]+|contractor(?:\/job\/[a-f0-9-]+)?|asset\/[a-f0-9-]+|property\/[a-f0-9-]+|unit\/[a-f0-9-]+|work-order\/[a-f0-9-]+|request\/[a-f0-9-]+)?$/.test(url.pathname)) {
       return url.pathname;
     }

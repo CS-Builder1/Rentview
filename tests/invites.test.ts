@@ -98,5 +98,10 @@ test("inbox and job notifications can return through authentication", () => {
   for (const path of ["/inbox",`/conversation/${id}`,"/contractor",`/contractor/job/${id}`]) {
     assert.equal(safeReturnPath(path),path);
   }
+  const thread = "06cdc646-a146-4622-93e3-11b855268181";
+  const archived = `/conversation/${id}?thread=${thread}`;
+  assert.equal(authDestination("/", archived), archived);
+  assert.equal(safeReturnPath(archived + "&next=https://outside.invalid"), archived);
+  assert.equal(safeReturnPath(`/conversation/${id}?thread=invalid`), `/conversation/${id}`);
   assert.equal(safeReturnPath("/conversation//external.invalid"),"/");
 });

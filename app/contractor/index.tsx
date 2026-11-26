@@ -11,7 +11,7 @@ import { supabase } from "../../lib/supabase";
 
 export default function ContractorJobs() {
   const router = useRouter();
-  const { session, role } = useAuth();
+  const { session, role, refreshProfile } = useAuth();
   const [jobs, setJobs] = useState<DispatchJob[] | null>(null);
   const [error, setError] = useState("");
   const [refresh, setRefresh] = useState(0);
@@ -54,6 +54,17 @@ export default function ContractorJobs() {
     <Button title={showPrefs ? "Hide notification settings" : "Notification settings"} variant="secondary" onPress={() => setShowPrefs(value => !value)} />
     {showPrefs ? <NotificationPrefs variant="contractor" /> : null}
     <Button title="Join another vendor invitation" variant="secondary" onPress={() => router.push("/contractor-invite")} />
+    <Button title="My tenant portal" variant="secondary" onPress={() => router.push("/tenant")} />
+    <Button title="Manage my properties" variant="secondary" onPress={async () => {
+      try {
+        if (role !== "owner") {
+          const { error } = await supabase.rpc("contractor_open_owner_workspace");
+          if (error) throw error;
+          await refreshProfile();
+        }
+        router.replace("/(app)");
+      } catch (e) { setError(operationError(e)); }
+    }} />
     {role !== "contractor" ? <Button title="Return to my home" variant="secondary" onPress={() => router.replace(homeForRole(role))} /> : null}
   </ScrollView></Screen>;
 }

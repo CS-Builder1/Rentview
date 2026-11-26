@@ -14,9 +14,12 @@ create extension if not exists pg_cron;
 create extension if not exists pg_net;
 
 select cron.unschedule(jobid) from cron.job
-where jobname in ('rentview-daily-reminders','rentview-reminder-worker','rentview-notification-worker');
+where jobname in ('rentview-daily-reminders','rentview-reminder-worker','rentview-notification-worker','rentview-inbox-retention');
 
 select cron.schedule('rentview-reminder-worker','*/15 * * * *',
   'select public.dispatch_due_reminders();');
 select cron.schedule('rentview-notification-worker','*/2 * * * *',
   'select public.dispatch_due_notifications();');
+
+select cron.schedule('rentview-inbox-retention','17 * * * *',
+  'select rentview_private.prune_read_inbox_events();');

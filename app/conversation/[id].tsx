@@ -12,14 +12,14 @@ import { useInboxRefresh } from "../../lib/useInboxRefresh";
 const PAGE = 40;
 
 export default function Conversation() {
-  const { id } = useLocalSearchParams<{id: string}>();
+  const { id, thread } = useLocalSearchParams<{id: string; thread?: string}>();
   const { session, initializing } = useAuth();
   if (initializing) return <Loading />;
-  if (!session) return <Redirect href={{pathname:"/(auth)/login",params:{next:`/conversation/${id}`}}} />;
-  return <Thread key={`${id}:${session.user.id}`} id={id} uid={session.user.id} />;
+  if (!session) return <Redirect href={{pathname:"/(auth)/login",params:{next:`/conversation/${id}${thread ? "?thread="+encodeURIComponent(thread) : ""}`}}} />;
+  return <Thread key={`${id}:${thread ?? ""}:${session.user.id}`} id={id} thread={thread} uid={session.user.id} />;
 }
 
-function Thread({ id, uid }: { id: string; uid: string }) {
+function Thread({ id, uid, thread }: { id: string; uid: string; thread?: string }) {
   const router = useRouter();
   const [lease, setLease] = useState<InboxLease | null>(null);
   const [messages, setMessages] = useState<LeaseMessage[]>([]);
@@ -32,22 +32,24 @@ function Thread({ id, uid }: { id: string; uid: string }) {
   const [sendError, setSendError] = useState("");
   const lock = useRef(false);
   const alive = useRef(true);
-  const resident = useRef<string | null>(null);
+  const selectedThread = useRef<string | null>(null);
   const pending = useRef<{ id:string; body:string; resident:string } | null>(null);
   useEffect(()=>{alive.current=true;return ()=>{alive.current=false;};},[]);
   const refresh = useInboxRefresh(useCallback(async current => {
     try {
-      const {data:scope,error:scopeError} = await supabase.rpc("inbox_leases",{p_lease:id}).maybeSingle();
+      const {data:scope,error:scopeError} = await supabase.rpc("inbox_leases",{p_lease:id,p_thread:thread || selectedThread.current || undefined})
+        .order("can_post",{ascending:false}).order("latest_at",{ascending:false,nullsFirst:false}).order("thread_id").limit(1).maybeSingle();
       if (scopeError) throw scopeError;
       if (!current()) return;
-      if (!scope || (resident.current && resident.current !== scope.resident_id)) {
-        resident.current = null; pending.current = null;
+      if (!scope) {
+        pending.current = null;
         setBody(""); setSendError("");
         throw new Error("This tenancy has changed or access has ended. Return to the inbox to select a current lease.");
       }
       // Do not transfer an unsent draft to the next resident after turnover.
-      resident.current = scope.resident_id;
-      const result = await supabase.rpc("lease_thread", {p_lease:id,p_resident:scope.resident_id})
+      selectedThread.current = scope.thread_id;
+      if (!scope.can_post) { setBody(""); pending.current = null; }
+      const result = await supabase.rpc("lease_thread", {p_lease:id,p_resident:scope.resident_id,p_thread:scope.thread_id})
         .order("created_at",{ascending:false}).order("id",{ascending:false}).range(page*PAGE,(page+1)*PAGE);
       if (result.error) throw result.error;
       if (!current()) return;
@@ -55,16 +57,16 @@ function Thread({ id, uid }: { id: string; uid: string }) {
       setMessages(result.data.slice(0,PAGE).reverse()); setHasOlder(result.data.length>PAGE);
       setLease(scope); setError("");
       if (page===0 && scope.unread && newest) {
-        const read = await supabase.rpc("mark_thread_read",{p_href:`/conversation/${id}`,p_through:newest.created_at});
+        const read = await supabase.rpc("mark_thread_read",{p_href:`/conversation/${id}?thread=${scope.thread_id}`,p_through:newest.created_at});
         if (read.error && current()) setError("Messages loaded. Read status could not be saved.");
       }
     } catch (e) {
       if (current()) { setLease(null); setMessages([]); setError(operationError(e)); }
     } finally { if (current()) setLoaded(true); }
-  },[id,page]));
+  },[id,page,thread]));
   async function send() {
     const text = body.trim();
-    if (!lease || lock.current || !text) return;
+    if (!lease?.can_post || !lease.resident_id || lock.current || !text) return;
     lock.current=true; setSending(true); setSendError("");
     try {
       if (!pending.current || pending.current.body!==text || pending.current.resident!==lease.resident_id) {
@@ -95,9 +97,9 @@ function Thread({ id, uid }: { id: string; uid: string }) {
         <Text selectable className="mt-1 text-slate-900">{m.body}</Text>
       </View>)}
       {page>0 && <Button title="Newer messages" variant="secondary" onPress={()=>setPage(n=>n-1)} />}
-      <View className="mt-4"><Field label="Message" value={body} onChangeText={setBody} multiline maxLength={5000} /></View>
+      {lease.can_post ? <><View className="mt-4"><Field label="Message" value={body} onChangeText={setBody} multiline maxLength={5000} /></View>
       {sendError ? <Text accessibilityRole="alert" className="mb-2 text-red-700">{sendError}</Text> : null}
-      <Button title="Send message" onPress={()=>void send()} disabled={!body.trim()} loading={sending} />
+      <Button title="Send message" onPress={()=>void send()} disabled={!body.trim()} loading={sending} /></> : <Text className="mt-3 text-slate-600">This conversation is archived and read only.</Text>}
     </>}
   </ScrollView></Screen>;
 }
