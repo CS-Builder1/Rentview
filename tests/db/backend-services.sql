@@ -157,4 +157,16 @@ do $$ begin
  perform public.due_reminder_owners(current_date,current_date+60,25);
  assert (select status='failed' and claim_token is null from public.reminder_deliveries where owner_id='50000000-0000-4000-8000-000000000002' and reminder_day=current_date),'final crashed reminder stayed processing';
 end $$;
+-- A deletion between finding a due reminder and claiming it must also stop delivery.
+do $$ declare person uuid:=gen_random_uuid(); prop uuid; claim public.reminder_deliveries; begin
+ insert into auth.users(id,email) values(person,'deleting-reminder@example.test');
+ insert into public.properties(owner_id,name) values(person,'Reminder property') returning id into prop;
+ insert into public.assets(owner_id,property_id,name,warranty_expiry) values(person,prop,'Pump',current_date);
+ assert exists(select from public.due_reminder_owners(current_date,current_date+30,100) where owner_id=person);
+ perform public.prepare_identity_deletion(person);
+ assert not exists(select from public.due_reminder_owners(current_date,current_date+30,100) where owner_id=person);
+ select * into claim from public.claim_reminder(person,current_date);
+ assert claim.id is null;
+ assert not exists(select from public.reminder_deliveries where owner_id=person);
+end $$;
 rollback;

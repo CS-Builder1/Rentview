@@ -46,6 +46,10 @@ class RunnerGuards(unittest.TestCase):
                 "20261030110358_reconcile_billing_safely.sql",
                 "20261030110404_notification_terminal_delivery.sql",
                 "20261030111719_identity_deletion_worker_claim.sql",
+                "20261126000310_review_billing_and_reminders.sql",
+                "20261126000320_limit_tenant_invite_claims.sql",
+                "20261126000330_recover_idle_deletion_claim.sql",
+                "20261126000340_return_unused_stock.sql",
             )]
             for path in expected:
                 path.write_text("-- fixture")
@@ -201,9 +205,9 @@ class RunnerGuards(unittest.TestCase):
             self.assertEqual(report["identity_migration_path"], str(identity.relative_to(root)))
             self.assertEqual(report["identity_migration_sha256"], RUNNER.hashlib.sha256(identity.read_bytes()).hexdigest())
             self.assertEqual([stage["name"] for stage in report["stages"]], report["validation_stage_plan"])
-            self.assertEqual(len(report["stages"]), 34)
+            self.assertEqual(len(report["stages"]), 38)
             self.assertEqual(report["container"], "supabase_db_rentview-review-followup")
-            self.assertEqual(report["runner_contract_version"], 2)
+            self.assertEqual(report["runner_contract_version"], 3)
             legacy_position = statements.index(((DIRECTORY / "legacy-check.sql").read_text(), None, None))
             identity_position = statements.index((identity.read_text(), None, None))
             regression_position = statements.index(((DIRECTORY / "rls-performance.sql").read_text(), None, None))
