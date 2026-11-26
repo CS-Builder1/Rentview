@@ -125,4 +125,21 @@ do $$ declare plan jsonb; begin
  perform pg_temp.ok(plan::text like '%rentview_storage_owner_created_idx%','native owner quota expression can use bounded owner/time index');
 end $$;
 set constraints all immediate;
+-- Return stock explicitly when a job is cancelled before financial completion.
+do $$ declare
+ person uuid := 'e9100000-0000-4000-8000-000000000001';
+ prop uuid := 'e9200000-0000-4000-8000-000000000001';
+ job uuid; stock uuid; part uuid;
+begin
+ perform pg_temp.actor(person::text);
+ insert into public.work_orders(owner_id,property_id,title) values(person,prop,'Cancelled stock return') returning id into job;
+ insert into public.inventory_items(owner_id,property_id,name,quantity) values(person,prop,'Filter',5) returning id into stock;
+ part:=public.add_work_order_part(job,stock,null,2,null,'USD',gen_random_uuid());
+ update public.work_orders set status='cancelled' where id=job;
+ perform public.remove_work_order_part(part);
+ perform public.remove_work_order_part(part);
+ assert (select quantity=5 from public.inventory_items where id=stock);
+ assert (select count(*)=1 from public.inventory_movements where part_id=part and reason='restored');
+ assert (select status='cancelled' from public.work_orders where id=job);
+end $$;
 rollback;

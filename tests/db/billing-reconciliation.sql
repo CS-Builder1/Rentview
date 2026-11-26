@@ -110,4 +110,28 @@ do $$ declare f regprocedure:='public.reconcile_verified_billing_subscription(te
  assert not has_table_privilege('authenticated','rentview_private.billing_reconciliation_audit','SELECT,INSERT,UPDATE,DELETE');
  assert not has_table_privilege('anon','rentview_private.billing_reconciliation_audit','SELECT,INSERT,UPDATE,DELETE');
 end $$;
+-- Later provider evidence clears only older conflicts for this exact subscription.
+do $$
+declare
+ person uuid := 'b1100000-0000-4000-8000-000000000002';
+ stamp timestamptz := now()-interval '2 days';
+ paid_until timestamptz := now()+interval '2 weeks';
+begin
+ perform public.reconcile_verified_billing_subscription('paypal','paid-through',person,'customer','pro','active',paid_until,false,stamp,'provider:paid-through','account:original');
+ assert public.apply_billing_event('paypal','ambiguous-cancel','BILLING.SUBSCRIPTION.CANCELLED',person,'paid-through',null,'pro','cancelled',null,true,stamp,'{}')='ambiguous';
+ assert rentview_private.billing_needs_reconciliation(person);
+ assert public.apply_billing_event('paypal','older-cancel','BILLING.SUBSCRIPTION.CANCELLED',person,'paid-through',null,'pro','cancelled',null,true,stamp-interval '1 hour','{}')='stale';
+ assert rentview_private.billing_needs_reconciliation(person);
+ assert public.apply_billing_event('paypal','later-cancel','BILLING.SUBSCRIPTION.CANCELLED',person,'paid-through',null,'pro','cancelled',null,true,stamp+interval '1 hour','{}')='applied';
+ assert (select processing_state='superseded' and processing_error is null from public.billing_events where event_id='ambiguous-cancel');
+ assert not rentview_private.billing_needs_reconciliation(person);
+ assert (select period_end=paid_until from public.billing_subscription_states where provider='paypal' and subscription_id='paid-through');
+ assert (select current_period_end=paid_until and plan='pro' and status='cancelled' from public.subscriptions where owner_id=person);
+ assert public.apply_billing_event('paypal','expired-after-cancel','BILLING.SUBSCRIPTION.EXPIRED',person,'paid-through',null,'free','expired',null,false,stamp+interval '2 hours','{}')='applied';
+ assert (select period_end is null from public.billing_subscription_states where provider='paypal' and subscription_id='paid-through');
+ assert (select processing_state='pending' from public.billing_events where event_id='same-second-active');
+ perform public.reconcile_verified_billing_subscription('paypal','unpaid-trial',person,null,'free','trialing',paid_until,false,stamp,'provider:unpaid','account:original');
+ assert public.apply_billing_event('paypal','cancel-unpaid','BILLING.SUBSCRIPTION.CANCELLED',person,'unpaid-trial',null,'pro','cancelled',null,true,stamp+interval '1 hour','{}')='applied';
+ assert (select period_end is null from public.billing_subscription_states where provider='paypal' and subscription_id='unpaid-trial');
+end $$;
 rollback;

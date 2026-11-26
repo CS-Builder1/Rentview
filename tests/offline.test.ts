@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
+import { readLegacyQueueRow } from "../lib/legacyQueueRow";
+import type { PhotoStorage } from "../lib/photoStorage";
 
 import { createReadCache } from "../lib/cacheStore";
 import { secureRecordId } from "../lib/id";
@@ -25,6 +31,18 @@ class MemoryStorage implements QueueStorage {
     this.values.delete(key);
   }
 }
+async function photoDirectory(t: { after: (fn: () => Promise<void>) => void }): Promise<PhotoStorage> {
+  const folder = await mkdtemp(join(tmpdir(), "rentview-photos-"));
+  t.after(() => rm(folder, { recursive: true, force: true }));
+  const file = (key: string) => join(folder, encodeURIComponent(key));
+  return {
+    async write(key, bytes) { await writeFile(file(key), new Uint8Array(bytes)); },
+    async read(key) { return Uint8Array.from(await readFile(file(key))).buffer; },
+    async remove(key) { await rm(file(key), { force: true }); },
+    async list(account) { return (await readdir(folder)).map(decodeURIComponent).filter(key => key.startsWith(account + "/")); },
+  };
+}
+
 function backend() {
   const rows = new Map<string, Record<string, unknown>>();
   const uploads: string[] = [];
@@ -181,8 +199,8 @@ test("switching accounts during a response retains the original operation for sa
   assert.equal(server.rows.size, 1);
 });
 
-test("photo retries reuse both the object path and document ID", async () => {
-  const store = createOfflineStore(new MemoryStorage(), randomUUID);
+test("photo retries reuse both the object path and document ID", async t => {
+  const store = createOfflineStore(new MemoryStorage(), randomUUID, Date.now, undefined, await photoDirectory(t));
   const server = backend();
   const op = store.preparePhoto(A, {
     base64: "aGVsbG8=", contentType: "image/jpeg", storagePath: `${A}/work_orders/roof/photo.jpg`,
@@ -357,4 +375,138 @@ test("a caller-supplied record ID is persisted unchanged and malformed queued id
   assert.equal(op.payload.id, id);
   await assert.rejects(store.put({ ...op, id: randomUUID() }), /preserved/);
   assert.equal((await store.read(A)).length, 0);
+});
+
+test("a 6 MiB photo survives restart in a compact queue, a lost acknowledgement, and an exact-byte replay", async t => {
+  const disk = await photoDirectory(t);
+  const storage = new MemoryStorage();
+  const originalSetItem = storage.setItem.bind(storage);
+  storage.setItem = async (key, value) => {
+    assert.ok(Buffer.byteLength(value) < 2048, "the metadata store must never receive the photo bytes");
+    return originalSetItem(key, value);
+  };
+  const bytes = Buffer.alloc(6 * 1024 * 1024);
+  for (let i = 0; i < bytes.length; i++) bytes[i] = i % 251;
+  const capture = createOfflineStore(storage, randomUUID, Date.now, undefined, disk);
+  const op = capture.preparePhoto(A, { base64: bytes.toString("base64"), contentType: "image/jpeg",
+    storagePath: A + "/work_orders/item/inspection.jpg", doc: { owner_id: A } });
+  await capture.put(op);
+  await capture.put(capture.prepareInsert(A, "expenses", expense()));
+  const restarted = createOfflineStore(storage, randomUUID, Date.now, undefined, disk);
+  const [photo, expenseOp] = await restarted.read(A);
+  assert.equal(photo.kind, "photo");
+  assert.equal(expenseOp.kind, "insert");
+  if (photo.kind !== "photo") throw new Error("Expected photo");
+  assert.equal("base64" in photo, false);
+  assert.equal(photo.byteLength, bytes.length);
+  assert.deepEqual(Buffer.from(await restarted.readPhoto(photo)), bytes);
+  const server = backend();
+  let requests = 0;
+  server.transport.upload = async (metadata, actual) => {
+    requests++;
+    assert.equal(metadata.id, op.id);
+    assert.equal(metadata.storagePath, op.storagePath);
+    assert.deepEqual(Buffer.from(actual), bytes);
+  };
+  server.loseNextAcknowledgment();
+  await flushOfflineQueue(restarted, server.transport, A, () => true);
+  assert.deepEqual(await disk.list(A), [photo.photoKey]);
+  assert.equal(await flushOfflineQueue(restarted, server.transport, A, () => true), 2);
+  assert.equal(requests, 2);
+  assert.equal(server.rows.size, 2);
+  assert.deepEqual(await disk.list(A), []);
+});
+
+test("v2 inline migration preserves IDs, remote paths and original bytes across a failed metadata commit", async t => {
+  const storage = new MemoryStorage();
+  const disk = await photoDirectory(t);
+  const provider = () => createOfflineStore(storage, randomUUID, Date.now, undefined, disk);
+  const key = "rentview.offline.queue.v2." + A;
+  const bytes = Buffer.alloc(6 * 1024 * 1024, 0x46);
+  const op = provider().preparePhoto(A, { base64: bytes.toString("base64"), contentType: "image/png",
+    doc: { owner_id: A }, storagePath: A + "/work_orders/move-in.png" });
+  const raw = JSON.stringify([{ ...op, status: "failed", revision: 2, error: "Review this photo" }]);
+  storage.values.set(key, raw);
+  storage.rejectWrite = true;
+  await assert.rejects(provider().read(A), /quota/);
+  assert.equal(storage.values.get(key), raw);
+  storage.rejectWrite = false;
+  const [migrated] = await provider().read(A);
+  assert.ok(migrated.kind === "photo");
+  assert.equal(migrated.id, op.id);
+  assert.equal(migrated.status, "failed");
+  assert.equal(migrated.revision, 2);
+  assert.equal(migrated.storagePath, op.storagePath);
+  assert.deepEqual(Buffer.from(await provider().readPhoto(migrated)), bytes);
+  assert.ok(storage.values.get(key)!.length < 1024);
+
+  const other = provider().preparePhoto(B, { base64: "aGVsbG8=", contentType: "image/png",
+    doc: { owner_id: B }, storagePath: B + "/work_orders/other.png" });
+  await provider().put(other);
+  await provider().remove(A, op.id);
+  assert.deepEqual(await disk.list(A), []);
+  assert.equal((await provider().read(B)).length, 1);
+  await provider().clearAccount(B);
+  assert.deepEqual(await disk.list(B), []);
+});
+
+test("Android migration recovers a SQLite TEXT row in bounded chunks, including non-BMP characters", async () => {
+  const db = new DatabaseSync(":memory:");
+  try {
+    db.exec("CREATE TABLE catalystLocalStorage(key TEXT PRIMARY KEY,value TEXT NOT NULL)");
+    const key = "rentview.offline.queue.v2." + A;
+    const data = JSON.stringify({ note: "🛠".repeat(131100), base64: Buffer.alloc(6*1024*1024).toString("base64") });
+    db.prepare("INSERT INTO catalystLocalStorage VALUES(?, ?)").run(key, data);
+    let largest = 0;
+    const read = async (sql: string, offset: number, count: number, key: string) => {
+      const row = db.prepare(sql).get(offset, count, key) as { chunk: string } | undefined;
+      if (row) largest = Math.max(largest, Buffer.byteLength(row.chunk));
+      return row ?? null;
+    };
+    assert.equal(await readLegacyQueueRow(key, read), data);
+    assert.ok(largest <= 512 * 1024);
+    await assert.rejects(readLegacyQueueRow("absent", read), /could not be recovered/);
+  } finally { db.close(); }
+});
+
+test("legacy v1 photo migration retries a file-write failure without quarantining or dropping the original", async t => {
+  const storage = new MemoryStorage();
+  const disk = await photoDirectory(t);
+  const legacyKey = "rentview.offline.queue.v1";
+  const original = JSON.stringify([{ kind: "photo", id: "old-photo", doc: { owner_id: A },
+    storagePath: A + "/work_orders/old.png", contentType: "image/png", base64: "aGVsbG8=" }]);
+  storage.values.set(legacyKey, original);
+  const unavailable = { ...disk, async write() { throw new Error("Insufficient device space"); } };
+  const setup = (sidecar: PhotoStorage) => createOfflineStore(storage, randomUUID, Date.now, undefined, sidecar);
+  await assert.rejects(setup(unavailable).read(A), /device space/);
+  assert.equal(storage.values.get(legacyKey), original);
+  assert.equal(storage.values.has("rentview.offline.quarantine.v2"), false);
+  const store = setup(disk);
+  const [photo] = await store.read(A);
+  assert.ok(photo.kind === "photo" && photo.status === "failed"); // Older writes still require user review.
+  assert.equal(Buffer.from(await store.readPhoto(photo)).toString(), "hello");
+  assert.equal(storage.values.has(legacyKey), false);
+  assert.equal(JSON.stringify(await store.read(A)).includes("aGVsbG8="), false);
+});
+
+test("interrupted capture and cleanup leave only referenced files after restart", async t => {
+  const storage = new MemoryStorage();
+  const disk = await photoDirectory(t);
+  const setup = (sidecar: PhotoStorage) => createOfflineStore(storage, randomUUID, Date.now, undefined, sidecar);
+  const store = setup(disk);
+  const capture = () => store.preparePhoto(A, { doc: { owner_id: A }, storagePath: A + "/work_orders/cover.png",
+    contentType: "image/png", base64: "aGVsbG8=" });
+  const good = capture();
+  await store.put(good);
+  storage.rejectWrite = true;
+  await assert.rejects(store.put(capture()), /quota/);
+  storage.rejectWrite = false;
+  const interruptedCleanup = setup({ ...disk, async remove() { throw new Error("temporarily busy"); } });
+  const [op] = await interruptedCleanup.read(A);
+  assert.ok(op.kind === "photo");
+  assert.equal(Buffer.from(await interruptedCleanup.readPhoto(op)).toString(), "hello");
+  await interruptedCleanup.remove(A, op.id);
+  assert.ok((await disk.list(A)).length > 0);
+  assert.deepEqual(await setup(disk).read(A), []);
+  assert.deepEqual(await disk.list(A), []);
 });

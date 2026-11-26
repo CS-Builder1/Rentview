@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import ts from "typescript";
+import { createClient } from "@supabase/supabase-js";
 import * as billing from "../supabase/functions/_shared/billing.ts";
 import * as http from "../supabase/functions/_shared/http.ts";
 import * as notifications from "../supabase/functions/_shared/notifications.ts";
@@ -144,7 +145,7 @@ function deletionAdmin(options: { billingBlocked?: boolean; uploadFailure?: bool
   const calls: { name: string; args?: unknown }[] = [];
   let removed = false;
   return { calls, admin: {
-    auth: { getUser: async () => ({ data: { user: { id: uid } }, error: null }), admin: { deleteUser: async (id: string) => { calls.push({ name: "deleteUser", args: id }); return { error: null }; }, signOut: async () => ({ error: null }) } },
+    auth: { getUser: async () => ({ data: { user: { id: uid } }, error: null }), admin: { deleteUser: async (id: string) => { calls.push({ name: "deleteUser", args: id }); return { error: null as { message: string } | null }; }, signOut: async () => ({ error: null }) } },
     rpc: async (name: string, args: unknown): Promise<DeletionRpcResult> => {
       calls.push({ name, args });
       if (name === "prepare_identity_deletion") return { error: options.billingBlocked ? { code: "P0001", message: "fixture" } : null };
@@ -179,6 +180,50 @@ test("Unconfirmed Storage cleanup preserves account and blocks unsafe automatic 
   assert.equal(state.calls.some(call => call.name === "mark_identity_deletion_uncertain"), true);
   assert.equal(state.calls.some(call => call.name === "release_identity_deletion_worker"), false);
 });
+// Exercise the pinned SDK. It wraps a GoTrue HTTP 500 in AuthRetryableFetchError,
+// the same class used for a lost connection (which carries HTTP status zero).
+function providerFixture(reply: () => Response) {
+  return createClient("https://fixture.local", "fixture-key", {
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    global: { fetch: async () => reply() },
+  });
+}
+for (const provider of ["Auth", "Storage"] as const) {
+  test(`A confirmed ${provider} rejection releases the worker and allows another attempt`, async () => {
+    const state = deletionAdmin();
+    const client = providerFixture(() => Response.json(
+      provider === "Auth" ? { code: "unexpected_failure", msg: "Database error deleting user" }
+        : { statusCode: "403", error: "Unauthorized", message: "Operation denied" },
+      { status: provider === "Auth" ? 500 : 403 },
+    ));
+    const originalAuth = state.admin.auth.admin.deleteUser;
+    const originalStorage = state.admin.storage.from;
+    if (provider === "Auth") state.admin.auth.admin.deleteUser = client.auth.admin.deleteUser.bind(client.auth.admin);
+    else state.admin.storage.from = bucket => client.storage.from(bucket);
+    const fixture = load("delete-account", {}, state.admin);
+    const response = await fixture.handle(deleteRequest());
+    assert.equal(response.status, 503);
+    assert.equal((await response.json()).code, "deletion_retryable");
+    assert.deepEqual(state.calls.slice(-2).map(c => c.name), ["finish_identity_deletion_step", "release_identity_deletion_worker"]);
+    assert.equal(state.calls.some(c => c.name === "mark_identity_deletion_uncertain"), false);
+    if (provider === "Storage") assert.equal(state.calls.some(c => c.name === "forget_deleted_uploads"), false);
+    state.admin.auth.admin.deleteUser = originalAuth;
+    state.admin.storage.from = originalStorage;
+    assert.equal((await fixture.handle(deleteRequest())).status, 200);
+  });
+
+  test(`A missing or timed-out ${provider} response still requires review`, async () => {
+    for (const reply of [() => { throw new TypeError("Connection reset"); }, () => new Response(null, { status: 504 })]) {
+      const state = deletionAdmin();
+      const client = providerFixture(reply);
+      if (provider === "Auth") state.admin.auth.admin.deleteUser = client.auth.admin.deleteUser.bind(client.auth.admin);
+      else state.admin.storage.from = bucket => client.storage.from(bucket);
+      const response = await load("delete-account", {}, state.admin).handle(deleteRequest());
+      assert.equal((await response.json()).code, "deletion_review_required");
+      assert.equal(state.calls.at(-1)?.name, "mark_identity_deletion_uncertain");
+    }
+  });
+}
 test("Deletion rechecks renewed billing before deleting the identity", async () => {
   const state = deletionAdmin();
   const original = state.admin.rpc;
@@ -265,6 +310,16 @@ test("A lost claim response cannot trigger path lookup or an unowned claim relea
   const state = deletionAdmin({ claimFailure: true });
   assert.equal((await load("delete-account", {}, state.admin).handle(deleteRequest())).status, 500);
   assert.equal(state.calls.some(call => ["owned_storage_paths", "remove", "release_identity_deletion_worker"].includes(call.name)), false);
+});
+test("A superseded worker stops before dispatching a destructive call", async () => {
+  const state = deletionAdmin();
+  const original = state.admin.rpc;
+  state.admin.rpc = async (name, args) => name === "begin_identity_deletion_step"
+    ? { data: false, error: null } : original(name, args);
+  const response = await load("delete-account", {}, state.admin).handle(deleteRequest());
+  assert.equal(response.status, 409);
+  assert.equal(state.calls.some(c => ["remove", "deleteUser", "mark_identity_deletion_uncertain"].includes(c.name)), false);
+  assert.equal(state.calls.at(-1)?.name, "release_identity_deletion_worker");
 });
 test("Lost destructive-step acknowledgments retain the claim and stop further work", async () => {
   for (const failedRpc of ["begin_identity_deletion_step", "finish_identity_deletion_step"]) {
