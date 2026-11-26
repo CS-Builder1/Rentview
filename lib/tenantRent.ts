@@ -1,4 +1,6 @@
-import { localToday } from "./maintenance";
+import type { Database, Tables } from "./database.types";
+import { newRecordId } from "./id";
+import { localTimeZone, localToday } from "./maintenance";
 import { totalsByCurrency } from "./dashboard";
 
 export const localDateKey = localToday;
@@ -54,4 +56,36 @@ export function rentSummaryResult(records: RentRecord[]): { groups: Summary[]; e
   catch (error) {
     return { groups: [], error: error instanceof Error ? error.message : "The rent balance could not be calculated." };
   }
+}
+
+export function availableReceiptAmount(record: Pick<RentRecord, "amount" | "applied_amount" | "due_date" | "paid_on">): number {
+  // A legacy row with both dates is the receipt for its own charge.
+  return record.paid_on && !record.due_date ? rentRemaining(record) : 0;
+}
+
+export type MarkPaidRequest = Database["public"]["Functions"]["apply_rent_receipt"]["Args"];
+
+/** Keep the complete original request across a lost response, even if midnight
+ * passes or a refresh already shows the receipt in the charge balance. */
+export async function applyMarkPaid(
+  pending: Map<string, MarkPaidRequest>,
+  charge: Pick<Tables<"rent_record_balances">, "id" | "amount" | "applied_amount" | "method">,
+  send: (request: MarkPaidRequest) => PromiseLike<{ error: unknown }>,
+): Promise<void> {
+  let request = pending.get(charge.id);
+  if (!request) {
+    request = {
+      p_operation_id: newRecordId(),
+      p_charge_id: charge.id,
+      p_receipt_id: newRecordId(),
+      p_amount: rentRemaining(charge),
+      p_paid_on: localToday(),
+      p_method: charge.method ?? null,
+      p_time_zone: localTimeZone(),
+    };
+    pending.set(charge.id, request);
+  }
+  const result = await send(request);
+  if (result.error) throw result.error;
+  pending.delete(charge.id);
 }

@@ -110,3 +110,18 @@ export function historyEvidenceBucket(
 ): "attachments" | "dispatch-photos" {
   return kind === "dispatch" ? "dispatch-photos" : "attachments";
 }
+
+export function draftPhotos(rooms: Room[], evidence: string[]): string[] {
+  return [...new Set([...evidence, ...rooms.flatMap((room) => room.evidence)])];
+}
+
+export function historyEvidencePayload(inspection: boolean, rooms: Room[], evidence: string[]) {
+  if (inspection) return { p_rooms: rooms, p_evidence: evidence };
+
+  // Keep previously uploaded room photos when the draft changes event type.
+  const paths = draftPhotos(rooms, evidence);
+  if (paths.length > 10) {
+    throw new Error("An entry can hold 10 photos. Save this draft as an inspection to retain all room photos.");
+  }
+  return { p_rooms: [], p_evidence: paths };
+}

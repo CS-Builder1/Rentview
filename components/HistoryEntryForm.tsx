@@ -7,7 +7,9 @@ import { pickAndUploadImage, removeAttachment } from "../lib/attachments";
 import { notify } from "../lib/feedback";
 import {
   conditions,
+  draftPhotos,
   entryKinds,
+  historyEvidencePayload,
   inspectionError,
   type Room,
 } from "../lib/history";
@@ -60,6 +62,8 @@ export function HistoryEntryForm({
   const [followUp, setFollowUp] = useState(false);
   const [busy, setBusy] = useState(false);
   const lock = useRef(false);
+  const photos = draftPhotos(rooms, evidence);
+  const entryPhotoCount = kind === "inspection" ? evidence.length : photos.length;
   useEffect(() => {
     let present = true;
     if (unitId)
@@ -118,9 +122,8 @@ export function HistoryEntryForm({
     if (lock.current) return;
     lock.current = true;
     setBusy(true);
-    const paths = [...evidence, ...rooms.flatMap((r) => r.evidence)];
     try {
-      await Promise.all(paths.map(removeAttachment));
+      await Promise.all(photos.map(removeAttachment));
       onClose();
     } catch (error) {
       notify("Could not discard draft photos", operationError(error));
@@ -163,8 +166,7 @@ export function HistoryEntryForm({
         p_details: details,
         p_observer: observer,
         p_phase: inspection ? phase : null,
-        p_rooms: inspection ? rooms : [],
-        p_evidence: evidence,
+        ...historyEvidencePayload(inspection, rooms, evidence),
         p_follow_up: followUp,
       });
       if (error) throw error;
@@ -191,7 +193,7 @@ export function HistoryEntryForm({
             label="Event type"
             selected={kind}
             choices={entryKinds}
-            disabled={busy || rooms.some((r) => r.evidence.length > 0)}
+            disabled={busy}
             onSelect={setKind}
           />
           <Field
@@ -312,11 +314,11 @@ export function HistoryEntryForm({
           />
           <Button
             title={
-              evidence.length
-                ? "Add photo (" + evidence.length + " attached)"
+              entryPhotoCount
+                ? "Add photo (" + entryPhotoCount + " attached)"
                 : "Attach photo"
             }
-            disabled={busy || evidence.length >= 10}
+            disabled={busy || entryPhotoCount >= 10}
             variant="secondary"
             onPress={() => void addPhoto()}
           />

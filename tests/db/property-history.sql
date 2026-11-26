@@ -33,15 +33,29 @@ insert into public.dispatch_history(work_order_id,property_id,owner_id,event,det
   'field_completed','{"vendor_name":"Taylor HVAC","completion_notes":"Adjusted belt","completion_photos":[]}', '2024-01-12T13:00:00Z'),
  ('d6000000-0000-4000-8000-000000000001','d2000000-0000-4000-8000-000000000001','d1000000-0000-4000-8000-000000000001',
   'field_completed','{"vendor_name":"Taylor HVAC","completion_notes":"Replaced motor","completion_photos":[]}', '2024-01-13T14:00:00Z');
+-- A snapshot imported from the old schedule is promoted in place on the
+-- first real same-day completion. Subsequent retries must not roll it again.
+insert into public.maintenance_schedules(id,owner_id,property_id,title,next_due,last_done,frequency,cadence)
+values('d7500000-0000-4000-8000-000000000001','d1000000-0000-4000-8000-000000000001',
+ 'd2000000-0000-4000-8000-000000000001','Imported service','2024-01-31','2024-01-31','monthly','scheduled');
+insert into public.maintenance_completions(owner_id,schedule_id,property_id,completed_on,notes,next_due,imported_from_schedule)
+select owner_id,id,property_id,last_done,'Latest completion recorded on the original schedule',next_due,true
+from public.maintenance_schedules where id='d7500000-0000-4000-8000-000000000001';
 create function pg_temp.record_inspection() returns uuid language sql as $$
  select public.record_property_history('d7000000-0000-4000-8000-000000000001','d2000000-0000-4000-8000-000000000001',
  'd3000000-0000-4000-8000-000000000001',null,'d5000000-0000-4000-8000-000000000001','inspection','2024-01-31','Move-out walkthrough',
  '','Inspector Lee','move_out','[{"room":"Kitchen","condition":"worn","notes":"Loose hinge","evidence":["history/d2000000-0000-4000-8000-000000000001/d1000000-0000-4000-8000-000000000003/cc000000-0000-4000-8000-000000000001.jpg"]}]','{}',true);
 $$;
+create function pg_temp.record_observation() returns uuid language sql as $$
+ select public.record_property_history('d7000000-0000-4000-8000-000000000002','d2000000-0000-4000-8000-000000000001',
+ 'd3000000-0000-4000-8000-000000000001',null,null,'observation','2024-01-31','Sink repair',
+ '','Inspector Lee',null,'[]',array['history/d2000000-0000-4000-8000-000000000001/d1000000-0000-4000-8000-000000000003/cc000000-0000-4000-8000-000000000002.jpg'],false);
+$$;
 set local role authenticated;
 select pg_temp.actor('d1000000-0000-4000-8000-000000000003');
 insert into storage.objects(bucket_id,name,owner_id) values
- ('attachments','history/d2000000-0000-4000-8000-000000000001/d1000000-0000-4000-8000-000000000003/cc000000-0000-4000-8000-000000000001.jpg','d1000000-0000-4000-8000-000000000003');
+ ('attachments','history/d2000000-0000-4000-8000-000000000001/d1000000-0000-4000-8000-000000000003/cc000000-0000-4000-8000-000000000001.jpg','d1000000-0000-4000-8000-000000000003'),
+ ('attachments','history/d2000000-0000-4000-8000-000000000001/d1000000-0000-4000-8000-000000000003/cc000000-0000-4000-8000-000000000002.jpg','d1000000-0000-4000-8000-000000000003');
 select pg_temp.actor('d1000000-0000-4000-8000-000000000001');
 select pg_temp.ok(not exists(select from storage.objects where name='history/d2000000-0000-4000-8000-000000000001/d1000000-0000-4000-8000-000000000003/cc000000-0000-4000-8000-000000000001.jpg'),
   'An unpublished draft should only be visible to its uploader');
@@ -58,6 +72,19 @@ update public.assets set status='needs_attention' where id='d4000000-0000-4000-8
 select pg_temp.ok(exists(select from public.property_event_history where kind='asset_condition'
   and asset_id='d4000000-0000-4000-8000-000000000001' and details like '%needs attention%'),
   'Changing condition on the asset must also add a dated record');
+select public.complete_maintenance_schedule('d7500000-0000-4000-8000-000000000001','2024-01-31','Filter replaced','UTC');
+select public.complete_maintenance_schedule('d7500000-0000-4000-8000-000000000001','2024-01-31','Filter replaced','UTC');
+select pg_temp.ok((select count(*)=1 and bool_and(notes='Filter replaced' and not imported_from_schedule and next_due='2024-02-29')
+ from public.maintenance_completions where schedule_id='d7500000-0000-4000-8000-000000000001'),'real completion must record the notes and advance the imported slot exactly once');
+select pg_temp.ok((select next_due='2024-02-29' from public.maintenance_schedules where id='d7500000-0000-4000-8000-000000000001'),'schedule advances with the replacement');
+-- Room photos folded into a non-inspection entry become published evidence.
+select pg_temp.record_observation();
+select pg_temp.record_observation();
+select pg_temp.ok((select count(*)=1 from public.property_event_history e
+ join storage.objects o on o.bucket_id='attachments' and o.name=any(e.evidence)
+ where e.title='Sink repair' and e.kind='observation' and e.rooms='[]'::jsonb
+ and o.owner_id='d1000000-0000-4000-8000-000000000001'),
+ 'Saving and retrying an observation publishes the converted room photo exactly once');
 select pg_temp.record_inspection();
 select pg_temp.record_inspection();
 select pg_temp.ok((select count(*)=1 from public.property_event_history where title='Move-out walkthrough'

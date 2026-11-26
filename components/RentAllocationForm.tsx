@@ -8,7 +8,7 @@ import { formatCurrency, formatDate, titleCase } from "../lib/format";
 import { localTimeZone, localToday } from "../lib/maintenance";
 import { operationError } from "../lib/operationsQuery";
 import { supabase } from "../lib/supabase";
-import { rentRemaining } from "../lib/tenantRent";
+import { availableReceiptAmount, rentRemaining } from "../lib/tenantRent";
 import { calendarDate, nonNegativeMoney } from "../lib/validation";
 
 type Record = Tables<"rent_record_balances">;
@@ -16,7 +16,7 @@ type Record = Tables<"rent_record_balances">;
 export function RentAllocationForm({ charge, records, onCancel, onSaved }: {
   charge: Record; records: Record[]; onCancel: () => void; onSaved: () => void;
 }) {
-  const receipts = records.filter(r => r.paid_on && r.currency === charge.currency && r.lease_id === charge.lease_id && rentRemaining(r) > 0);
+  const receipts = records.filter(r => r.currency === charge.currency && r.lease_id === charge.lease_id && availableReceiptAmount(r) > 0);
   const [receipt, setReceipt] = useState<Record | null>(null);
   const [amount, setAmount] = useState(String(rentRemaining(charge)));
   const [paidOn, setPaidOn] = useState(localToday());

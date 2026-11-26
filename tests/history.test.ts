@@ -4,6 +4,7 @@ import {
   compareRooms,
   filterHistory,
   historyEvidenceBucket,
+  historyEvidencePayload,
   inspectionError,
   type HistoryEvent,
   type Room,
@@ -99,4 +100,15 @@ test("dispatch photos and inspection evidence resolve in their own private stora
   assert.equal(historyEvidenceBucket("dispatch"), "dispatch-photos");
   assert.equal(historyEvidenceBucket("inspection"), "attachments");
   assert.equal(historyEvidenceBucket("request_photo"), "attachments");
+});
+
+test("changing an inspection to an observation preserves every uploaded attachment on save and retry", () => {
+  const rooms = [{ ...room("Kitchen", "good"), evidence: ["oven.jpg", "sink.jpg"] }];
+  const photos = ["front.jpg", "oven.jpg"];
+  const expected = { p_rooms: [], p_evidence: ["front.jpg", "oven.jpg", "sink.jpg"] };
+  assert.deepEqual(historyEvidencePayload(false, rooms, photos), expected);
+  assert.deepEqual(historyEvidencePayload(false, rooms, photos), expected);
+  assert.deepEqual(historyEvidencePayload(true, rooms, photos), { p_rooms: rooms, p_evidence: photos });
+  assert.throws(() => historyEvidencePayload(false, rooms, Array.from({ length: 10 }, (_, i) => String(i))), /10 photos/);
+  assert.deepEqual(rooms[0].evidence, ["oven.jpg", "sink.jpg"]);
 });

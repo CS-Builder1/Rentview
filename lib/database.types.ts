@@ -85,6 +85,7 @@ export type Database = {
           property_id: string | null
           unit_id: string | null
           asset_id: string | null
+          imported_from_schedule: boolean
           completed_on: string
           notes: string | null
           next_due: string | null
@@ -97,6 +98,7 @@ export type Database = {
           property_id?: string | null
           unit_id?: string | null
           asset_id?: string | null
+          imported_from_schedule?: boolean
           completed_on?: string
           notes?: string | null
           next_due?: string | null
@@ -109,6 +111,7 @@ export type Database = {
           property_id?: string | null
           unit_id?: string | null
           asset_id?: string | null
+          imported_from_schedule?: boolean
           completed_on?: string
           notes?: string | null
           next_due?: string | null
@@ -1952,7 +1955,7 @@ export type Database = {
       apply_rent_receipt: {
         Args: {
           p_operation_id: string; p_charge_id: string; p_receipt_id: string; p_amount: number
-          p_paid_on?: string; p_method?: Database["public"]["Enums"]["payment_method"]; p_note?: string; p_time_zone?: string
+          p_paid_on?: string; p_method?: Database["public"]["Enums"]["payment_method"] | null; p_note?: string; p_time_zone?: string
         }
         Returns: string
       }

@@ -25,7 +25,7 @@ import {
   Screen,
 } from "../../../components/ui";
 import { RentAllocationForm } from "../../../components/RentAllocationForm";
-import { rentRemaining, rentSummaryResult } from "../../../lib/tenantRent";
+import { applyMarkPaid, rentRemaining, rentSummaryResult, type MarkPaidRequest } from "../../../lib/tenantRent";
 import { useAuth } from "../../../lib/auth";
 import { cachedSelectResult } from "../../../lib/cache";
 import { confirmAction } from "../../../lib/confirm";
@@ -38,7 +38,7 @@ import { newRecordId } from "../../../lib/id";
 import { inviteUrl } from "../../../lib/appUrl";
 import { notify } from "../../../lib/feedback";
 import { calendarDate, currencyCode, nonNegativeMoney } from "../../../lib/validation";
-import { localTimeZone, localToday } from "../../../lib/maintenance";
+import { localToday } from "../../../lib/maintenance";
 import { operationError, readAllPages } from "../../../lib/operationsQuery";
 
 type Lease = Tables<"leases"> & {
@@ -66,6 +66,7 @@ export default function LeaseDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const generation = useRef(0);
+  const markPaidRequests = useRef(new Map<string, MarkPaidRequest>());
   const paymentDraftId = useRef<string | null>(null);
   const { session } = useAuth();
 
@@ -223,12 +224,7 @@ export default function LeaseDetail() {
     if (payment.paid_on || busy) return;
     setBusy(true);
     try {
-      const { error } = await supabase.rpc("apply_rent_receipt", {
-        p_operation_id: newRecordId(), p_charge_id: payment.id, p_receipt_id: newRecordId(),
-        p_amount: rentRemaining(payment), p_paid_on: localToday(), p_method: payment.method ?? "bank_transfer",
-        p_time_zone: localTimeZone(),
-      });
-      if (error) throw error;
+      await applyMarkPaid(markPaidRequests.current, payment, args => supabase.rpc("apply_rent_receipt", args));
       await load();
     } catch (error) { notify("Could not mark payment paid", operationError(error)); }
     finally { setBusy(false); }

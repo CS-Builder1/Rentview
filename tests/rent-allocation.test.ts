@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { rentSummaries, rentState } from "../lib/tenantRent";
+import { applyMarkPaid, availableReceiptAmount, rentSummaries, rentState, type MarkPaidRequest } from "../lib/tenantRent";
 
 test("receipts reduce only their allocated charges and preserve legacy history", () => {
   const charge = { lease_id: "a", amount: 1000, currency: "USD", due_date: "2026-01-01", paid_on: null, applied_amount: 400 };
@@ -18,4 +18,31 @@ test("operating statements use the receipt date, include each receipt once and t
   assert.ok(csv.indexOf("2026-04-29") < csv.indexOf("2026-05-01"));
   assert.match(csv,/Rent less expenses,,,374.90,USD/);
   assert.match(csv,/Rent less expenses,,,-60.00,XCD/);
+});
+
+test("a lost mark-paid acknowledgement replays the original command and nullable method", async () => {
+  const pending = new Map<string, MarkPaidRequest>();
+  const payment = { id: "charge", due_date: "2026-01-01", paid_on: null, amount: 1000, applied_amount: 400, method: null };
+  const requests: MarkPaidRequest[] = [];
+  const committed = new Set<string>();
+  const send = async (request: MarkPaidRequest) => {
+    requests.push(request);
+    committed.add(request.p_operation_id);
+    if (requests.length === 1) throw new Error("Lost acknowledgement");
+    return { error: null };
+  };
+  await assert.rejects(applyMarkPaid(pending, payment, send), /Lost acknowledgement/);
+  await applyMarkPaid(pending, { ...payment, applied_amount: 1000 }, send);
+  assert.deepEqual(requests[0], requests[1]);
+  assert.equal(committed.size, 1);
+  assert.equal(pending.size, 0);
+  assert.equal(requests[0].p_amount, 600);
+  assert.equal(requests[0].p_method, null);
+});
+
+test("only standalone receipts offer money to another charge", () => {
+  const receipt = { amount: 1000, applied_amount: 400, due_date: null, paid_on: "2026-01-03" };
+  assert.equal(availableReceiptAmount(receipt), 600);
+  assert.equal(availableReceiptAmount({ ...receipt, due_date: "2026-01-01" }), 0);
+  assert.equal(availableReceiptAmount({ ...receipt, paid_on: null }), 0);
 });
