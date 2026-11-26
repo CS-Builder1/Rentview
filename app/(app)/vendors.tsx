@@ -95,7 +95,10 @@ export default function Vendors() {
     finally { setSaving(false); }
   }
 
+  const ownsEditedRecord = Boolean(editingId && session && vendors?.some((row) => row.id === editingId && row.owner_id === session.user.id));
+
   function remove() {
+    if (!ownsEditedRecord) return;
     if (!editingId) return;
     confirmAction(
       "Delete vendor",
@@ -201,7 +204,7 @@ export default function Vendors() {
                 <Button title="Save" onPress={save} loading={saving} />
               </View>
             </View>
-            {editingId ? (
+            {ownsEditedRecord ? (
               <View className="mt-3">
                 <Button title="Delete vendor" variant="danger" onPress={remove} />
               </View>

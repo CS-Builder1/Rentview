@@ -123,7 +123,10 @@ export default function Inventory() {
     finally { setSaving(false); }
   }
 
+  const ownsEditedRecord = Boolean(editingId && session && items?.some((row) => row.id === editingId && row.owner_id === session.user.id));
+
   function remove() {
+    if (!ownsEditedRecord) return;
     if (!editingId) return;
     confirmAction(
       "Delete item",
@@ -306,7 +309,7 @@ export default function Inventory() {
                 <Button title="Save" onPress={save} loading={saving} />
               </View>
             </View>
-            {editingId ? (
+            {ownsEditedRecord ? (
               <View className="mt-3">
                 <Button title="Delete item" variant="danger" onPress={remove} />
               </View>

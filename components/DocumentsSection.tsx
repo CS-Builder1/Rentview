@@ -4,6 +4,7 @@ import { Alert, Modal, Platform, Pressable, Text, View } from "react-native";
 
 import {
   openAttachment,
+  deleteDocument,
   pickAndUploadDocument,
 } from "../lib/attachments";
 import { useAuth } from "../lib/auth";
@@ -145,10 +146,13 @@ export function DocumentsSection({
   }
 
   async function remove(doc: Tables<"documents">) {
+    if (doc.owner_id !== session?.user.id) return;
     const run = async () => {
-      await supabase.storage.from("attachments").remove([doc.storage_path]);
-      await supabase.from("documents").delete().eq("id", doc.id);
-      load();
+      try {
+        await deleteDocument(doc.id);
+      } catch (error) {
+        notify("Document removal", error instanceof Error ? error.message : String(error));
+      } finally { await load(); }
     };
     if (Platform.OS === "web") {
       if (window.confirm(`Delete "${doc.name}"?`)) run();
@@ -191,9 +195,11 @@ export function DocumentsSection({
                 </Text>
               </View>
               <Badge label={d.doc_type} />
-              <Pressable onPress={() => remove(d)} className="ml-2">
-                <Ionicons name="trash-outline" size={18} color="#dc2626" />
-              </Pressable>
+              {d.owner_id === session?.user.id ? (
+                <Pressable onPress={() => remove(d)} className="ml-2">
+                  <Ionicons name="trash-outline" size={18} color="#dc2626" />
+                </Pressable>
+              ) : null}
             </View>
           </Card>
         ))

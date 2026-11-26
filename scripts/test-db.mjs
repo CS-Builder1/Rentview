@@ -19,3 +19,5 @@ for (const file of ['tests/db/trust.sql', 'tests/db/property-handover.sql', 'tes
     console.error('Local database regression failed or could not run; validation is incomplete.'); process.exit(result.status ?? 1);
   }
 }
+const { verifyPortfolioConcurrency } = await import('../tests/db/portfolio-concurrency.mjs');
+await verifyPortfolioConcurrency(raw, env);

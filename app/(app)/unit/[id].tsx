@@ -244,6 +244,7 @@ export default function UnitDetail() {
   }
 
   function deleteUnit() {
+    if (!unit || unit.owner_id !== session?.user.id) return;
     confirmAction(
       "Delete unit",
       "This permanently deletes the unit and its leases. Assets and work orders are kept but unlinked from it. This cannot be undone.",
@@ -282,9 +283,11 @@ export default function UnitDetail() {
         <Pressable accessibilityRole="button" accessibilityLabel="Edit unit" onPress={openEdit} className="p-2">
           <Ionicons name="create-outline" size={22} color="#0f766e" />
         </Pressable>
-        <Pressable accessibilityRole="button" accessibilityLabel="Delete unit" onPress={deleteUnit} className="p-2">
-          <Ionicons name="trash-outline" size={22} color="#dc2626" />
-        </Pressable>
+        {unit.owner_id === session?.user.id ? (
+          <Pressable accessibilityRole="button" accessibilityLabel="Delete unit" onPress={deleteUnit} className="p-2">
+            <Ionicons name="trash-outline" size={22} color="#dc2626" />
+          </Pressable>
+        ) : null}
       </View>
 
       <ScrollView contentContainerClassName="px-5 pb-12">

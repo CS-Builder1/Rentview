@@ -229,6 +229,7 @@ export default function LeaseDetail() {
   }
 
   function removePayment(paymentId: string) {
+    if (!session || lease?.owner_id !== session.user.id) return;
     confirmAction(
       "Delete payment",
       "This removes the record from the tenant's history too.",
@@ -248,7 +249,10 @@ export default function LeaseDetail() {
   if (loading) return <Loading />;
   if (!lease) return <Screen><View className="p-5"><Text accessibilityRole="alert" className="mb-3 text-red-700">{loadError ?? "This lease is unavailable or you no longer have access."}</Text><Button title="Retry" onPress={() => void load()} /><Button title="Back to properties" variant="secondary" onPress={() => router.replace("/properties")} /></View></Screen>;
 
-  const activeInvite = invites.find(
+  const todayUtc = new Date().toISOString().slice(0, 10);
+  const ended = Boolean(lease.end_date && lease.end_date < todayUtc);
+  const futureStart = Boolean(lease.start_date && lease.start_date > todayUtc);
+  const activeInvite = !ended && invites.find(
     (i) => !i.claimed_at && new Date(i.expires_at) > new Date(),
   );
   const linked = Boolean(lease.tenant_user_id);
@@ -317,12 +321,11 @@ export default function LeaseDetail() {
             <View className="flex-row items-center">
               <Ionicons name="checkmark-circle" size={20} color="#16a34a" />
               <Text className="ml-2 flex-1 text-slate-700">
-                This tenant has portal access.
+                {futureStart && lease.start_date ? `Portal access starts ${formatDate(lease.start_date)}.` : ended ? "The lease has ended." : "This tenant has portal access."}
               </Text>
             </View>
             <Text className="mt-2 text-xs text-slate-400">
-              They can report repairs, follow progress and see the rent history
-              you record here.
+              {ended ? "Property staff retain the payment and repair history." : "During the lease they can report repairs, follow progress and see their rent history."}
             </Text>
             <View className="mt-3">
               <Button
@@ -370,8 +373,8 @@ export default function LeaseDetail() {
             </Text>
             <View className="mt-3">
               <Button
-                title={!lease.tenant_email ? "Add a resident email on the lease to invite" : lease.status === "active" ? "Generate tenant invitation" : "Activate the lease to invite"}
-                disabled={lease.status !== "active" || !lease.tenant_email}
+                title={ended ? "The lease has ended" : !lease.tenant_email ? "Add a resident email on the lease to invite" : lease.status === "active" ? "Generate tenant invitation" : "Activate the lease to invite"}
+                disabled={ended || lease.status !== "active" || !lease.tenant_email}
                 onPress={generateInvite}
                 loading={busy}
               />
@@ -405,9 +408,11 @@ export default function LeaseDetail() {
                 <Text className="text-base font-semibold text-slate-900">
                   {formatCurrency(p.amount, p.currency)}
                 </Text>
-                <Pressable accessibilityRole="button" accessibilityLabel="Delete payment record" disabled={busy} onPress={() => removePayment(p.id)}>
-                  <Ionicons name="trash-outline" size={18} color="#dc2626" />
-                </Pressable>
+                {p.owner_id === session?.user.id ? (
+                  <Pressable accessibilityRole="button" accessibilityLabel="Delete payment record" disabled={busy} onPress={() => removePayment(p.id)}>
+                    <Ionicons name="trash-outline" size={18} color="#dc2626" />
+                  </Pressable>
+                ) : null}
               </View>
               <Text className="mt-1 text-slate-500">
                 {p.paid_on
