@@ -36,22 +36,41 @@ select pg_temp.ok(public.finish_identity_deletion_step('ed100000-0000-4000-8000-
 select pg_temp.ok(public.release_identity_deletion_worker('ed100000-0000-4000-8000-000000000001','ed200000-0000-4000-8000-000000000001'),'acknowledged continuation releases');
 select pg_temp.ok(public.claim_identity_deletion_worker('ed100000-0000-4000-8000-000000000001','ed200000-0000-4000-8000-000000000002')='claimed','normal continuation claims anew');
 reset role;
--- No TTL takeover, even if a clock says the running claim is ancient.
-update rentview_private.identity_deletion_workers set claimed_at='2000-01-01',updated_at='2000-01-01'
+-- Activity from the current worker renews the idle window.
+update rentview_private.identity_deletion_workers set updated_at = now() - interval '11 minutes'
  where owner_id='ed100000-0000-4000-8000-000000000001';
--- Simulate an acknowledged remove followed by another principal reusing name.
+set local role service_role;
+select pg_temp.ok((select count(*)=1 from public.owned_storage_paths('ed100000-0000-4000-8000-000000000001','ed200000-0000-4000-8000-000000000002',100)),'worker can resume listing');
+select pg_temp.ok(public.claim_identity_deletion_worker('ed100000-0000-4000-8000-000000000001','ed200000-0000-4000-8000-000000000003')='running','recently active worker stays exclusive');
+reset role;
+-- Simulate an interrupted worker between acknowledged steps. A new attempt
+-- must list current ownership from scratch after taking the old idle claim.
+update rentview_private.identity_deletion_workers set updated_at = now() - interval '11 minutes'
+ where owner_id='ed100000-0000-4000-8000-000000000001';
 set local storage.allow_delete_query='true';
 delete from storage.objects where bucket_id='attachments' and name='requests/deletion-worker/owned.jpg';
 insert into storage.objects(bucket_id,name,owner_id) values
  ('attachments','requests/deletion-worker/owned.jpg','ed100000-0000-4000-8000-000000000002');
 set local role service_role;
-select pg_temp.ok(public.claim_identity_deletion_worker('ed100000-0000-4000-8000-000000000001','ed200000-0000-4000-8000-000000000003')='running','clock never overtakes active worker');
-select pg_temp.ok((select count(*)=0 from public.owned_storage_paths('ed100000-0000-4000-8000-000000000001','ed200000-0000-4000-8000-000000000002',100)),'foreign replacement not listed');
-select pg_temp.ok(public.begin_identity_deletion_step('ed100000-0000-4000-8000-000000000001','ed200000-0000-4000-8000-000000000002'),'second worker begins step');
-select pg_temp.ok(public.mark_identity_deletion_uncertain('ed100000-0000-4000-8000-000000000001','ed200000-0000-4000-8000-000000000002'),'lost response requires review');
-select pg_temp.ok(not public.finish_identity_deletion_step('ed100000-0000-4000-8000-000000000001','ed200000-0000-4000-8000-000000000002'),'uncertain work cannot resume blindly');
-select pg_temp.ok(not public.release_identity_deletion_worker('ed100000-0000-4000-8000-000000000001','ed200000-0000-4000-8000-000000000002'),'uncertain work cannot auto-release');
-select pg_temp.ok(public.claim_identity_deletion_worker('ed100000-0000-4000-8000-000000000001','ed200000-0000-4000-8000-000000000003')='needs_review','review state remains visible');
+select pg_temp.ok(public.claim_identity_deletion_worker('ed100000-0000-4000-8000-000000000001','ed200000-0000-4000-8000-000000000003')='claimed','idle worker may be replaced');
+select pg_temp.ok(not public.begin_identity_deletion_step('ed100000-0000-4000-8000-000000000001','ed200000-0000-4000-8000-000000000002'),'stale token cannot dispatch');
+select pg_temp.ok(not public.release_identity_deletion_worker('ed100000-0000-4000-8000-000000000001','ed200000-0000-4000-8000-000000000002'),'stale token cannot release replacement');
+select pg_temp.denied($q$select * from public.owned_storage_paths('ed100000-0000-4000-8000-000000000001','ed200000-0000-4000-8000-000000000002',100)$q$,'42501');
+select pg_temp.ok((select count(*)=0 from public.owned_storage_paths('ed100000-0000-4000-8000-000000000001','ed200000-0000-4000-8000-000000000003',100)),'foreign replacement not listed');
+select pg_temp.ok(public.begin_identity_deletion_step('ed100000-0000-4000-8000-000000000001','ed200000-0000-4000-8000-000000000003'),'new worker begins step');
+reset role;
+update rentview_private.identity_deletion_workers set updated_at = now() - interval '1 day'
+ where owner_id='ed100000-0000-4000-8000-000000000001';
+set local role service_role;
+select pg_temp.ok(public.claim_identity_deletion_worker('ed100000-0000-4000-8000-000000000001','ed200000-0000-4000-8000-000000000004')='running','clock never overtakes pending provider work');
+select pg_temp.ok(public.mark_identity_deletion_uncertain('ed100000-0000-4000-8000-000000000001','ed200000-0000-4000-8000-000000000003'),'lost response requires review');
+select pg_temp.ok(not public.finish_identity_deletion_step('ed100000-0000-4000-8000-000000000001','ed200000-0000-4000-8000-000000000003'),'uncertain work cannot resume blindly');
+select pg_temp.ok(not public.release_identity_deletion_worker('ed100000-0000-4000-8000-000000000001','ed200000-0000-4000-8000-000000000003'),'uncertain work cannot auto-release');
+reset role;
+update rentview_private.identity_deletion_workers set updated_at = now() - interval '1 day'
+ where owner_id='ed100000-0000-4000-8000-000000000001';
+set local role service_role;
+select pg_temp.ok(public.claim_identity_deletion_worker('ed100000-0000-4000-8000-000000000001','ed200000-0000-4000-8000-000000000004')='needs_review','clock never replaces a claim under review');
 select pg_temp.denied($q$select * from public.owned_storage_paths('ed100000-0000-4000-8000-000000000001',100)$q$,'42501');
 select pg_temp.denied($q$select public.forget_deleted_uploads('ed100000-0000-4000-8000-000000000001',array['requests/deletion-worker/owned.jpg'])$q$,'42501');
 reset role;

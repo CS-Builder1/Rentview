@@ -1,21 +1,22 @@
 # Deletion worker recovery
 
 `delete-account` claims one private, service-only token per identity before it
-lists or removes any Storage names. A second caller receives HTTP 409 with
-`deletion_in_progress` or `deletion_review_required`; it performs no cleanup.
-The account screen displays the support response and disables further deletion
-attempts for that screen lifetime. Reopening/reloading the screen rechecks the
-server on the next authenticated attempt; the server-side claim persists across
-reloads and accounts cannot override it.
-Normal acknowledged partial cleanup returns HTTP 202 and releases the claim for
+lists or removes any Storage names. A concurrent caller receives HTTP 409 with
+`deletion_in_progress` or `deletion_review_required`. Confirmed provider
+rejections return HTTP 503 with `deletion_retryable` after the worker
+acknowledges the step and releases its claim. The account screen permits
+continuation. A retry lists current ownership and rechecks billing. Normal
+acknowledged partial cleanup returns HTTP 202 and releases the claim for
 continuation. The deletion-request tombstone continues to freeze account writes.
 
-The claim has **no automatic expiry or takeover**. A Storage remove addresses a
-name rather than a particular immutable object version. Client timeout,
-AbortSignal cancellation, an old `updated_at`, or disappearance of an Edge
-invocation from a dashboard does not prove that a previously dispatched request
-cannot finish later. A timed lease would permit the stale request to remove a
-file subsequently created by another request participant at the same name.
+On an authenticated retry, a running worker idle for ten minutes between
+destructive steps can be replaced atomically. Listing and cleanup metadata
+operations renew that interval. A replaced worker's token cannot start another
+Storage or Auth operation. A worker with a pending destructive call or a
+`needs_review` claim remains exclusive indefinitely. A Storage remove addresses
+a name, so an earlier request could delete another participant's replacement at
+the same path. A timeout, cancellation or a missing response cannot establish
+that the request has finished.
 
 Before rollout, separately authorize the hosted target, quiesce old deletion
 handlers, and establish that their destructive requests have finished. Apply the
@@ -32,9 +33,9 @@ There is no customer endpoint to override a claim.
 1. Inspect only the selected identity's row in
    `rentview_private.identity_deletion_workers`: `owner_id`, `state`,
    `destructive_pending`, `claimed_at`, and `updated_at`. Keep the claim token
-   private; never ask the customer to provide or publish it. An old running row
-   remains blocked and requires the same review as `needs_review` if its worker
-   was interrupted.
+   private; never ask the customer to provide or publish it. A running row with `destructive_pending = false` is eligible for authenticated
+   retry after ten minutes of inactivity. Investigate a running row with pending
+   work using the same process as a row marked `needs_review`.
 2. Prove that the exact old worker has terminated and **every destructive
    Storage/Auth request it dispatched has a terminal server-side outcome**.
    Correlate provider request IDs and service logs. If this cannot be established,
@@ -60,15 +61,15 @@ There is no customer endpoint to override a claim.
    and performs the remaining work. A successful normal continuation releases
    its claim or cascades it through Auth deletion.
 
-A provider-confirmed rejected destructive request may be released after the same
-proof of terminal outcome. Generic 5xx, transport errors and partial batch errors
-are treated as unknown and require review. This favors preserving other
-participants' files over automatically retrying uncertain name-based deletes.
+The handler recognizes GoTrue’s returned database refusal, including the HTTP
+500 caused by the billing guard, and explicit Storage API rejections. Missing
+responses, gateway timeouts and lost step acknowledgments retain their claims
+for review.
 
 ## Validation limits
 
 The SQL and handler fixtures verify exclusive claims, wrong-token denial,
-non-expiry, release after acknowledged continuation, concurrent invocation
+idle token rotation, exclusion during pending work, release after a provider refusal or acknowledged continuation, concurrent invocation
 rejection, retained claims after unknown outcomes, old-RPC denial, and foreign
 replacement preservation. They do not prove successful deletion through a live
 Edge runtime, provider delivery, or the ability to terminate an already-dispatched
