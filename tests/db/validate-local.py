@@ -225,7 +225,7 @@ def main():
             (followup_stages[2], "to_regprocedure('public.finish_notification(uuid,uuid,boolean,jsonb,text,boolean)') is not null and to_regprocedure('public.finish_notification(uuid,uuid,boolean,jsonb,text)') is null"),
             (followup_stages[3], "to_regclass('rentview_private.identity_deletion_workers') is not null and to_regprocedure('public.owned_storage_paths(uuid,uuid,integer)') is not null and not has_function_privilege('service_role','public.owned_storage_paths(uuid,integer)','execute')"),
             (followup_stages[4], "position('account_deletion_requests' in pg_get_functiondef('public.due_reminder_owners(date,date,integer)'::regprocedure))>0 and position('p_period_end := prior.period_end' in pg_get_functiondef('public.apply_billing_event(text,text,text,uuid,text,text,text,text,timestamptz,boolean,timestamptz,jsonb)'::regprocedure))>0"),
-            (followup_stages[5], "to_regclass('rentview_private.tenant_invite_claim_failures') is not null and to_regprocedure('rentview_private.claim_tenant_invite_checked(text)') is not null"),
+            (followup_stages[5], "to_regclass('rentview_private.tenant_invite_claim_failures') is not null and to_regprocedure('rentview_private.claim_tenant_invite_checked(text)') is not null and to_regprocedure('rentview_private.claim_tenant_invite_throttled(text)') is not null"),
             (followup_stages[6], "position('clock_timestamp()' in pg_get_functiondef('public.claim_identity_deletion_worker(uuid,uuid)'::regprocedure))>0"),
             (followup_stages[7], "position('Parts cannot be returned after financial completion' in pg_get_functiondef('public.remove_work_order_part(uuid)'::regprocedure))>0"),
         ]

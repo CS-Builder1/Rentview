@@ -16,7 +16,7 @@ alter function public.claim_tenant_invite(text) set schema rentview_private;
 alter function rentview_private.claim_tenant_invite(text) rename to claim_tenant_invite_checked;
 revoke all on function rentview_private.claim_tenant_invite_checked(text) from public, anon, authenticated, service_role;
 
-create function public.claim_tenant_invite(invite_code text)
+create function rentview_private.claim_tenant_invite_throttled(invite_code text)
 returns json language plpgsql security definer set search_path = '' as $$
 declare
   claimant uuid := auth.uid();
@@ -57,6 +57,14 @@ begin
   perform set_config('response.status', case error_code when '42501' then '403' else '400' end, true);
   return json_build_object('code', error_code, 'message', error_message, 'details', null, 'hint', null);
 end;
+$$;
+revoke all on function rentview_private.claim_tenant_invite_throttled(text) from public, anon, authenticated, service_role;
+
+-- Later access migrations can replace the eligibility checks while keeping
+-- the public RPC bound to the same durable, serialized attempt counter.
+create function public.claim_tenant_invite(invite_code text)
+returns json language sql security definer set search_path = '' as $$
+  select rentview_private.claim_tenant_invite_throttled(invite_code);
 $$;
 revoke all on function public.claim_tenant_invite(text) from public, anon, service_role;
 grant execute on function public.claim_tenant_invite(text) to authenticated;
