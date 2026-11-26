@@ -26,6 +26,8 @@ import { notify } from "../../../lib/feedback";
 import { currencyCode, nonNegativeMoney } from "../../../lib/validation";
 import { operationError, readAllPages } from "../../../lib/operationsQuery";
 
+import { PropertyManagers } from "../../../components/PropertyManagers";
+
 const UNIT_TYPES = Constants.public.Enums.unit_type;
 const UNIT_STATUSES = Constants.public.Enums.unit_status;
 const PROPERTY_TYPES = Constants.public.Enums.property_type;
@@ -185,12 +187,13 @@ export default function PropertyDetail() {
         <Pressable accessibilityRole="button" accessibilityLabel="Edit property" onPress={openEdit} className="p-2">
           <Ionicons name="create-outline" size={22} color="#0f766e" />
         </Pressable>
-        <Pressable accessibilityRole="button" accessibilityLabel="Delete property" onPress={deleteProperty} className="p-2">
+        {property.owner_id === session?.user.id ? <Pressable accessibilityRole="button" accessibilityLabel="Delete property" onPress={deleteProperty} className="p-2">
           <Ionicons name="trash-outline" size={22} color="#dc2626" />
-        </Pressable>
+        </Pressable> : null}
       </View>
 
       <ScrollView contentContainerClassName="px-5 pb-10">
+        {property.owner_id === session?.user.id ? <PropertyManagers propertyId={property.id} /> : null}
         {loadError ? <View className="mb-3"><Text accessibilityRole="alert" className="mb-2 text-red-700">{loadError}</Text><Button title="Retry" variant="secondary" onPress={() => void load()} /></View> : null}
         <View className="mb-3"><Button title="New maintenance job" onPress={() => router.push({ pathname: "/work-orders", params: { new: "1", propertyId: property.id } })} /></View>
         <Card>

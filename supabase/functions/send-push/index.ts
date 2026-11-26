@@ -18,6 +18,11 @@ const relation = (value: unknown): Record<string, unknown> => {
   return candidate && typeof candidate === "object" ? candidate as Record<string, unknown> : {};
 };
 
+function activeDates(lease: { start_date?: string | null; end_date?: string | null; archived_at?: string | null }) {
+  const today = new Date().toISOString().slice(0, 10);
+  return !lease.archived_at && (!lease.start_date || lease.start_date <= today) && (!lease.end_date || lease.end_date >= today);
+}
+
 Deno.serve(async req => {
   try {
     if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
@@ -94,23 +99,27 @@ Deno.serve(async req => {
             let offset = 0;
             const ids = new Set<string>();
             for (;;) {
-              const { data: leases, error: leaseError } = await admin.from("leases").select("tenant_user_id,units!leases_unit_id_owner_fk!inner(property_id)").eq("owner_id", announcement.owner_id).eq("status", "active").not("tenant_user_id", "is", null).order("id").range(offset, offset + 499);
+              const { data: leases, error: leaseError } = await admin.from("leases").select("tenant_user_id,start_date,end_date,archived_at,units!leases_unit_id_owner_fk!inner(property_id)").eq("owner_id", announcement.owner_id).eq("status", "active").not("tenant_user_id", "is", null).order("id").range(offset, offset + 499);
               if (leaseError) throw leaseError;
-              for (const lease of leases ?? []) if (!announcement.property_id || relation(lease.units).property_id === announcement.property_id) ids.add(lease.tenant_user_id);
+              for (const lease of leases ?? []) if (activeDates(lease) && (!announcement.property_id || relation(lease.units).property_id === announcement.property_id)) ids.add(lease.tenant_user_id);
               if ((leases?.length ?? 0) < 500) break; offset += 500;
             }
             recipients = [...ids].map(userId => ({ userId, url: "/tenant" }));
             title = clamp(announcement.title, 60); body = clamp(announcement.body ?? "Open RentView to read the notice.");
           }
         } else {
-          const { data: request, error } = await admin.from("maintenance_requests").select("id,lease_id,title,status,owner_id,tenant_user_id,units!maintenance_requests_unit_property_owner_fk(label),properties!maintenance_requests_property_id_owner_fk(name)").eq("id", job.row_id).maybeSingle();
+          const { data: request, error } = await admin.from("maintenance_requests").select("id,lease_id,property_id,title,status,owner_id,tenant_user_id,units!maintenance_requests_unit_property_owner_fk(label),properties!maintenance_requests_property_id_owner_fk(name)").eq("id", job.row_id).maybeSingle();
           if (error) throw error;
-          if (request?.tenant_user_id && (job.actor_id === request.owner_id || job.actor_id === request.tenant_user_id)) {
-            const { data: lease, error: leaseError } = await admin.from("leases").select("id").eq("id", request.lease_id).eq("owner_id", request.owner_id).eq("tenant_user_id", request.tenant_user_id).eq("status", "active").maybeSingle();
+          if (request?.tenant_user_id) {
+            const { data: managers, error: managerError } = await admin.from("property_managers").select("user_id").eq("property_id", request.property_id);
+            if (managerError) throw managerError;
+            const staff = [request.owner_id, ...(managers ?? []).map(m => m.user_id)];
+            const staffActed = staff.includes(job.actor_id);
+            const { data: lease, error: leaseError } = await admin.from("leases").select("id,start_date,end_date,archived_at").eq("id", request.lease_id).eq("owner_id", request.owner_id).eq("tenant_user_id", request.tenant_user_id).eq("status", "active").maybeSingle();
             if (leaseError) throw leaseError;
-            if (lease) {
-              const ownerActed = job.actor_id === request.owner_id;
-              recipients = [{ userId: ownerActed ? request.tenant_user_id : request.owner_id, url: ownerActed ? `/tenant/request/${request.id}` : `/request/${request.id}` }];
+            if (lease && activeDates(lease) && (staffActed || job.actor_id === request.tenant_user_id)) {
+              recipients = staffActed ? [{ userId: request.tenant_user_id, url: `/tenant/request/${request.id}` }]
+                : [...new Set(staff)].map(userId => ({userId, url: `/request/${request.id}` }));
               const place = [relation(request.properties).name, relation(request.units).label].filter(Boolean).join(" · ");
               title = job.event === "request_created" ? "New repair request" : job.event === "request_message" ? "New message" : "Request updated";
               body = clamp(job.event === "request_message" ? `A new message about ${request.title}.` : job.event === "request_created" ? `${place ? `${place}: ` : ""}${request.title}` : `${request.title} — ${String(request.status).replace(/_/g, " ")}`);

@@ -201,7 +201,10 @@ export default function Expenses() {
     }
   }
 
+  const ownsEditedRecord = Boolean(editingId && session && expenses?.some((row) => row.id === editingId && row.owner_id === session.user.id));
+
   function remove() {
+    if (!ownsEditedRecord) return;
     if (!editingId || savingRef.current) return;
     confirmAction(
       "Delete expense",
@@ -445,7 +448,7 @@ export default function Expenses() {
                 <Button title="Save" onPress={save} loading={saving} />
               </View>
             </View>
-            {editingId ? (
+            {ownsEditedRecord ? (
               <View className="mt-3">
                 <Button title="Delete expense" variant="danger" onPress={remove} disabled={saving} />
               </View>

@@ -30,6 +30,8 @@ export default function Vendors() {
   const [editingId, setEditingId] = useState<string | null>(null);
 
   const [name, setName] = useState("");
+  const [locations, setLocations] = useState<{id: string; name: string}[]>([]);
+  const [propertyId, setPropertyId] = useState<string | null>(null);
   const [trade, setTrade] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
@@ -37,6 +39,8 @@ export default function Vendors() {
   const [notes, setNotes] = useState("");
 
   const load = useCallback(async () => {
+    const properties = await readAllPages<{id: string;name: string}>((from,to) => supabase.from("properties").select("id,name", { count: "exact" }).order("id").range(from,to));
+    setLocations(properties.data ?? []);
     const result = await cachedSelectResult<Tables<"vendors">[]>(
       "vendors",
       readAllPages<Tables<"vendors">>((from, to) => supabase.from("vendors").select("*", { count: "exact" }).order("name").order("id").range(from, to)),
@@ -58,7 +62,7 @@ export default function Vendors() {
     setEmail("");
     setCompany("");
     setNotes("");
-    setEditingId(null);
+    setEditingId(null); setPropertyId(null);
   }
 
   function openAdd() {
@@ -67,7 +71,7 @@ export default function Vendors() {
   }
 
   function openEdit(v: Tables<"vendors">) {
-    setName(v.name);
+    setName(v.name); setPropertyId(v.property_id);
     setTrade(v.trade ?? "");
     setPhone(v.phone ?? "");
     setEmail(v.email ?? "");
@@ -84,14 +88,17 @@ export default function Vendors() {
       if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) throw new Error("Enter a valid email address.");
       setSaving(true);
       const payload = { name: name.trim(), trade: trade.trim() || null, phone: phone.trim() || null, email: email.trim() || null, company: company.trim() || null, notes: notes.trim() || null };
-      const { error: e } = editingId ? await supabase.from("vendors").update(payload).eq("id", editingId).select("id").single() : await supabase.from("vendors").insert({ ...payload, owner_id: session.user.id }).select("id").single();
+      const { error: e } = editingId ? await supabase.from("vendors").update(payload).eq("id", editingId).select("id").single() : await supabase.from("vendors").insert({ ...payload, owner_id: session.user.id, property_id: propertyId }).select("id").single();
       if (e) throw e;
       setOpen(false); reset(); await load();
     } catch (e) { notify("Could not save vendor", operationError(e)); }
     finally { setSaving(false); }
   }
 
+  const ownsEditedRecord = Boolean(editingId && session && vendors?.some((row) => row.id === editingId && row.owner_id === session.user.id));
+
   function remove() {
+    if (!ownsEditedRecord) return;
     if (!editingId) return;
     confirmAction(
       "Delete vendor",
@@ -172,6 +179,9 @@ export default function Vendors() {
               {editingId ? "Edit vendor" : "New vendor"}
             </Text>
             {editingId ? <View className="mb-3 flex-row gap-2">{phone ? <Button title="Call vendor" variant="secondary" onPress={() => { void Linking.openURL(`tel:${phone.replace(/[^+0-9]/g, "")}`).catch(() => notify("Could not call", "Use the phone number below.")); }} /> : null}{email ? <Button title="Email vendor" variant="secondary" onPress={() => { void Linking.openURL(`mailto:${encodeURIComponent(email)}`).catch(() => notify("Could not email", "Use the email address below.")); }} /> : null}</View> : null}
+            {!editingId ? <View className="mb-3"><Text className="font-semibold">Contact available to</Text>
+              {[{ id: null, name: "My private portfolio" }, ...locations].map(p => <Button key={p.id ?? "private"} title={p.name}
+                variant={propertyId===p.id ? "primary" : "secondary"} onPress={() => setPropertyId(p.id)} />)}</View> : null}
             <Field label="Name" value={name} onChangeText={setName} placeholder="e.g. Island Plumbing Co." />
             <Field label="Trade" value={trade} onChangeText={setTrade} placeholder="Plumber, Electrician…" />
             <Field label="Phone" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
@@ -194,7 +204,7 @@ export default function Vendors() {
                 <Button title="Save" onPress={save} loading={saving} />
               </View>
             </View>
-            {editingId ? (
+            {ownsEditedRecord ? (
               <View className="mt-3">
                 <Button title="Delete vendor" variant="danger" onPress={remove} />
               </View>

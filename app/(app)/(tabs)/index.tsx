@@ -30,7 +30,7 @@ async function fetchSnapshot(ownerId: string): Promise<{ data: Snapshot | null; 
       supabase.from("maintenance_schedules").select("id", { count: "exact", head: true }).eq("is_active", true).lte("next_due", today),
       readAllPages<{ quantity: number; low_stock_threshold: number | null }>((from, to) => supabase.from("inventory_items").select("quantity,low_stock_threshold", { count: "exact" }).not("low_stock_threshold", "is", null).order("id").range(from, to)),
       supabase.from("assets").select("id", { count: "exact", head: true }).gte("warranty_expiry", today).lte("warranty_expiry", soon),
-      supabase.from("maintenance_requests").select("id", { count: "exact", head: true }).eq("owner_id", ownerId).eq("status", "submitted"),
+      supabase.from("maintenance_requests").select("id, properties!maintenance_requests_property_id_owner_fk!inner(id)", { count: "exact", head: true }).eq("status", "submitted"),
     ]);
     if (expenses.error) throw expenses.error;
     if (inventory.error) throw inventory.error;

@@ -343,7 +343,7 @@ export async function insertIdempotently(transport: OfflineTransport, table: str
   if (typeof error !== "object" || !("code" in error) || error.code !== "23505") throw error;
   const { data, error: readError } = await transport.find(table, String(payload.id));
   if (readError) throw readError;
-  if (!data || !Object.entries(payload).every(([key, value]) => equalValue(value, data[key]))) {
+  if (!data || !Object.entries(payload).every(([key, value]) => equalValue(value, data[key]) || (key === "owner_id" && typeof value === "string" && data.created_by === value))) {
     throw new Error("A conflicting record already exists. Review the saved record before retrying or discarding this change.");
   }
 }

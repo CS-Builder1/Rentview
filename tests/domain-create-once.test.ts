@@ -24,3 +24,10 @@ test("an unavailable or forbidden verification keeps the failure visible", async
   const invalid = { code: "23514", message: "Invalid amount" };
   await assert.rejects(createOnce(row, async () => ({ data: null, error: invalid }), async () => { throw new Error("Unexpected read"); }), e => e === invalid);
 });
+
+test("a manager confirms a lost acknowledgment using the stored author and canonical portfolio owner", async () => {
+  const saved = { ...row, owner_id: "portfolio-owner", created_by: row.owner_id };
+  const insert = async () => ({ data: null, error: { code: "23505" } });
+  assert.deepEqual(await createOnce(row, insert, async () => ({ data: saved, error: null })), { id: row.id });
+  await assert.rejects(createOnce(row, insert, async () => ({ data: { ...saved, amount: row.amount + 1 }, error: null })));
+});

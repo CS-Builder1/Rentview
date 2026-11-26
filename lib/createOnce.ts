@@ -24,7 +24,8 @@ export async function createOnce<T extends { id: string }>(
       const result = await inspect();
       const existing = result.data;
       if (!result.error && existing && Object.entries(expected).every(([key, value]) =>
-        Object.prototype.hasOwnProperty.call(existing, key) && existing[key as keyof T] === value)) {
+        (Object.prototype.hasOwnProperty.call(existing, key) && existing[key as keyof T] === value) ||
+        (key === "owner_id" && typeof value === "string" && "created_by" in existing && existing.created_by === value))) {
         return { id: expected.id };
       }
       if (!result.error && result.data) throw new Error("A record from this draft already exists with different details. Review it before creating another record.");

@@ -14,6 +14,67 @@ export type Database = {
   }
   public: {
     Tables: {
+      property_managers: {
+        Row: {
+          property_id: string
+          user_id: string
+          email: string
+          assigned_at: string
+        }
+        Insert: {
+          property_id?: string
+          user_id?: string
+          email?: string
+          assigned_at?: string
+        }
+        Update: {
+          property_id?: string
+          user_id?: string
+          email?: string
+          assigned_at?: string
+        }
+        Relationships: []
+      }
+      manager_invitations: {
+        Row: {
+          property_id: string
+          email: string
+          expires_at: string
+        }
+        Insert: {
+          property_id?: string
+          email?: string
+          expires_at?: string
+        }
+        Update: {
+          property_id?: string
+          email?: string
+          expires_at?: string
+        }
+        Relationships: []
+      }
+      portfolio_transfers: {
+        Row: {
+          from_owner: string
+          to_manager: string
+          owner_email: string
+          expires_at: string
+        }
+        Insert: {
+          from_owner?: string
+          to_manager?: string
+          owner_email?: string
+          expires_at?: string
+        }
+        Update: {
+          from_owner?: string
+          to_manager?: string
+          owner_email?: string
+          expires_at?: string
+        }
+        Relationships: []
+      }
+
       maintenance_completions: {
         Row: {
           id: string
@@ -121,6 +182,7 @@ export type Database = {
       }
       announcements: {
         Row: {
+          created_by: string | null
           body: string | null
           created_at: string
           id: string
@@ -129,6 +191,7 @@ export type Database = {
           title: string
         }
         Insert: {
+          created_by?: string | null
           body?: string | null
           created_at?: string
           id?: string
@@ -137,6 +200,7 @@ export type Database = {
           title: string
         }
         Update: {
+          created_by?: string | null
           body?: string | null
           created_at?: string
           id?: string
@@ -164,6 +228,7 @@ export type Database = {
       }
       assets: {
         Row: {
+          created_by: string | null
           category: string | null
           created_at: string
           expected_life_years: number | null
@@ -185,6 +250,7 @@ export type Database = {
           warranty_expiry: string | null
         }
         Insert: {
+          created_by?: string | null
           category?: string | null
           created_at?: string
           expected_life_years?: number | null
@@ -206,6 +272,7 @@ export type Database = {
           warranty_expiry?: string | null
         }
         Update: {
+          created_by?: string | null
           category?: string | null
           created_at?: string
           expected_life_years?: number | null
@@ -297,6 +364,7 @@ export type Database = {
       }
       documents: {
         Row: {
+          created_by: string | null
           asset_id: string | null
           created_at: string
           doc_type: Database["public"]["Enums"]["doc_type"]
@@ -311,6 +379,7 @@ export type Database = {
           work_order_id: string | null
         }
         Insert: {
+          created_by?: string | null
           asset_id?: string | null
           created_at?: string
           doc_type?: Database["public"]["Enums"]["doc_type"]
@@ -325,6 +394,7 @@ export type Database = {
           work_order_id?: string | null
         }
         Update: {
+          created_by?: string | null
           asset_id?: string | null
           created_at?: string
           doc_type?: Database["public"]["Enums"]["doc_type"]
@@ -421,6 +491,7 @@ export type Database = {
       }
       expenses: {
         Row: {
+          created_by: string | null
           amount: number
           category: Database["public"]["Enums"]["expense_category"]
           created_at: string
@@ -440,6 +511,7 @@ export type Database = {
           work_order_id: string | null
         }
         Insert: {
+          created_by?: string | null
           amount: number
           category?: Database["public"]["Enums"]["expense_category"]
           created_at?: string
@@ -459,6 +531,7 @@ export type Database = {
           work_order_id?: string | null
         }
         Update: {
+          created_by?: string | null
           amount?: number
           category?: Database["public"]["Enums"]["expense_category"]
           created_at?: string
@@ -553,6 +626,7 @@ export type Database = {
       }
       inventory_items: {
         Row: {
+          created_by: string | null
           cost_currency: string | null
           created_at: string
           id: string
@@ -570,6 +644,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          created_by?: string | null
           cost_currency?: string | null
           created_at?: string
           id?: string
@@ -587,6 +662,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          created_by?: string | null
           cost_currency?: string | null
           created_at?: string
           id?: string
@@ -644,6 +720,9 @@ export type Database = {
       }
       leases: {
         Row: {
+          created_by: string | null
+          archived_at: string | null
+          portal_resident_id: string | null
           created_at: string
           deposit_amount: number | null
           end_date: string | null
@@ -662,6 +741,9 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          created_by?: string | null
+          archived_at?: string | null
+          portal_resident_id?: string | null
           created_at?: string
           deposit_amount?: number | null
           end_date?: string | null
@@ -680,6 +762,9 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          created_by?: string | null
+          archived_at?: string | null
+          portal_resident_id?: string | null
           created_at?: string
           deposit_amount?: number | null
           end_date?: string | null
@@ -863,6 +948,7 @@ export type Database = {
       }
       maintenance_schedules: {
         Row: {
+          created_by: string | null
           anchor_day: number | null
           cadence: string
           asset_id: string | null
@@ -881,6 +967,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          created_by?: string | null
           anchor_day?: number | null
           cadence?: string
           asset_id?: string | null
@@ -899,6 +986,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          created_by?: string | null
           anchor_day?: number | null
           cadence?: string
           asset_id?: string | null
@@ -1125,6 +1213,7 @@ export type Database = {
       }
       rent_payments: {
         Row: {
+          created_by: string | null
           amount: number
           created_at: string
           currency: string
@@ -1138,6 +1227,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          created_by?: string | null
           amount: number
           created_at?: string
           currency?: string
@@ -1151,6 +1241,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          created_by?: string | null
           amount?: number
           created_at?: string
           currency?: string
@@ -1299,6 +1390,7 @@ export type Database = {
       }
       tasks: {
         Row: {
+          created_by: string | null
           created_at: string
           description: string | null
           due_date: string | null
@@ -1313,6 +1405,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          created_by?: string | null
           created_at?: string
           description?: string | null
           due_date?: string | null
@@ -1327,6 +1420,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          created_by?: string | null
           created_at?: string
           description?: string | null
           due_date?: string | null
@@ -1440,6 +1534,7 @@ export type Database = {
       }
       units: {
         Row: {
+          created_by: string | null
           bathrooms: number | null
           bedrooms: number | null
           created_at: string
@@ -1458,6 +1553,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          created_by?: string | null
           bathrooms?: number | null
           bedrooms?: number | null
           created_at?: string
@@ -1476,6 +1572,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          created_by?: string | null
           bathrooms?: number | null
           bedrooms?: number | null
           created_at?: string
@@ -1513,6 +1610,8 @@ export type Database = {
       }
       vendors: {
         Row: {
+          created_by: string | null
+          property_id: string | null
           company: string | null
           created_at: string
           email: string | null
@@ -1525,6 +1624,8 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          created_by?: string | null
+          property_id?: string | null
           company?: string | null
           created_at?: string
           email?: string | null
@@ -1537,6 +1638,8 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          created_by?: string | null
+          property_id?: string | null
           company?: string | null
           created_at?: string
           email?: string | null
@@ -1624,6 +1727,7 @@ export type Database = {
       }
       work_orders: {
         Row: {
+          created_by: string | null
           completion_input: Json | null
           completion_expense_id: string | null
           asset_id: string | null
@@ -1644,6 +1748,7 @@ export type Database = {
           vendor_id: string | null
         }
         Insert: {
+          created_by?: string | null
           completion_input?: Json | null
           completion_expense_id?: string | null
           asset_id?: string | null
@@ -1664,6 +1769,7 @@ export type Database = {
           vendor_id?: string | null
         }
         Update: {
+          created_by?: string | null
           completion_input?: Json | null
           completion_expense_id?: string | null
           asset_id?: string | null
@@ -1806,6 +1912,20 @@ export type Database = {
       }
     }
     Functions: {
+      can_manage_property: { Args: { p_property: string }; Returns: boolean }
+      can_manage_lease: { Args: { p_lease: string }; Returns: boolean }
+      can_post_request: { Args: { p_request: string }; Returns: boolean }
+      can_read_request: { Args: { p_request: string }; Returns: boolean }
+      invite_property_manager: { Args: { p_property: string; p_email: string }; Returns: undefined }
+      remove_property_manager: { Args: { p_property: string; p_email: string }; Returns: undefined }
+      accept_manager_invitation: { Args: { p_property: string }; Returns: undefined }
+      my_manager_invitations: { Args: Record<PropertyKey, never>; Returns: {property_id: string;property_name: string}[] }
+      handover_property_manager: { Args: { p_property: string; p_outgoing: string; p_successor: string }; Returns: undefined }
+      offer_portfolio_transfer: { Args: { p_successor: string }; Returns: undefined }
+      accept_portfolio_transfer: { Args: { p_owner: string }; Returns: undefined }
+      cancel_portfolio_transfer: { Args: Record<PropertyKey, never>; Returns: undefined }
+      revoke_lease_portal: { Args: { p_lease: string; p_archive?: boolean }; Returns: undefined }
+
       billing_reconciliation_pending: { Args: Record<PropertyKey, never>; Returns: boolean }
       current_account_is_active: { Args: Record<PropertyKey, never>; Returns: boolean }
       create_tenant_invite: {

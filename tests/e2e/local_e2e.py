@@ -726,14 +726,18 @@ def main(argv=None):
         one_winner(stock_results)
         assert float(api.select("inventory_items", owner["token"], id=stock["id"])[0]["quantity"]) == 1
         negative_unit = api.insert("units", {"owner_id": owner["id"], "property_id": property_id, "label": "Fixture negative cases"}, owner["token"])
-        race_lease = api.insert("leases", {"owner_id": owner["id"], "unit_id": negative_unit["id"], "tenant_name": "Fixture competing tenants", "status": "active"}, owner["token"])
+        race_lease = api.insert("leases", {"owner_id": owner["id"], "unit_id": negative_unit["id"], "tenant_name": "Fixture competing tenants", "tenant_email": competitor["email"], "status": "active"}, owner["token"])
         race_invite = api.rpc("create_tenant_invite", {"p_lease_id": race_lease["id"], "p_email": None}, owner["token"])
         secret_values.append(race_invite["code"])
         def competing_claim(who):
             return api.request("POST", "/rest/v1/rpc/claim_tenant_invite", token=who["token"], body={"invite_code": race_invite["code"]})
         claimants = [outsider, competitor]
         claims = race(competing_claim, claimants)
-        winner = claimants[one_winner(claims)]
+        # The verified recipient wins irrespective of which request acquires the
+        # lease lock first. Other property and stock races still expect 23514.
+        assert 200 <= claims[1][0] < 300
+        assert claims[0][0] in (400, 403) and claims[0][1].get("code") in ("23514", "42501")
+        winner = competitor
         linked_race = api.select("leases", owner["token"], id=race_lease["id"])[0]
         assert linked_race["tenant_user_id"] == winner["id"]
         api.patch("leases", race_lease["id"], {"status": "expired"}, owner["token"])
@@ -744,7 +748,7 @@ def main(argv=None):
         checkpoint("failed invite claims persist across HTTP errors and concurrent attempts respect the per-account limit", "real-local-api-data")
 
         current_step = "expiry_and_revocation"
-        expired_lease = api.insert("leases", {"owner_id": owner["id"], "unit_id": negative_unit["id"], "tenant_name": "Fixture expired invite", "status": "active"}, owner["token"])
+        expired_lease = api.insert("leases", {"owner_id": owner["id"], "unit_id": negative_unit["id"], "tenant_name": "Fixture expired invite", "tenant_email": tenant_email, "status": "active"}, owner["token"])
         expired_invite = api.rpc("create_tenant_invite", {"p_lease_id": expired_lease["id"], "p_email": None}, owner["token"])
         secret_values.append(expired_invite["code"])
         api.patch("tenant_invites", expired_invite["id"], {"expires_at": "2000-01-01T00:00:00Z"}, admin=True)

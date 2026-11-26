@@ -23,6 +23,7 @@ function fixture(options: { jobs?: Row[]; lostClaim?: boolean; receipts?: Row[];
       const data = () => {
         if (table === "notification_outbox") return options.receipts ?? [];
         if (table === "maintenance_requests") return { id: "request", lease_id: "lease", title: "Repair", status: "new", owner_id: owner, tenant_user_id: tenant };
+        if (table === "property_managers") return [];
         if (table === "leases") return { id: "lease" };
         if (table === "notification_prefs") return options.prefs ?? { push_enabled: true, email_enabled: false };
         if (table === "push_tokens") return (options.tokens ?? []).map(token => ({ token }));

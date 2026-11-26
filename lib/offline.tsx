@@ -6,6 +6,7 @@ import {
   errorMessage, flushOfflineQueue, offlineStore, type OfflineTransport, type PreparedOperation, type PhotoSubmission, type QueuedOp,
 } from "./offlineQueue";
 import { supabase } from "./supabase";
+import { uploadPhotoOnce } from "./uploadPhotoOnce";
 import { assertStoragePath, inspectImage } from "./uploadPolicy";
 
 export type { PhotoSubmission } from "./offlineStore";
@@ -23,12 +24,7 @@ const transport: OfflineTransport = {
     assertStoragePath(photo.storagePath);
     const detected = inspectImage(new Uint8Array(bytes));
     if (detected.mimeType !== photo.contentType) throw new Error("The saved photo does not match its image type. Discard it and choose the photo again.");
-    const { error } = await supabase.storage.from("attachments").upload(photo.storagePath, bytes, {
-      contentType: photo.contentType,
-      // An operation owns a UUID-specific object path. A retry replaces only its own bytes.
-      upsert: true,
-    });
-    if (error) throw error;
+    await uploadPhotoOnce(supabase.storage.from("attachments"), photo.storagePath, bytes, photo.contentType);
   },
   documentPayload(photo) {
     return {
