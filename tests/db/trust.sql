@@ -38,6 +38,8 @@ select pg_temp.assert_true(not has_table_privilege('authenticated','public.subsc
 select pg_temp.assert_true(not has_table_privilege('authenticated','public.subscriptions','UPDATE'),'subscription UPDATE revoked');
 select pg_temp.assert_true(not has_table_privilege('authenticated','public.subscriptions','DELETE'),'subscription DELETE revoked');
 select pg_temp.assert_true(not has_function_privilege('anon','public.claim_tenant_invite(text)','EXECUTE'),'anonymous invite claim revoked');
+select pg_temp.assert_true(not has_function_privilege('authenticated','rentview_private.claim_tenant_invite_checked(text)','EXECUTE'),'claim eligibility only runs behind the rate limit');
+select pg_temp.assert_true(not has_table_privilege('authenticated','rentview_private.tenant_invite_claim_failures','SELECT,INSERT,UPDATE,DELETE'),'claimants cannot edit their failure window');
 select pg_temp.assert_true(not has_function_privilege('authenticated','public.user_id_for_email(text)','EXECUTE'),'email lookup service-only');
 select pg_temp.assert_true(not has_table_privilege('authenticated','public.work_order_parts','INSERT'),'stock mutation must use RPC');
 
@@ -52,16 +54,27 @@ select pg_temp.expect_error($q$select public.create_tenant_invite('20000000-0000
 select pg_temp.expect_error($q$update public.leases set tenant_user_id='00000000-0000-4000-8000-000000000004' where id='10000000-0000-4000-8000-000000000201'$q$,'42501');
 select set_config('test.invite',(public.create_tenant_invite('10000000-0000-4000-8000-000000000201','tenant@example.test')).code,true);
 select pg_temp.assert_true(length(current_setting('test.invite'))=32,'server invitation entropy');
-select pg_temp.expect_error($q$select public.claim_tenant_invite(current_setting('test.invite'))$q$,'23514');
+select pg_temp.assert_true(public.claim_tenant_invite(current_setting('test.invite'))->>'code'='23514','owner cannot claim own invite');
 insert into public.properties(owner_id,name) values(auth.uid(),'Second property'),(auth.uid(),'Third property');
 select pg_temp.expect_error($q$insert into public.properties(owner_id,name) values(auth.uid(),'Fourth property')$q$,'23514');
 select pg_temp.expect_error($q$insert into public.properties(id,owner_id,name) values('10000000-0000-4000-8000-000000000001',auth.uid(),'Owner A building')$q$,'23505'); -- lost-ack retry at cap
 select pg_temp.expect_error($q$insert into public.work_orders(owner_id,property_id,title,status) values(auth.uid(),'10000000-0000-4000-8000-000000000001','Forged completion','completed')$q$,'42501');
 
 select pg_temp.actor('00000000-0000-4000-8000-000000000004');
-select pg_temp.expect_error($q$select public.claim_tenant_invite(current_setting('test.invite'))$q$,'42501');
+select pg_temp.assert_true(public.claim_tenant_invite(current_setting('test.invite'))->>'code'='42501','targeted invite requires the matching verified email');
+select pg_temp.assert_true(current_setting('response.status')='403','targeted invite retains its HTTP error status');
+reset role;
+select pg_temp.assert_true((select cardinality(failed_at)=1 from rentview_private.tenant_invite_claim_failures where user_id='00000000-0000-4000-8000-000000000004'),'failed targeted claim is recorded');
+-- With one attempt aged out and nine still recent, exactly one attempt remains.
+update rentview_private.tenant_invite_claim_failures
+set failed_at = array[clock_timestamp() - interval '11 minutes'] || array_fill(clock_timestamp() - interval '2 minutes',array[9])
+where user_id='00000000-0000-4000-8000-000000000004';
+set local role authenticated;
+select pg_temp.assert_true(public.claim_tenant_invite('INVALID-FIXTURE')->>'code'='23514','expired attempt frees one slot');
+select pg_temp.assert_true(current_setting('response.status')='400','invalid code retains its HTTP error status');
+select pg_temp.expect_error($q$select public.claim_tenant_invite(current_setting('test.invite'))$q$,'P0001');
 select pg_temp.actor('00000000-0000-4000-8000-000000000005');
-select pg_temp.expect_error($q$select public.claim_tenant_invite(current_setting('test.invite'))$q$,'42501');
+select pg_temp.assert_true(public.claim_tenant_invite(current_setting('test.invite'))->>'code'='42501','targeted invite requires the matching verified email');
 select pg_temp.actor('00000000-0000-4000-8000-000000000003');
 select public.claim_tenant_invite(lower(current_setting('test.invite')));
 select public.claim_tenant_invite(current_setting('test.invite')); -- lost-ack retry by same linked tenant
