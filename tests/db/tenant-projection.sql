@@ -39,7 +39,11 @@ select pg_temp.assert_true(not has_schema_privilege('anon','rentview_private','u
 do $$ declare helper record; begin
  for helper in select p.oid,p.proname from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='rentview_private' loop
   assert not has_function_privilege('anon',helper.oid,'execute'),'anonymous can execute a private helper';
-  if helper.oid not in ('rentview_private.current_tenant_lease_details()'::regprocedure, 'rentview_private.attachment_permission(text)'::regprocedure) then
+  -- This suite runs at earlier migration stages as well as against the full schema.
+  if helper.oid <> 'rentview_private.current_tenant_lease_details()'::regprocedure
+    and helper.oid is distinct from to_regprocedure('rentview_private.attachment_permission(text)')
+    and helper.oid is distinct from to_regprocedure('rentview_private.dispatch_photo_allowed(text,boolean)')
+    and helper.oid is distinct from to_regprocedure('rentview_private.dispatch_draft_allowed(text)') then
    assert not has_function_privilege('authenticated',helper.oid,'execute'),'schema usage exposed another private helper';
   end if;
  end loop;

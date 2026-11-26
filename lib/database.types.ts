@@ -1,3 +1,5 @@
+import type { DispatchViews, DispatchFunctions } from "./dispatchTypes";
+
 export type Json =
   | string
   | number
@@ -1871,7 +1873,7 @@ export type Database = {
         ]
       }
     }
-    Views: {
+    Views: DispatchViews & {
       tenant_lease_details: {
         Row: {
           address_line1: string | null
@@ -1911,7 +1913,7 @@ export type Database = {
         ]
       }
     }
-    Functions: {
+    Functions: DispatchFunctions & import("./inboxTypes").InboxFunctions & {
       can_manage_property: { Args: { p_property: string }; Returns: boolean }
       can_manage_lease: { Args: { p_lease: string }; Returns: boolean }
       can_post_request: { Args: { p_request: string }; Returns: boolean }

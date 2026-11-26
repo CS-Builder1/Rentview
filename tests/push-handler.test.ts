@@ -13,7 +13,7 @@ const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value));
 const job = (deliveries: unknown = {}) => ({ id: "job", event: "request_created", row_id: "request", actor_id: tenant, claim_token: "claim", attempts: 1, deliveries });
 const accepted = (ticketId = "ticket") => ({ status: "accepted", channel: "push", userId: owner, ticketId, attemptedAt: new Date().toISOString() });
 const request = () => new Request("http://fixture.local", { method: "POST", headers: { "x-push-secret": "fixture-secret" }, body: "{}" });
-function fixture(options: { jobs?: Row[]; lostClaim?: boolean; receipts?: Row[]; tokens?: string[]; prefs?: Row; email?: Row; emailError?: Row; emailConfigured?: boolean; send?: (url: string, init: RequestInit) => Promise<Response> } = {}) {
+function fixture(options: { inbox?: Row | null; jobs?: Row[]; lostClaim?: boolean; receipts?: Row[]; tokens?: string[]; prefs?: Row; email?: Row; emailError?: Row; emailConfigured?: boolean; send?: (url: string, init: RequestInit) => Promise<Response> } = {}) {
   const checkpoints: Row[] = [], finishes: Row[] = [], requests: string[] = [], deletes: Row[] = [];
   let handle!: (request: Request) => Promise<Response>;
   const admin = {
@@ -37,7 +37,8 @@ function fixture(options: { jobs?: Row[]; lostClaim?: boolean; receipts?: Row[];
       const builder: any = { select: () => builder, update: (value: Row) => { update = value; return builder; }, delete: () => { deleting = true; return builder; }, eq: (key: string, value: unknown) => { filters[key] = value; return builder; }, order: () => builder, limit: () => builder, maybeSingle: async () => result(), then: (resolve: (value: unknown) => unknown) => Promise.resolve(resolve(result())) };
       return builder;
     },
-    rpc: async (name: string, args: Row) => {
+    rpc: (name: string, args: Row) => {
+      if (name === "inbox_delivery") return { maybeSingle: async () => ({data: options.inbox ?? null, error:null}) };
       if (name === "claim_notification_batch") return { data: clone(options.jobs ?? []), error: null };
       assert.equal(name, "finish_notification"); finishes.push(clone(args)); return { data: true, error: null };
     },
@@ -128,4 +129,25 @@ test("A mixed final receipt clears polling and preserves unresolved tickets for 
   const f = fixture({ receipts: [{ id: "job", attempts: 8, completed_at: new Date().toISOString(), deliveries: { "push:first": accepted("first-ticket"), "push:second": accepted("second-ticket") } }], send: async () => new Response(JSON.stringify({ data: { "first-ticket": { status: "error", details: { error: "DeviceNotRegistered" } } } })) });
   await f.handle(request()); assert.equal(f.checkpoints[0].status, "failed"); assert.equal(f.checkpoints[0].receipt_pending, false);
   assert.equal(f.checkpoints[0].deliveries["push:second"].status, "uncertain"); assert.equal(f.checkpoints[0].deliveries["push:second"].ticketId, "second-ticket");
+});
+
+test("Lease and contractor inbox alerts honor the current relationship and event preference", async () => {
+  const event = {...job(), event:"inbox_event"};
+  const revoked = fixture({jobs:[event]});
+  await revoked.handle(request());
+  assert.equal(revoked.requests.length,0);
+  assert.equal(revoked.finishes[0].p_success,true);
+  for (const preference of ["messages","requests"]) {
+    const inbox = {recipient_id:owner, title:"Inbox update", body:"Open the inbox", href:"/inbox", preference};
+    const muted = fixture({jobs:[event],inbox,prefs:{push_enabled:true,email_enabled:true,[preference]:false},tokens:["fixture"]});
+    await muted.handle(request());
+    assert.equal(muted.requests.length,0);
+    assert.equal(muted.finishes[0].p_success,true);
+    const active = fixture({jobs:[event], inbox, tokens:["fixture"],send:async()=>{
+      return new Response(JSON.stringify({data:[{status:"ok",id:"inbox-ticket"}]}));
+    }});
+    await active.handle(request());
+    assert.equal(active.requests.length,1);
+    assert.equal(active.finishes[0].p_success,true);
+  }
 });

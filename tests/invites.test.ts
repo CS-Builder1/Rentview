@@ -91,3 +91,17 @@ test("clearing an invitation waits for an in-flight remember instead of resurrec
  await Promise.all([remember,clear]);
  assert.equal(await store.pending(), "/");
 });
+
+
+test("inbox and job notifications can return through authentication", () => {
+  const id = "b3e69824-a1c4-429c-a3d0-3aabc677b24e";
+  for (const path of ["/inbox",`/conversation/${id}`,"/contractor",`/contractor/job/${id}`]) {
+    assert.equal(safeReturnPath(path),path);
+  }
+  const thread = "06cdc646-a146-4622-93e3-11b855268181";
+  const archived = `/conversation/${id}?thread=${thread}`;
+  assert.equal(authDestination("/", archived), archived);
+  assert.equal(safeReturnPath(archived + "&next=https://outside.invalid"), archived);
+  assert.equal(safeReturnPath(`/conversation/${id}?thread=invalid`), `/conversation/${id}`);
+  assert.equal(safeReturnPath("/conversation//external.invalid"),"/");
+});

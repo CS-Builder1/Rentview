@@ -7,6 +7,7 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState, Pressable, ScrollView, Text, View } from "react-native";
 
+import { DispatchPanel } from "../../../components/DispatchPanel";
 import { RequestConversation } from "../../../components/RequestConversation";
 import {
   Badge,
@@ -141,6 +142,8 @@ export default function TenantRequestDetail() {
             reported {formatDate(request.created_at)}
           </Text>
         </Card>
+
+        {request.work_order_id ? <DispatchPanel requestId={request.id} audience="tenant" onChange={() => void load()} /> : null}
 
         {request.rating != null ? (
           <Card>

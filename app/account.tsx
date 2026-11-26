@@ -183,6 +183,7 @@ export default function Account() {
               <Button title="Change password" variant="secondary" disabled={busy} onPress={() => router.push({ pathname: "/reset-password", params: { next: "/account" } } as never)} />
               <Button title="Sign out other devices" variant="secondary" disabled={busy} onPress={otherDevices} />
               <Button title="My tenant portal" variant="secondary" disabled={busy} onPress={() => router.push("/tenant")} />
+              <Button title="My assigned jobs" variant="secondary" disabled={busy} onPress={() => router.push("/contractor")} />
               {role === "owner" ? <Button title="Manage my properties" variant="secondary" disabled={busy} onPress={() => router.push("/(app)")} /> : null}
             </View>
           </>

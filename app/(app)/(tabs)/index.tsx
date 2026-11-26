@@ -1,3 +1,4 @@
+import { InboxLink } from "../../../components/InboxLink";
 import { Ionicons } from "@expo/vector-icons";
 import { Href, useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -73,6 +74,7 @@ export default function Dashboard() {
   return <Screen><ScrollView contentContainerClassName="px-5 pb-10" refreshControl={<RefreshControl refreshing={loading} onRefresh={() => void load()} />}>
     <Text className="mb-1 mt-2 text-2xl font-bold text-slate-900">Home</Text>
     <Text className="mb-5 text-slate-500">What needs attention in your portfolio.</Text>
+    <InboxLink />
     {error ? <Card><Text accessibilityRole="alert" className="mb-3 text-red-700">{stale ? "Showing the last saved snapshot. " : "The portfolio could not be loaded. "}{error}</Text><Button title="Retry" onPress={() => void load()} /></Card> : null}
     {snapshot ? <>
       <View className="flex-row flex-wrap justify-between">{[

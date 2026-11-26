@@ -9,7 +9,7 @@ import { accepted, chunked, clamp, type Deliveries, notificationEmail, receiptFa
 
 const EXPO_SEND = "https://exp.host/--/api/v2/push/send";
 const EXPO_RECEIPTS = "https://exp.host/--/api/v2/push/getReceipts";
-const PREF = { request_created: "requests", request_updated: "requests", request_message: "messages", announcement: "announcements" } as const;
+const PREF = { request_created: "requests", request_updated: "requests", request_message: "messages", announcement: "announcements", inbox_event: "messages" } as const;
 type Event = keyof typeof PREF;
 type Recipient = { userId: string; url: string };
 type Job = { id: string; event: Event; row_id: string; actor_id: string | null; preview: string | null; claim_token: string; attempts: number; deliveries: unknown };
@@ -92,7 +92,18 @@ Deno.serve(async req => {
       try {
         let recipients: Recipient[] = [], title = "RentView", body = "";
         if (!(job.event in PREF)) throw new Error("Unsupported persisted notification event");
-        if (job.event === "announcement") {
+        let preference: "messages" | "requests" | "announcements" = PREF[job.event];
+        if (job.event === "inbox_event") {
+          const { data: entry, error } = await admin.rpc("inbox_delivery", { p_event: job.row_id }).maybeSingle();
+          if (error) throw error;
+          if (entry) {
+            const item = relation(entry);
+            recipients = [{userId: String(item.recipient_id), url: String(item.href)}];
+            title = clamp(String(item.title), 60);
+            body = clamp(String(item.body));
+            preference = item.preference === "messages" ? "messages" : "requests";
+          }
+        } else if (job.event === "announcement") {
           const { data: announcement, error } = await admin.from("announcements").select("id,title,body,owner_id,property_id").eq("id", job.row_id).maybeSingle();
           if (error) throw error;
           if (announcement && job.actor_id === announcement.owner_id) {
@@ -138,7 +149,7 @@ Deno.serve(async req => {
           if (Object.values(deliveries).some(delivery => delivery.userId === recipient.userId && (accepted(delivery) || delivery.status === "skipped" && delivery.error === "Notifications disabled"))) continue;
           const { data: prefs, error: prefError } = await admin.from("notification_prefs").select("push_enabled,email_enabled,requests,messages,announcements").eq("user_id", recipient.userId).maybeSingle();
           if (prefError) throw prefError;
-          if (prefs?.[PREF[job.event]] === false || (prefs?.push_enabled === false && prefs?.email_enabled === false)) {
+          if (prefs?.[preference] === false || (prefs?.push_enabled === false && prefs?.email_enabled === false)) {
             deliveries[`skip:${recipient.userId}`] = { channel: "email", userId: recipient.userId, status: "skipped", error: "Notifications disabled", attemptedAt: new Date().toISOString() };
             continue;
           }

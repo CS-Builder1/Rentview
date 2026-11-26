@@ -328,6 +328,7 @@ export default function LeaseDetail() {
               {ended ? "Property staff retain the payment and repair history." : "During the lease they can report repairs, follow progress and see their rent history."}
             </Text>
             <View className="mt-3">
+              {lease.status==="active" && <View className="mb-3"><Button title="Message resident" onPress={()=>router.push(`/conversation/${lease.id}` as never)} /></View>}
               <Button
                 title="Remove portal access"
                 variant="secondary"

@@ -1,3 +1,4 @@
+import { useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, AppState, Image, Modal, Pressable, ScrollView, Text, TextInput, View } from "react-native";
@@ -21,12 +22,18 @@ export function RequestConversation({requestId,locked=false}:{requestId:string;l
  const preview=photos.find(photo=>photo.id===previewId)?.url??null;
  const identity=useRef("");const key=`${requestId}:${uid??""}`;identity.current=key;
  const generation=useRef(0);const inflight=useRef(false);const messageIds=useRef(new Set<string>());const mounted=useRef(true);const pendingMessage=useRef<{id:string;body:string}|null>(null);const sendLock=useRef(false);
+ const focused=useRef(false);
+ const readThrough=useRef("");
+ useFocusEffect(useCallback(()=>{
+  focused.current=true;
+  return ()=>{focused.current=false;};
+ },[]));
  const photoLinks=useRef(createRequestPhotoLinks());
  const load=useCallback(async()=>{
   if(!uid||inflight.current||identity.current!==key)return;inflight.current=true;const ticket=generation.current;const links=photoLinks.current;
   try{
    const [requestRes,photoRes,messageRes]=await Promise.all([
-    supabase.from("maintenance_requests").select("id").eq("id",requestId).maybeSingle(),
+    supabase.from("maintenance_requests").select("id,tenant_user_id,updated_at").eq("id",requestId).maybeSingle(),
     supabase.from("request_photos").select("*").eq("request_id",requestId).order("created_at",{ascending:false}).limit(100),
     supabase.from("request_messages").select("*").eq("request_id",requestId).order("created_at",{ascending:false}).order("id",{ascending:false}).limit(100),
    ]);
@@ -37,6 +44,14 @@ export function RequestConversation({requestId,locked=false}:{requestId:string;l
    const fresh=messageRes.data;const newReplies=fresh.filter(m=>!messageIds.current.has(m.id)&&m.sender_id!==uid);
    if(messageIds.current.size>0&&newReplies.length)setUnread(n=>n+newReplies.length);
    if(messageIds.current.size===0)setHasOlder(fresh.length===100);fresh.forEach(m=>messageIds.current.add(m.id));setMessages(previous=>mergeMessages(previous,fresh));setError("");setLoading(false);
+   if (focused.current && AppState.currentState==="active") {
+    const latest=[requestRes.data.updated_at,fresh[0]?.created_at ?? ""].sort().pop()!;
+    if (readThrough.current!==latest) {
+     const prefix=requestRes.data.tenant_user_id===uid?"/tenant/request/":"/request/";
+     const read=await supabase.rpc("mark_thread_read",{p_href:prefix+requestId,p_through:latest});
+     if (!read.error && mounted.current && ticket===generation.current && identity.current===key) readThrough.current=latest;
+    }
+   }
    const resolved=await links.resolve(photoRes.data,signedUrl);
    if(!mounted.current||ticket!==generation.current||identity.current!==key)return;
    setPhotos(resolved);
@@ -44,7 +59,7 @@ export function RequestConversation({requestId,locked=false}:{requestId:string;l
   finally{if(ticket===generation.current){inflight.current=false;if(mounted.current&&identity.current===key)setLoading(false);}}
  },[requestId,uid,key]);
  useEffect(()=>{
-  mounted.current=true;generation.current+=1;inflight.current=false;sendLock.current=false;photoLinks.current=createRequestPhotoLinks();setLoading(true);setSending(false);setUploading(false);setMessages([]);setPhotos([]);setBody("");setPreviewId(null);setUnread(0);setHasOlder(false);setOlder(false);setError("");messageIds.current.clear();pendingMessage.current=null;
+  mounted.current=true;readThrough.current="";generation.current+=1;inflight.current=false;sendLock.current=false;photoLinks.current=createRequestPhotoLinks();setLoading(true);setSending(false);setUploading(false);setMessages([]);setPhotos([]);setBody("");setPreviewId(null);setUnread(0);setHasOlder(false);setOlder(false);setError("");messageIds.current.clear();pendingMessage.current=null;
   void load();const interval=setInterval(()=>{if(AppState.currentState==="active")void load();},12000);
   const foreground=AppState.addEventListener("change",state=>{if(state==="active")void load();});
   const channel=supabase.channel(`conversation:${requestId}:${uid}`).on("postgres_changes",{event:"INSERT",schema:"public",table:"request_messages",filter:`request_id=eq.${requestId}`},()=>void load()).on("postgres_changes",{event:"INSERT",schema:"public",table:"request_photos",filter:`request_id=eq.${requestId}`},()=>void load()).subscribe();

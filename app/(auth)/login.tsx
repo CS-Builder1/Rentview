@@ -2,7 +2,7 @@ import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from "react-native";
 import { Button, Field, Loading, Screen } from "../../components/ui";
-import { useAuth } from "../../lib/auth";
+import { homeForRole, useAuth } from "../../lib/auth";
 import { clearAuthDestination, pendingAuthDestination, rememberAuthDestination } from "../../lib/authDestination";
 import { safeReturnPath } from "../../lib/invites";
 import { authRedirectUrl, signInWithGoogle } from "../../lib/oauth";
@@ -88,7 +88,7 @@ export default function Login() {
   }
   const busy = !destinationReady || loading || googleLoading;
   if (initializing || (session && !destinationReady)) return <Loading />;
-  if (session) return <Redirect href={(next !== "/" ? next : role === "tenant" ? "/tenant" : "/(app)") as never} />;
+  if (session) return <Redirect href={(next !== "/" ? next : homeForRole(role)) as never} />;
   return <Screen><KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} className="flex-1"><ScrollView contentContainerClassName="flex-grow justify-center px-6 py-8" keyboardShouldPersistTaps="handled"><View className="mx-auto w-full max-w-lg">
     <Text className="text-3xl font-bold text-brand">RentView</Text><Text className="mb-6 mt-1 text-slate-500">Operations-first property management.</Text>
     {next.startsWith("/claim") ? <Text className="mb-4 text-slate-700">Sign in or create an account to join your landlord. Your invitation will be kept for the next step.</Text> : null}
@@ -103,5 +103,6 @@ export default function Login() {
     {mode === "signin" ? <><Pressable accessibilityRole="button" disabled={busy} onPress={() => changeMode("recovery")} className="py-2"><Text className="text-center text-brand">Forgot password?</Text></Pressable><Pressable accessibilityRole="button" disabled={busy} onPress={resendConfirmation} className="py-2"><Text className="text-center text-brand">Resend confirmation email</Text></Pressable></> : mode === "recovery" ? <Button title="Back to sign in" variant="secondary" onPress={() => changeMode("signin")}/> : null}
     {next.startsWith("/claim")?<Pressable accessibilityRole="button" disabled={busy} onPress={()=>{void clearAuthDestination();setNext("/");router.replace("/(auth)/login");}} className="mt-3 py-2"><Text className="text-center text-brand">Manage properties instead</Text></Pressable>:null}
     <Pressable accessibilityRole="link" disabled={busy} onPress={() => router.push("/claim")} className="mt-5 py-3"><Text className="text-center font-semibold text-brand">I have an invite code</Text></Pressable>
+    <Button title="I have a contractor invitation" variant="secondary" onPress={() => router.push("/contractor-invite")} disabled={busy} />
   </View></ScrollView></KeyboardAvoidingView></Screen>;
 }

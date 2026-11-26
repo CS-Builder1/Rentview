@@ -9,6 +9,7 @@ export default function AppLayout() {
   if (initializing) return <Loading />;
   if (!session) return <Redirect href="/(auth)/login" />;
   // A claimed tenant belongs in the portal, never in the owner app.
+  if (role === "contractor") return <Redirect href="/contractor" />;
   if (role === "tenant") return <Redirect href="/tenant" />;
 
   // A Stack with the tab bar as the first screen. Detail and management

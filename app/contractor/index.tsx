@@ -1,0 +1,70 @@
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useState } from "react";
+import { AppState, ScrollView, Text, View } from "react-native";
+import { NotificationPrefs } from "../../components/NotificationPrefs";
+import { Badge, Button, Card, EmptyState, Loading, Screen } from "../../components/ui";
+import { useAuth, homeForRole } from "../../lib/auth";
+import { operationError, readAllPages } from "../../lib/operationsQuery";
+import type { DispatchJob } from "../../lib/dispatchTypes";
+import { displayVisit } from "../../lib/dispatchVisit";
+import { supabase } from "../../lib/supabase";
+
+export default function ContractorJobs() {
+  const router = useRouter();
+  const { session, role, refreshProfile } = useAuth();
+  const [jobs, setJobs] = useState<DispatchJob[] | null>(null);
+  const [error, setError] = useState("");
+  const [refresh, setRefresh] = useState(0);
+  const [showPrefs, setShowPrefs] = useState(false);
+  useFocusEffect(useCallback(() => {
+    let active = true;
+    setError("");
+    let sequence = 0;
+    async function load() {
+      const ticket = ++sequence;
+      const result = await readAllPages<DispatchJob>((from, to) => supabase.rpc("my_dispatch_jobs", {})
+        .order("work_order_id").range(from, to));
+      if (!active || ticket !== sequence) return;
+      setError(result.error ? operationError(result.error) : "");
+      setJobs(result.data ?? []);
+    }
+    void load();
+    const timer = setInterval(() => { if (AppState.currentState === "active") void load(); }, 30000);
+    const subscription = AppState.addEventListener("change", state => { if (state === "active") void load(); });
+    return () => { active = false; clearInterval(timer); subscription.remove(); };
+  }, [session?.user.id, refresh]));
+  if (!jobs) return <Loading />;
+  const sorted = jobs.slice().sort((a,b) => Number(b.assignment_status === "pending") - Number(a.assignment_status === "pending") ||
+    (a.visit_start ?? "z").localeCompare(b.visit_start ?? "z") || a.title.localeCompare(b.title));
+  return <Screen><ScrollView contentContainerClassName="mx-auto w-full max-w-2xl gap-3 px-5 py-5">
+    <Text className="text-2xl font-bold text-slate-900">Assigned jobs</Text>
+    <View className="flex-row flex-wrap gap-2">
+      <Button title="Inbox" variant="secondary" onPress={() => router.push("/inbox" as never)} />
+      <Button title="Refresh jobs" variant="secondary" onPress={() => setRefresh(n => n + 1)} />
+      <Button title="Account" variant="secondary" onPress={() => router.push("/account")} />
+    </View>
+    {error ? <Text accessibilityRole="alert" className="text-red-700">{error}</Text> :
+      sorted.length === 0 ? <EmptyState title="No assigned jobs" subtitle="Jobs appear here when a property manager assigns you." /> : null}
+    {sorted.map(job => <Card key={job.work_order_id} onPress={() => router.push(`/contractor/job/${job.work_order_id}`)}>
+      <Text className="text-lg font-semibold text-slate-900">{job.title}</Text>
+      <Text className="my-1 text-slate-600">{[job.property_name, job.unit_label].filter(Boolean).join(" · ")}</Text>
+      <Badge label={job.assignment_status ?? job.work_status} />
+      {job.visit_start ? <Text className="mt-2 text-slate-600">{displayVisit(job.visit_start)} · {job.visit_status}</Text> : null}
+    </Card>)}
+    <Button title={showPrefs ? "Hide notification settings" : "Notification settings"} variant="secondary" onPress={() => setShowPrefs(value => !value)} />
+    {showPrefs ? <NotificationPrefs variant="contractor" /> : null}
+    <Button title="Join another vendor invitation" variant="secondary" onPress={() => router.push("/contractor-invite")} />
+    <Button title="My tenant portal" variant="secondary" onPress={() => router.push("/tenant")} />
+    <Button title="Manage my properties" variant="secondary" onPress={async () => {
+      try {
+        if (role !== "owner") {
+          const { error } = await supabase.rpc("contractor_open_owner_workspace");
+          if (error) throw error;
+          await refreshProfile();
+        }
+        router.replace("/(app)");
+      } catch (e) { setError(operationError(e)); }
+    }} />
+    {role !== "contractor" ? <Button title="Return to my home" variant="secondary" onPress={() => router.replace(homeForRole(role))} /> : null}
+  </ScrollView></Screen>;
+}

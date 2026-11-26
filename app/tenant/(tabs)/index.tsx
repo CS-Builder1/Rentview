@@ -1,3 +1,4 @@
+import { InboxLink } from "../../../components/InboxLink";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
@@ -84,6 +85,7 @@ export default function TenantHome() {
           Report repairs and follow their progress.
         </Text>
 
+        <InboxLink />
         {error ? <Text accessibilityRole="alert" className="mb-4 text-red-700">{error}</Text> : null}
         {leases.length === 0 ? (
           <Card>
@@ -132,6 +134,7 @@ export default function TenantHome() {
                   <Row label="Landlord" value={l.landlord_name} />
                 ) : null}
               </View>
+              {l.lease_id && l.status==="active" && <View className="mt-3"><Button title="Message property management" variant="secondary" onPress={()=>router.push(`/conversation/${l.lease_id}` as never)} /></View>}
             </Card>
           ))
         )}
