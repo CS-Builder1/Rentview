@@ -1,10 +1,9 @@
 import NetInfo from "@react-native-community/netinfo";
-import { decode } from "base64-arraybuffer";
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 
 import { useAuth } from "./auth";
 import {
-  errorMessage, flushOfflineQueue, offlineStore, type OfflineTransport, type PhotoSubmission, type QueuedOp,
+  errorMessage, flushOfflineQueue, offlineStore, type OfflineTransport, type PreparedOperation, type PhotoSubmission, type QueuedOp,
 } from "./offlineQueue";
 import { supabase } from "./supabase";
 import { assertStoragePath, inspectImage } from "./uploadPolicy";
@@ -20,9 +19,8 @@ const transport: OfflineTransport = {
     const result = await supabase.from(table as never).select("*").eq("id", id).maybeSingle();
     return { data: result.data as Record<string, unknown> | null, error: result.error };
   },
-  async upload(photo) {
+  async upload(photo, bytes) {
     assertStoragePath(photo.storagePath);
-    const bytes = decode(photo.base64);
     const detected = inspectImage(new Uint8Array(bytes));
     if (detected.mimeType !== photo.contentType) throw new Error("The saved photo does not match its image type. Discard it and choose the photo again.");
     const { error } = await supabase.storage.from("attachments").upload(photo.storagePath, bytes, {
@@ -35,7 +33,7 @@ const transport: OfflineTransport = {
   documentPayload(photo) {
     return {
       ...photo.doc, storage_path: photo.storagePath, mime_type: photo.contentType,
-      size_bytes: decode(photo.base64).byteLength,
+      size_bytes: photo.byteLength,
     };
   },
 };
@@ -141,7 +139,7 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
     if (accountId && !initializing && online) void sync();
   }, [accountId, initializing, online, refresh, sync]);
 
-  const submit = useCallback(async (operation: QueuedOp): Promise<SubmitResult> => {
+  const submit = useCallback(async (operation: PreparedOperation): Promise<SubmitResult> => {
     // Durable before the first HTTP request, including when the device appears online.
     await offlineStore.put(operation);
     await refresh();
